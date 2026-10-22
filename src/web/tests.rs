@@ -450,6 +450,12 @@ async fn managing_sources_requires_admin() {
             "/sources/restore",
             &*format!("source_id={}", urlenc(GODOT_SRC)),
         ),
+        (
+            "/owners/add",
+            "owner_kind=engine&id=stride&name=Stride&tier=1",
+        ),
+        ("/owners/remove", "owner_id=godot"),
+        ("/owners/restore", "owner_id=godot"),
     ] {
         let (status, _, _) = send(&st, post_form(uri, body, None)).await;
         assert_eq!(status, StatusCode::FORBIDDEN, "{uri}");
@@ -588,4 +594,123 @@ async fn removing_a_config_source_purges_it_until_restored() {
     let (_, body) = get_as(&st, "/sources", &cookie).await;
     assert!(!body.contains("Removed from sources.toml"));
     assert!(body.contains("godotengine&#x2f;godot"));
+}
+
+#[tokio::test]
+async fn admin_adds_an_engine_and_its_first_source() {
+    let st = state();
+    let cookie = login(&st).await;
+    let form = "owner_kind=engine&id=stride&name=Stride&homepage=https%3A%2F%2Fstride3d.net\
+                &tier=1&csharp=native&aliases=stride%2C+Stride3D";
+    let (status, headers, _) = send(&st, post_form("/owners/add", form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(
+        headers[header::LOCATION],
+        "/sources?owner=stride#add-source"
+    );
+    let engine = st
+        .registry
+        .current()
+        .config
+        .engine("stride")
+        .cloned()
+        .unwrap();
+    assert_eq!(engine.aliases, ["stride", "Stride3D"]);
+
+    // It shows up everywhere, with an empty group on /sources.
+    let (status, body) = get_as(&st, "/engine/stride", &cookie).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("native"));
+    let (_, body) = get_as(&st, "/engines", &cookie).await;
+    assert!(body.contains("Stride"));
+    let (_, body) = get_as(&st, "/sources?owner=stride", &cookie).await;
+    assert!(body.contains("0 of 0 enabled"));
+    assert!(body.contains(r#"<option value="stride" selected>"#));
+
+    let form = "owner_id=stride&kind=github&repo=stride3d%2Fstride";
+    let (status, _, _) = send(&st, post_form("/sources/add", form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    let (_, body) = get_as(&st, "/engine/stride", &cookie).await;
+    assert!(body.contains("stride3d&#x2f;stride (releases)"));
+
+    // Removing it deletes it and its source outright.
+    let (status, headers, _) = send(
+        &st,
+        post_form("/owners/remove", "owner_id=stride", Some(&cookie)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(headers[header::LOCATION], "/sources");
+    let (status, _) = get_as(&st, "/engine/stride", &cookie).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    assert!(
+        st.store
+            .lock()
+            .unwrap()
+            .custom_sources()
+            .unwrap()
+            .is_empty()
+    );
+}
+
+#[tokio::test]
+async fn invalid_owners_rerender_the_form() {
+    let st = state();
+    let cookie = login(&st).await;
+    for (form, message) in [
+        (
+            "owner_kind=engine&id=godot&name=Godot+2&tier=1",
+            "defined in sources.toml",
+        ),
+        (
+            "owner_kind=engine&id=Bad+Id&name=X&tier=1",
+            "be used as an id",
+        ),
+        ("owner_kind=engine&id=x&name=X&tier=7", "tier must be"),
+        ("owner_kind=outlet&id=x&name=", "Enter a name"),
+        ("id=x&name=X", "Choose engine or news outlet"),
+    ] {
+        let (status, _, body) = send(&st, post_form("/owners/add", form, Some(&cookie))).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{form}");
+        assert!(body.contains(message), "{form}: {message}");
+        assert!(
+            body.contains(r#"id="add-owner" class="panel" open"#),
+            "{form}"
+        );
+    }
+    assert!(st.store.lock().unwrap().custom_owners().unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn removing_a_config_engine_until_restored() {
+    let st = state();
+    let cookie = login(&st).await;
+    let (status, _, _) = send(
+        &st,
+        post_form("/owners/remove", "owner_id=godot", Some(&cookie)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+
+    let (status, _) = get_as(&st, "/engine/godot", &cookie).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+    // Its own item is gone and the outlet's copy no longer carries the Godot tag.
+    let (_, body) = get_as(&st, "/", &cookie).await;
+    assert!(!body.contains("Godot 4.8 released"));
+    assert!(body.contains("Godot 4.8<"));
+    assert!(!body.contains(r#"href="/engine/godot""#));
+    let (_, body) = get_as(&st, "/sources", &cookie).await;
+    assert!(body.contains("Removed from sources.toml (1)"));
+    assert!(!body.contains("godotengine&#x2f;godot"));
+
+    let (status, _, _) = send(
+        &st,
+        post_form("/owners/restore", "owner_id=godot", Some(&cookie)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    let (status, _) = get_as(&st, "/engine/godot", &cookie).await;
+    assert_eq!(status, StatusCode::OK);
+    let (_, body) = get_as(&st, "/sources", &cookie).await;
+    assert!(!body.contains("Removed from sources.toml"));
 }

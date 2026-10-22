@@ -280,7 +280,7 @@ gen notify-test --channel phone
 | `/` | Latest items from all enabled sources. |
 | `/engines` | Engine list with tier, C# support and recent activity. |
 | `/engine/{id}` | Items for one engine. |
-| `/sources` | Every source with its last fetch time and errors. Admins can switch sources on and off, add, remove and restore them here. |
+| `/sources` | Every source with its last fetch time and errors. Admins can switch sources on and off, and add, remove and restore sources, engines and outlets here. |
 | `/login`, `/logout` | Admin login with `server.admin_token`. |
 | `/feed.xml` | Combined Atom feed. |
 | `/api/items` | JSON API for items. |
@@ -298,11 +298,13 @@ Each source (on `/sources` and on every engine page) gets an **Enable** / **Disa
 - It takes effect immediately: a disabled source stops polling, and a re-enabled one polls right away. Items it already fetched stay visible.
 - Only sources of enabled engines and outlets are listed; switch a whole engine on with `enabled = true` in `sources.toml`.
 
-### Adding, removing and restoring sources
+### Adding, removing and restoring sources, engines and outlets
 
 - **Add a source** (at the top of `/sources`, or the **Add source** link next to an engine or outlet) takes the same settings as a `[[engine.source]]` entry: a feed, GitHub repository, Hacker News search, scraped HTML page or the Unity releases API, plus an optional category, interval and keywords. Input is checked first (URLs, `owner/repo`, CSS selectors), and a source that already exists is refused. A new source is polled straight away; its first fetch is stored without sending notifications.
 - **Remove** (next to Enable / Disable) asks for confirmation, then stops polling the source and **deletes its stored items**, fetch state and on/off override. Items elsewhere that were duplicates of its items are shown in their place.
 - A removed source that comes from `sources.toml` is kept as a tombstone in the database and listed under **Removed from sources.toml**, where **Restore** brings it back (it then fetches its items again). A source added in the web UI is simply deleted.
+- **Add an engine or news outlet** takes an id (a lowercase slug, used in `/engine/{id}`), name, homepage and, for engines, the tier, C# support, aliases and exclude phrases, written as in `sources.toml` (see "sources.toml: engines and outlets"). It is added without sources and you're taken straight to adding its first one. New aliases tag items from the next fetch on.
+- **Remove engine / Remove outlet** (in its group header) removes it with all its sources and their items; an engine's tags on other sources' items are removed too. One from `sources.toml` can be restored like a source, and gets its sources back (minus ones removed one by one, and ones added in the web UI, which are deleted with it).
 - `gen check-config` validates only the config files; it doesn't include changes made in the web UI.
 
 ### Admin login

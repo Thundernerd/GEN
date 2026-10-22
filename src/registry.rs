@@ -8,7 +8,10 @@ use std::sync::Arc;
 use tokio::sync::watch;
 
 use crate::classify::Classifier;
-use crate::config::{Owner, ResolvedSource, SourceConfig, SourcesConfig, source_id};
+use crate::config::{
+    EngineConfig, OutletConfig, Owner, ResolvedSource, SourceConfig, SourcesConfig, check_url,
+    source_id, valid_owner_id,
+};
 use crate::model::Item;
 use crate::store::{Removed, Store};
 
@@ -40,6 +43,20 @@ impl Snapshot {
         for o in &mut config.outlets {
             o.sources
                 .retain(|s| !edits.removed_sources.contains(&source_id(&o.id, &s.spec)));
+        }
+
+        for owner in &edits.owners {
+            let id = owner.id();
+            if config.engines.iter().any(|e| e.id == id)
+                || config.outlets.iter().any(|o| o.id == id)
+            {
+                tracing::warn!(owner = %id, "skipping added engine/outlet: sources.toml defines it too");
+                continue;
+            }
+            match owner {
+                CustomOwner::Engine(e) => config.engines.push(e.clone()),
+                CustomOwner::Outlet(o) => config.outlets.push(o.clone()),
+            }
         }
 
         let mut ids: HashSet<String> = config.all_sources().into_iter().map(|s| s.id).collect();
@@ -82,14 +99,90 @@ impl Snapshot {
     pub fn is_custom_source(&self, id: &str) -> bool {
         self.edits.sources.iter().any(|s| s.id == id)
     }
+
+    /// Whether an engine or outlet was added in the web UI.
+    pub fn is_custom_owner(&self, id: &str) -> bool {
+        self.edits.owners.iter().any(|o| o.id() == id)
+    }
+
+    fn has_owner(&self, id: &str) -> bool {
+        self.config.engines.iter().any(|e| e.id == id)
+            || self.config.outlets.iter().any(|o| o.id == id)
+    }
 }
 
 /// Changes made in the web UI on top of `sources.toml`.
 #[derive(Debug, Clone, Default)]
 pub struct SourceEdits {
+    pub owners: Vec<CustomOwner>,
     pub sources: Vec<CustomSource>,
     pub removed_owners: BTreeSet<String>,
     pub removed_sources: BTreeSet<String>,
+}
+
+/// An engine or outlet added in the web UI. Its sources are kept in
+/// [`SourceEdits::sources`], so `sources` here is always empty.
+#[derive(Debug, Clone)]
+pub enum CustomOwner {
+    Engine(EngineConfig),
+    Outlet(OutletConfig),
+}
+
+impl CustomOwner {
+    pub fn id(&self) -> &str {
+        match self {
+            CustomOwner::Engine(e) => &e.id,
+            CustomOwner::Outlet(o) => &o.id,
+        }
+    }
+
+    fn kind(&self) -> &'static str {
+        match self {
+            CustomOwner::Engine(_) => "engine",
+            CustomOwner::Outlet(_) => "outlet",
+        }
+    }
+
+    fn to_json(&self) -> serde_json::Result<String> {
+        match self {
+            CustomOwner::Engine(e) => serde_json::to_string(e),
+            CustomOwner::Outlet(o) => serde_json::to_string(o),
+        }
+    }
+
+    fn from_json(kind: &str, json: &str) -> anyhow::Result<Self> {
+        Ok(match kind {
+            "engine" => CustomOwner::Engine(serde_json::from_str(json)?),
+            "outlet" => CustomOwner::Outlet(serde_json::from_str(json)?),
+            other => anyhow::bail!("unknown kind `{other}`"),
+        })
+    }
+
+    /// Checks an engine/outlet entered in the web UI. The error is a message for the user.
+    fn check(&self) -> Result<(), String> {
+        let id = self.id();
+        if !valid_owner_id(id) {
+            return Err(format!(
+                "“{id}” can't be used as an id: use up to 40 lowercase letters, digits and dashes."
+            ));
+        }
+        let (name, homepage) = match self {
+            CustomOwner::Engine(e) => (&e.name, &e.homepage),
+            CustomOwner::Outlet(o) => (&o.name, &o.homepage),
+        };
+        if name.trim().is_empty() {
+            return Err("Enter a name.".into());
+        }
+        if let Some(url) = homepage {
+            check_url(url)?;
+        }
+        if let CustomOwner::Engine(e) = self
+            && !(1..=3).contains(&e.tier)
+        {
+            return Err("The tier must be 1, 2 or 3.".into());
+        }
+        Ok(())
+    }
 }
 
 /// A source added in the web UI.
@@ -102,6 +195,15 @@ pub struct CustomSource {
 
 impl SourceEdits {
     fn load(store: &Store) -> anyhow::Result<Self> {
+        let mut owners = Vec::new();
+        for (id, kind, json) in store.custom_owners()? {
+            match CustomOwner::from_json(&kind, &json) {
+                Ok(owner) => owners.push(owner),
+                Err(err) => {
+                    tracing::warn!(owner = %id, "skipping unreadable added {kind}: {err:#}")
+                }
+            }
+        }
         let mut sources = Vec::new();
         for (id, owner_id, json) in store.custom_sources()? {
             match serde_json::from_str(&json) {
@@ -114,6 +216,7 @@ impl SourceEdits {
             }
         }
         Ok(SourceEdits {
+            owners,
             sources,
             removed_owners: store.removed(Removed::Owner)?.into_iter().collect(),
             removed_sources: store.removed(Removed::Source)?.into_iter().collect(),
@@ -130,6 +233,9 @@ pub enum SourceEdit {
     },
     RemoveSource(String),
     RestoreSource(String),
+    AddOwner(CustomOwner),
+    RemoveOwner(String),
+    RestoreOwner(String),
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -179,6 +285,27 @@ impl SourceRegistry {
             .filter(|s| current.edits.removed_sources.contains(&s.id) && !present.contains(&s.id))
             .filter(|s| !current.edits.removed_owners.contains(s.owner.id()))
             .collect()
+    }
+
+    /// Engines and outlets from sources.toml that were removed in the web UI and can be
+    /// restored.
+    pub fn removed_owners(&self) -> Vec<(Owner, String)> {
+        let current = self.current();
+        let removed =
+            |id: &str| current.edits.removed_owners.contains(id) && !current.has_owner(id);
+        let engines = self
+            .baseline
+            .engines
+            .iter()
+            .filter(|e| removed(&e.id))
+            .map(|e| (Owner::Engine(e.id.clone()), e.name.clone()));
+        let outlets = self
+            .baseline
+            .outlets
+            .iter()
+            .filter(|o| removed(&o.id))
+            .map(|o| (Owner::Outlet(o.id.clone()), o.name.clone()));
+        engines.chain(outlets).collect()
     }
 
     /// Checks `edit`, stores it and publishes the new snapshot. Returns the ids of sources
@@ -235,6 +362,79 @@ impl SourceRegistry {
                 edits.removed_sources.remove(&id);
                 self.commit(edits, || store.restore(Removed::Source, &id))?;
                 tracing::info!(source = %id, "source restored");
+                Ok(Vec::new())
+            }
+            SourceEdit::AddOwner(owner) => {
+                owner.check().map_err(EditError::Invalid)?;
+                let id = owner.id().to_string();
+                if self.baseline.engines.iter().any(|e| e.id == id)
+                    || self.baseline.outlets.iter().any(|o| o.id == id)
+                {
+                    let enabled = current.config.engine(&id).map(|e| e.enabled).or_else(|| {
+                        current
+                            .config
+                            .outlets
+                            .iter()
+                            .find(|o| o.id == id)
+                            .map(|o| o.enabled)
+                    });
+                    let hint = match enabled {
+                        None => " Restore it instead.",
+                        Some(false) => " It is switched off there; set `enabled = true` to use it.",
+                        Some(true) => "",
+                    };
+                    return Err(EditError::Invalid(format!(
+                        "“{id}” is defined in sources.toml.{hint}"
+                    )));
+                }
+                if current.has_owner(&id) {
+                    return Err(EditError::Invalid(format!("“{id}” is already used.")));
+                }
+                let json = owner.to_json().map_err(anyhow::Error::from)?;
+                let kind = owner.kind();
+                edits.owners.push(owner);
+                self.commit(edits, || store.add_custom_owner(&id, kind, &json))?;
+                tracing::info!(owner = %id, "{kind} added");
+                Ok(Vec::new())
+            }
+            SourceEdit::RemoveOwner(id) => {
+                let is_engine = current.config.engine(&id).is_some();
+                if !current.has_owner(&id) {
+                    return Err(EditError::Invalid(format!(
+                        "There is no engine or outlet “{id}”."
+                    )));
+                }
+                let source_ids: Vec<String> = current
+                    .config
+                    .all_sources()
+                    .into_iter()
+                    .filter(|s| s.owner.id() == id)
+                    .map(|s| s.id)
+                    .collect();
+                // Added here: delete it. From sources.toml: leave a tombstone. Either way
+                // the sources added to it are deleted.
+                let before = edits.owners.len();
+                edits.owners.retain(|o| o.id() != id);
+                let tombstone = edits.owners.len() == before;
+                if tombstone {
+                    edits.removed_owners.insert(id.clone());
+                }
+                edits.sources.retain(|s| s.owner_id != id);
+                self.commit(edits, || {
+                    store.remove_owner(&id, is_engine, tombstone, &source_ids)
+                })?;
+                tracing::info!(owner = %id, sources = source_ids.len(), "engine/outlet removed");
+                Ok(source_ids)
+            }
+            SourceEdit::RestoreOwner(id) => {
+                if !self.removed_owners().iter().any(|(o, _)| o.id() == id) {
+                    return Err(EditError::Invalid(format!(
+                        "“{id}” is not a removed engine or outlet that can be restored."
+                    )));
+                }
+                edits.removed_owners.remove(&id);
+                self.commit(edits, || store.restore(Removed::Owner, &id))?;
+                tracing::info!(owner = %id, "engine/outlet restored");
                 Ok(Vec::new())
             }
         }
@@ -436,6 +636,99 @@ mod tests {
         invalid(reg.apply(&mut store, SourceEdit::RemoveSource("nope".into())));
         invalid(reg.apply(&mut store, SourceEdit::RestoreSource(GODOT_SRC.into())));
         assert!(store.custom_sources().unwrap().is_empty());
+    }
+
+    fn engine(id: &str) -> CustomOwner {
+        CustomOwner::Engine(EngineConfig {
+            id: id.into(),
+            name: "Stride".into(),
+            tier: 1,
+            csharp: "native".into(),
+            homepage: None,
+            enabled: true,
+            aliases: vec!["stride".into()],
+            exclude: Vec::new(),
+            sources: Vec::new(),
+        })
+    }
+
+    #[test]
+    fn adds_and_removes_engines() {
+        let mut store = Store::open_in_memory().unwrap();
+        let reg = registry(&store);
+        reg.apply(&mut store, SourceEdit::AddOwner(engine("stride")))
+            .unwrap();
+        reg.apply(&mut store, add("stride", hn("stride"))).unwrap();
+        let snapshot = reg.current();
+        assert!(snapshot.is_custom_owner("stride"));
+        assert_eq!(snapshot.config.engine("stride").unwrap().sources.len(), 1);
+        // The classifier knows the new engine's aliases.
+        let gfs = snapshot
+            .config
+            .manageable_sources()
+            .into_iter()
+            .find(|s| s.owner.id() == "gfs")
+            .unwrap();
+        let raw = crate::model::RawItem {
+            guid: "1".into(),
+            title: "Stride 4.3 is out".into(),
+            ..Default::default()
+        };
+        let item = snapshot.classifier.classify(&gfs, raw).unwrap();
+        assert_eq!(item.engines, ["stride"]);
+        // Survives a reload.
+        assert!(registry(&store).current().config.engine("stride").is_some());
+
+        let purged = reg
+            .apply(&mut store, SourceEdit::RemoveOwner("stride".into()))
+            .unwrap();
+        assert_eq!(purged, ["stride:hn:stride"]);
+        assert!(reg.current().config.engine("stride").is_none());
+        assert!(store.custom_owners().unwrap().is_empty());
+        assert!(store.custom_sources().unwrap().is_empty());
+        assert!(
+            reg.removed_owners().is_empty(),
+            "added here: nothing to restore"
+        );
+
+        // An engine from sources.toml is tombstoned with its sources and can be restored.
+        let purged = reg
+            .apply(&mut store, SourceEdit::RemoveOwner("godot".into()))
+            .unwrap();
+        assert_eq!(purged, [GODOT_SRC]);
+        assert!(!ids(&reg).contains(&GODOT_SRC.to_string()));
+        assert_eq!(reg.removed_owners()[0].1, "Godot");
+        assert!(registry(&store).current().config.engine("godot").is_none());
+        reg.apply(&mut store, SourceEdit::RestoreOwner("godot".into()))
+            .unwrap();
+        assert!(ids(&reg).contains(&GODOT_SRC.to_string()));
+    }
+
+    #[test]
+    fn refuses_invalid_owners() {
+        let mut store = Store::open_in_memory().unwrap();
+        let reg = registry(&store);
+        let invalid = |reg: &SourceRegistry, store: &mut Store, owner: CustomOwner| match reg
+            .apply(store, SourceEdit::AddOwner(owner))
+        {
+            Err(EditError::Invalid(msg)) => msg,
+            other => panic!("expected Invalid, got {other:?}"),
+        };
+        assert!(invalid(&reg, &mut store, engine("Bad Id")).contains("can't be used"));
+        assert!(invalid(&reg, &mut store, engine("a:b")).contains("can't be used"));
+        assert!(invalid(&reg, &mut store, engine("gfs")).contains("defined in sources.toml."));
+        let CustomOwner::Engine(mut tier7) = engine("x") else {
+            unreachable!()
+        };
+        tier7.tier = 7;
+        assert!(invalid(&reg, &mut store, CustomOwner::Engine(tier7)).contains("tier"));
+
+        reg.apply(&mut store, SourceEdit::RemoveOwner("godot".into()))
+            .unwrap();
+        assert!(invalid(&reg, &mut store, engine("godot")).contains("Restore it instead"));
+        reg.apply(&mut store, SourceEdit::AddOwner(engine("stride")))
+            .unwrap();
+        assert!(invalid(&reg, &mut store, engine("stride")).contains("already used"));
     }
 
     #[test]

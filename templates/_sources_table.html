@@ -14,8 +14,16 @@
         {%- if g.owner_kind == "engine" %}<a class="group-name" href="/engine/{{ g.owner_id }}">{{ g.owner }}</a>{% else %}<span class="group-name">{{ g.owner }}</span>{% endif %}
         <span class="group-kind">{{ "engine" if g.owner_kind == "engine" else "news outlet" }}</span>
         <span class="group-count">{{ g.enabled }} of {{ g.total }} enabled</span>
+        {%- if g.custom %}<span class="group-count">added here</span>{% endif %}
         {%- if admin %}
         <a class="group-action" href="/sources?owner={{ g.owner_id }}#add-source">Add source</a>
+        <details class="confirm group-remove">
+          <summary class="group-action">Remove {{ "engine" if g.owner_kind == "engine" else "outlet" }}</summary>
+          <form method="post" action="/owners/remove">
+            <input type="hidden" name="owner_id" value="{{ g.owner_id }}">
+            <button type="submit" class="btn-small btn-danger">Remove {{ g.owner }}{% if g.total %}, its {{ g.total }} source{{ "s" if g.total != 1 }} and their items{% endif %}</button>
+          </form>
+        </details>
         {%- endif %}
       </th>
     </tr>

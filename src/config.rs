@@ -241,7 +241,14 @@ impl SourceConfig {
     }
 }
 
-fn check_url(url: &str) -> Result<(), String> {
+/// Whether `id` can name an engine or outlet added in the web UI: a short lowercase slug,
+/// so it fits in `/engine/{id}` and in source ids (`{owner}:{key}`).
+pub fn valid_owner_id(id: &str) -> bool {
+    let re = regex::Regex::new(r"^[a-z0-9][a-z0-9-]{0,39}$").expect("valid regex");
+    re.is_match(id)
+}
+
+pub fn check_url(url: &str) -> Result<(), String> {
     match url::Url::parse(url) {
         Ok(u) if matches!(u.scheme(), "http" | "https") && u.host().is_some() => Ok(()),
         _ => Err(format!("“{url}” is not an http(s) URL.")),

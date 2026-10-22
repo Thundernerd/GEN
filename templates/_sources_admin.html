@@ -1,6 +1,7 @@
-{#- Admin forms on /sources: add a source, restore removed ones. Expects `owners`,
-    `categories`, `default_interval`, `preselect_owner`, `removed` and `feedback` (a failed
-    submission: `panel`, `error` and the posted `form`). -#}
+{#- Admin forms on /sources: add a source or engine/outlet, restore removed ones. Expects
+    `owners`, `categories`, `tiers`, `default_interval`, `preselect_owner`, `removed`,
+    `removed_owners` and `feedback` (a failed submission: `panel`, `error` and the posted
+    `form`). -#}
 {%- set failed = feedback.panel if feedback else none %}
 {%- set f = feedback.form if feedback else {} %}
 <section class="admin-panel" aria-label="Manage sources">
@@ -97,10 +98,57 @@
       <button type="submit">Add source</button>
     </form>
   </details>
-  {%- if removed %}
+  <details id="add-owner" class="panel"{% if failed == "add-owner" %} open{% endif %}>
+    <summary>Add an engine or news outlet</summary>
+    {%- if failed == "add-owner" %}
+    <p class="form-error" role="alert">{{ feedback.error }}</p>
+    {%- endif %}
+    <form method="post" action="/owners/add" class="stack-form">
+      <div class="form-row">
+        <label class="check"><input type="radio" name="owner_kind" value="engine"{% if f.owner_kind != "outlet" %} checked{% endif %}> Engine</label>
+        <label class="check"><input type="radio" name="owner_kind" value="outlet"{% if f.owner_kind == "outlet" %} checked{% endif %}> News outlet (covers many engines)</label>
+      </div>
+      <div class="form-row">
+        <label><span>Id (lowercase, e.g. <code>stride</code>)</span><input name="id" value="{{ f.id or "" }}" pattern="[a-z0-9][a-z0-9\-]{0,39}" required></label>
+        <label><span>Name</span><input name="name" value="{{ f.name or "" }}" required></label>
+        <label><span>Homepage (optional)</span><input type="url" name="homepage" value="{{ f.homepage or "" }}"></label>
+      </div>
+      <fieldset>
+        <legend>Engine</legend>
+        <div class="form-row">
+          <label>
+            <span>Tier</span>
+            <select name="tier">
+              {%- for t in tiers %}
+              <option value="{{ t.tier }}"{% if t.tier|string == f.tier %} selected{% endif %}>{{ t.tier }}: {{ t.label }}</option>
+              {%- endfor %}
+            </select>
+          </label>
+          <label><span>C# support</span><input name="csharp" value="{{ f.csharp or "" }}" placeholder="none"></label>
+        </div>
+        <label><span>Aliases (comma-separated; tag outlet items with this engine. Lowercase matches any case, “Unity” only that case)</span><input name="aliases" value="{{ f.aliases or "" }}"></label>
+        <label><span>Exclude (comma-separated phrases that veto an alias match)</span><input name="exclude" value="{{ f.exclude or "" }}"></label>
+      </fieldset>
+      <fieldset>
+        <legend>News outlet</legend>
+        <label class="check"><input type="checkbox" name="require_engine_match" value="1"{% if f.require_engine_match %} checked{% endif %}> Only keep items that mention a known engine</label>
+      </fieldset>
+      <button type="submit">Add</button>
+    </form>
+  </details>
+  {%- if removed or removed_owners %}
   <details id="removed-sources" class="panel">
-    <summary>Removed from sources.toml ({{ removed|length }})</summary>
+    <summary>Removed from sources.toml ({{ removed|length + removed_owners|length }})</summary>
     <ul class="removed-list">
+      {%- for o in removed_owners %}
+      <li>
+        <span><strong>{{ o.name }}</strong> <span class="source-meta">{{ o.kind }} with all its sources</span></span>
+        <form method="post" action="/owners/restore">
+          <input type="hidden" name="owner_id" value="{{ o.id }}">
+          <button type="submit" class="btn-small btn-quiet">Restore</button>
+        </form>
+      </li>
+      {%- endfor %}
       {%- for r in removed %}
       <li>
         <span><strong>{{ r.owner }}</strong> <span class="source-kind">{{ r.kind }}</span> {{ r.target }}</span>

@@ -498,7 +498,10 @@ details.panel .form-error { margin-top: 0; }
 .form-hint { color: var(--muted); font-size: 0.85rem; margin: 0; }
 
 .group-action { font-size: 0.8rem; font-weight: 500; margin-left: 0.6rem; }
-.group-action::before { content: "·"; margin-right: 0.6rem; color: var(--muted); }
+.group-action::before { content: "·"; display: inline-block; margin-right: 0.6rem; color: var(--muted); }
+details.group-remove { display: inline; }
+details.group-remove > summary { display: inline; cursor: pointer; color: var(--link); }
+details.group-remove form { display: inline-block; margin: 0 0 0 0.6rem; vertical-align: middle; }
 
 table.sources td.actions > * + * { margin-top: 0.35rem; }
 details.confirm > summary { list-style: none; }

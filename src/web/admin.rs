@@ -1,4 +1,5 @@
-//! Admin actions that change the set of sources: adding, removing and restoring them.
+//! Admin actions that change the set of sources: adding, removing and restoring sources
+//! and engines/outlets.
 //! Changes go through the [`SourceRegistry`](crate::registry::SourceRegistry), so they take
 //! effect right away and are stored in the database (sources.toml is never written).
 
@@ -9,9 +10,11 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use super::{AppError, AppState, PageResult, SourcesParams, non_empty, safe_next, sources_page};
-use crate::config::{GithubMode, SourceConfig, SourceSpec, default_unity_limit};
+use crate::config::{
+    EngineConfig, GithubMode, OutletConfig, SourceConfig, SourceSpec, default_unity_limit,
+};
 use crate::model::ItemKind;
-use crate::registry::{EditError, SourceEdit};
+use crate::registry::{CustomOwner, EditError, SourceEdit};
 
 impl AppState {
     /// Applies an edit under the store lock and drops the toggles of purged sources.
@@ -203,6 +206,123 @@ pub(super) async fn restore_source(
         st.apply_edit(SourceEdit::RestoreSource(form.source_id))
             .await?;
         Ok(Redirect::to(&safe_next(form.next.as_deref())).into_response())
+    }
+    .await;
+    st.respond(result)
+}
+
+/// The add-engine/outlet form; like [`AddSourceForm`], all optional text.
+#[derive(Debug, Default, Deserialize, Serialize)]
+pub(super) struct AddOwnerForm {
+    owner_kind: Option<String>,
+    id: Option<String>,
+    name: Option<String>,
+    homepage: Option<String>,
+    tier: Option<String>,
+    csharp: Option<String>,
+    aliases: Option<String>,
+    exclude: Option<String>,
+    require_engine_match: Option<String>,
+}
+
+impl AddOwnerForm {
+    fn to_owner(&self) -> Result<CustomOwner, String> {
+        let id = non_empty(&self.id).ok_or("Enter an id.")?;
+        let name = non_empty(&self.name).ok_or("Enter a name.")?;
+        let homepage = non_empty(&self.homepage);
+        match non_empty(&self.owner_kind).as_deref() {
+            Some("engine") => Ok(CustomOwner::Engine(EngineConfig {
+                id,
+                name,
+                tier: non_empty(&self.tier)
+                    .and_then(|t| t.parse().ok())
+                    .ok_or("Choose a tier.")?,
+                csharp: non_empty(&self.csharp).unwrap_or_else(|| "none".into()),
+                homepage,
+                enabled: true,
+                aliases: split_list(self.aliases.as_deref()),
+                exclude: split_list(self.exclude.as_deref()),
+                sources: Vec::new(),
+            })),
+            Some("outlet") => Ok(CustomOwner::Outlet(OutletConfig {
+                id,
+                name,
+                homepage,
+                enabled: true,
+                require_engine_match: non_empty(&self.require_engine_match).is_some(),
+                sources: Vec::new(),
+            })),
+            _ => Err("Choose engine or news outlet.".into()),
+        }
+    }
+}
+
+pub(super) async fn add_owner(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    Form(form): Form<AddOwnerForm>,
+) -> Response {
+    let result = add_owner_inner(&st, &headers, form).await;
+    st.respond(result)
+}
+
+async fn add_owner_inner(st: &AppState, headers: &HeaderMap, form: AddOwnerForm) -> PageResult {
+    require_admin(st, headers)?;
+    let result = match form.to_owner() {
+        Ok(owner) => {
+            let id = owner.id().to_string();
+            st.apply_edit(SourceEdit::AddOwner(owner))
+                .await
+                .map(|()| id)
+        }
+        Err(msg) => Err(AppError::Invalid(msg)),
+    };
+    match result {
+        // Straight on to adding its first source.
+        Ok(id) => Ok(Redirect::to(&format!(
+            "/sources?owner={}#add-source",
+            url::form_urlencoded::byte_serialize(id.as_bytes()).collect::<String>()
+        ))
+        .into_response()),
+        Err(AppError::Invalid(msg)) => {
+            let feedback = json!({"panel": "add-owner", "error": msg, "form": form});
+            let page = sources_page(st, true, SourcesParams::default(), Some(feedback)).await?;
+            Ok((StatusCode::UNPROCESSABLE_ENTITY, page).into_response())
+        }
+        Err(err) => Err(err),
+    }
+}
+
+#[derive(Deserialize)]
+pub(super) struct OwnerForm {
+    owner_id: String,
+}
+
+pub(super) async fn remove_owner(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    Form(form): Form<OwnerForm>,
+) -> Response {
+    let result = async {
+        require_admin(&st, &headers)?;
+        st.apply_edit(SourceEdit::RemoveOwner(form.owner_id))
+            .await?;
+        Ok(Redirect::to("/sources").into_response())
+    }
+    .await;
+    st.respond(result)
+}
+
+pub(super) async fn restore_owner(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    Form(form): Form<OwnerForm>,
+) -> Response {
+    let result = async {
+        require_admin(&st, &headers)?;
+        st.apply_edit(SourceEdit::RestoreOwner(form.owner_id))
+            .await?;
+        Ok(Redirect::to("/sources").into_response())
     }
     .await;
     st.respond(result)

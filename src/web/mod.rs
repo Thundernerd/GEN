@@ -29,7 +29,7 @@ use tower_http::services::ServeDir;
 
 use crate::config::{AppConfig, Owner, SourceSpec};
 use crate::model::{Item, ItemKind, SourceState};
-use crate::registry::SourceRegistry;
+use crate::registry::{Snapshot, SourceRegistry};
 use crate::store::Store;
 use crate::toggles::SourceToggles;
 
@@ -231,6 +231,9 @@ pub fn router(state: AppState) -> Router {
         .route("/sources/add", post(admin::add_source))
         .route("/sources/remove", post(admin::remove_source))
         .route("/sources/restore", post(admin::restore_source))
+        .route("/owners/add", post(admin::add_owner))
+        .route("/owners/remove", post(admin::remove_owner))
+        .route("/owners/restore", post(admin::restore_owner))
         .route("/login", get(login_form).post(login))
         .route("/logout", post(logout))
         .route("/feed.xml", get(feed))
@@ -482,7 +485,7 @@ async fn engine_page(st: &AppState, id: String, params: ListParams, admin: bool)
                 "enabled": engine.enabled,
             },
             "source_count": sources.len(),
-            "groups": group_by_owner(&sources),
+            "groups": group_by_owner(&snapshot, &[(Owner::Engine(engine.id.clone()), &engine.name)], &sources),
             "grouped": false,
             "admin": admin,
             "next": base.clone(),
@@ -536,7 +539,8 @@ async fn sources_page(
         (Some("owner"), _) => "asc",
         _ => "config",
     };
-    let mut groups = group_by_owner(&rows);
+    let owners_in_order = snapshot.config.manageable_owners();
+    let mut groups = group_by_owner(&snapshot, &owners_in_order, &rows);
     if order != "config" {
         groups.sort_by_key(|g| g["owner"].as_str().unwrap_or_default().to_lowercase());
         if order == "desc" {
@@ -575,6 +579,23 @@ async fn sources_page(
             json!({"id": s.id, "owner": s.owner_name, "kind": kind, "target": target})
         })
         .collect();
+    let removed_owners: Vec<_> = st
+        .registry
+        .removed_owners()
+        .into_iter()
+        .map(|(o, name)| {
+            let kind = if matches!(o, Owner::Engine(_)) {
+                "engine"
+            } else {
+                "news outlet"
+            };
+            json!({"id": o.id(), "name": name, "kind": kind})
+        })
+        .collect();
+    let tiers: Vec<_> = TIER_LABELS
+        .iter()
+        .map(|(tier, label)| json!({"tier": tier, "label": label}))
+        .collect();
     let count = |status: &str| rows.iter().filter(|r| r["status"] == status).count();
     let summary = json!({
         "total": rows.len(),
@@ -600,30 +621,38 @@ async fn sources_page(
             "default_interval": st.config.polling.default_interval_minutes,
             "preselect_owner": non_empty(&params.owner),
             "removed": removed,
+            "removed_owners": removed_owners,
+            "tiers": tiers,
             "feedback": feedback,
         }),
     )
 }
 
-/// Groups source rows by owner, keeping the order in which owners first appear.
-fn group_by_owner(rows: &[serde_json::Value]) -> Vec<serde_json::Value> {
-    let mut groups: Vec<(String, Vec<serde_json::Value>)> = Vec::new();
-    for row in rows {
-        let key = format!("{}:{}", row["owner_kind"], row["owner_id"]);
-        match groups.iter_mut().find(|(k, _)| *k == key) {
-            Some((_, members)) => members.push(row.clone()),
-            None => groups.push((key, vec![row.clone()])),
-        }
-    }
-    groups
-        .into_iter()
-        .map(|(_, members)| {
-            let first = &members[0];
+/// One group of source rows per owner, in the given owner order. Owners without sources
+/// get an empty group, so sources can be added to them.
+fn group_by_owner(
+    snapshot: &Snapshot,
+    owners: &[(Owner, &str)],
+    rows: &[serde_json::Value],
+) -> Vec<serde_json::Value> {
+    owners
+        .iter()
+        .map(|(owner, name)| {
+            let owner_kind = match owner {
+                Owner::Engine(_) => "engine",
+                Owner::Outlet(_) => "outlet",
+            };
+            let members: Vec<_> = rows
+                .iter()
+                .filter(|r| r["owner_kind"] == owner_kind && r["owner_id"] == owner.id())
+                .cloned()
+                .collect();
             let enabled = members.iter().filter(|r| r["enabled"] == true).count();
             json!({
-                "owner": first["owner"],
-                "owner_kind": first["owner_kind"],
-                "owner_id": first["owner_id"],
+                "owner": name,
+                "owner_kind": owner_kind,
+                "owner_id": owner.id(),
+                "custom": snapshot.is_custom_owner(owner.id()),
                 "enabled": enabled,
                 "total": members.len(),
                 "sources": members,
