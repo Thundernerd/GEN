@@ -1,14 +1,16 @@
 //! Background polling: one task per source, each polling on its own interval, with a global
-//! concurrency limit, exponential backoff on errors and notifications for new items.
+//! concurrency limit and exponential backoff on errors. A single notifier task delivers
+//! pending notifications from the store, so failed sends are retried and nothing is lost
+//! across restarts.
 
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::Arc;
 use std::time::Duration;
 
-use tokio::sync::Semaphore;
+use tokio::sync::{Notify, Semaphore};
 use tokio::task::JoinSet;
 
-use crate::config::{AppConfig, ResolvedSource, SourcesConfig};
+use crate::config::{AppConfig, ChannelConfig, ChannelTarget, ResolvedSource, SourcesConfig};
 use crate::fetch::FetchError;
 use crate::model::Item;
 use crate::notify::{self, NotifyContext};
@@ -18,32 +20,49 @@ use crate::pipeline::Pipeline;
 const MAX_BACKOFF: Duration = Duration::from_secs(24 * 60 * 60);
 /// Initial polls are spread over this window so startup doesn't hit every host at once.
 const STARTUP_SPREAD: Duration = Duration::from_secs(60);
+/// How often the notifier retries pending notifications without being woken.
+const NOTIFY_RETRY_INTERVAL: Duration = Duration::from_secs(5 * 60);
+/// Pending notifications older than this are given up on.
+const NOTIFY_MAX_AGE: chrono::TimeDelta = chrono::TimeDelta::days(3);
+/// Items handled per channel per notifier run.
+const NOTIFY_BATCH: u32 = 100;
 
-/// Spawns a polling task per enabled source. Dropping the returned `JoinSet` stops them.
+/// Spawns a polling task per enabled source plus the notifier task. Dropping the returned
+/// `JoinSet` stops them.
 pub fn spawn(pipeline: Pipeline, sources: Arc<SourcesConfig>, app: Arc<AppConfig>) -> JoinSet<()> {
     let permits = Arc::new(Semaphore::new(app.polling.concurrency.max(1)));
+    let wake = Arc::new(Notify::new());
     let mut tasks = JoinSet::new();
     for source in sources.enabled_sources() {
-        let ctx = TaskContext {
+        let poller = Poller {
             pipeline: pipeline.clone(),
-            sources: sources.clone(),
             app: app.clone(),
             permits: permits.clone(),
+            wake: wake.clone(),
         };
-        tasks.spawn(async move { ctx.run(source).await });
+        tasks.spawn(async move { poller.run(source).await });
     }
-    tracing::info!(sources = tasks.len(), "scheduler started");
+    let sources_count = tasks.len();
+    let notifier = Notifier {
+        pipeline,
+        sources,
+        app,
+        wake,
+    };
+    tasks.spawn(async move { notifier.run().await });
+    tracing::info!(sources = sources_count, "scheduler started");
     tasks
 }
 
-struct TaskContext {
+struct Poller {
     pipeline: Pipeline,
-    sources: Arc<SourcesConfig>,
     app: Arc<AppConfig>,
     permits: Arc<Semaphore>,
+    /// Woken when new notifiable items were stored.
+    wake: Arc<Notify>,
 }
 
-impl TaskContext {
+impl Poller {
     async fn run(self, source: ResolvedSource) {
         let interval = Duration::from_secs(
             60 * source
@@ -66,11 +85,11 @@ impl TaskContext {
                     failures = 0;
                     if !poll.new_items.is_empty() {
                         tracing::info!(source = %source.id, new = poll.new_items.len(), "new items");
-                    }
-                    if poll.was_seeded {
-                        self.notify(&poll.new_items).await;
-                    } else if !poll.new_items.is_empty() {
-                        tracing::info!(source = %source.id, "first fetch: stored without notifying");
+                        if poll.was_seeded {
+                            self.wake.notify_one();
+                        } else {
+                            tracing::info!(source = %source.id, "first fetch: stored without notifying");
+                        }
                     }
                     interval
                 }
@@ -83,54 +102,91 @@ impl TaskContext {
                         Some(FetchError::RateLimited { retry_after, .. }) => *retry_after,
                         _ => None,
                     };
-                    let delay = retry_after.map_or(backoff, |r| r.max(interval));
+                    let delay = retry_after
+                        .map_or(backoff, |r| r.max(interval))
+                        .min(MAX_BACKOFF);
                     tracing::warn!(source = %source.id, failures, retry_in = ?delay, "poll failed: {err:#}");
                     delay
                 }
             };
-            tokio::time::sleep(delay + spread(&source.id, interval / 20)).await;
+            tokio::time::sleep(delay.saturating_add(spread(&source.id, interval / 20))).await;
+        }
+    }
+}
+
+struct Notifier {
+    pipeline: Pipeline,
+    sources: Arc<SourcesConfig>,
+    app: Arc<AppConfig>,
+    wake: Arc<Notify>,
+}
+
+impl Notifier {
+    async fn run(self) {
+        loop {
+            for channel in self.app.notify.channels.iter().filter(|c| c.enabled) {
+                if let Err(err) = self.deliver(channel).await {
+                    tracing::error!(channel = %channel.name, "notification failed: {err:#}");
+                }
+            }
+            tokio::select! {
+                () = self.wake.notified() => {}
+                () = tokio::time::sleep(NOTIFY_RETRY_INTERVAL) => {}
+            }
         }
     }
 
-    /// Sends new, non-duplicate items to every channel whose rules match them.
-    async fn notify(&self, items: &[Item]) {
-        let fresh: Vec<&Item> = items.iter().filter(|i| i.duplicate_of.is_none()).collect();
-        if fresh.is_empty() {
-            return;
+    /// Sends one channel's pending items. Each item is marked as handled right after it is
+    /// sent (or skipped by the rules), so a failure only leaves unsent items pending.
+    async fn deliver(&self, channel: &ChannelConfig) -> anyhow::Result<()> {
+        let name = channel.name.clone();
+        let pending = self
+            .pipeline
+            .with_store(move |s| {
+                let registered = s.register_channel(&name)?;
+                let since = registered.max(chrono::Utc::now() - NOTIFY_MAX_AGE);
+                s.pending_notifications(&name, since, NOTIFY_BATCH)
+            })
+            .await?;
+        if pending.is_empty() {
+            return Ok(());
         }
+        let (matching, skipped): (Vec<Item>, Vec<Item>) = pending
+            .into_iter()
+            .partition(|i| notify::matches(&channel.rules, i));
+        self.mark(channel, &skipped).await?;
+
         let ctx = NotifyContext {
             http: &self.pipeline.http,
             sources: &self.sources,
             base_url: &self.app.server.base_url,
         };
-        for channel in self.app.notify.channels.iter().filter(|c| c.enabled) {
-            let matching: Vec<Item> = fresh
-                .iter()
-                .filter(|i| notify::matches(&channel.rules, i))
-                .map(|i| (*i).clone())
-                .collect();
-            if matching.is_empty() {
-                continue;
-            }
-            match notify::send(&ctx, channel, &matching).await {
-                Ok(()) => {
-                    let name = channel.name.clone();
-                    let ids: Vec<i64> = matching.iter().map(|i| i.id).collect();
-                    let marked = self
-                        .pipeline
-                        .with_store(move |s| {
-                            ids.iter()
-                                .try_for_each(|id| s.mark_notified(*id, &name).map(|_| ()))
-                        })
-                        .await;
-                    if let Err(err) = marked {
-                        tracing::error!(channel = %channel.name, "recording notifications failed: {err:#}");
-                    }
-                    tracing::info!(channel = %channel.name, items = matching.len(), "notified");
-                }
-                Err(err) => tracing::error!(channel = %channel.name, "notification failed: {err}"),
-            }
+        let digest = matches!(channel.target, ChannelTarget::Email { digest: true, .. });
+        let batches: Vec<&[Item]> = if digest {
+            vec![matching.as_slice()]
+        } else {
+            matching.chunks(1).collect()
+        };
+        for batch in batches.into_iter().filter(|b| !b.is_empty()) {
+            notify::send(&ctx, channel, batch).await?;
+            self.mark(channel, batch).await?;
+            tracing::info!(channel = %channel.name, items = batch.len(), "notified");
         }
+        Ok(())
+    }
+
+    async fn mark(&self, channel: &ChannelConfig, items: &[Item]) -> anyhow::Result<()> {
+        if items.is_empty() {
+            return Ok(());
+        }
+        let name = channel.name.clone();
+        let ids: Vec<i64> = items.iter().map(|i| i.id).collect();
+        self.pipeline
+            .with_store(move |s| {
+                ids.iter()
+                    .try_for_each(|id| s.mark_notified(*id, &name).map(|_| ()))
+            })
+            .await
     }
 }
 

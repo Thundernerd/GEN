@@ -102,7 +102,8 @@ impl ItemView {
             id: item.id,
             kind: item.kind.as_str(),
             title: item.title.clone(),
-            url: item.url.clone(),
+            // Already filtered at ingestion; checked again in case of older rows.
+            url: item.url.clone().filter(|u| crate::classify::is_http_url(u)),
             source: lookup.source_name(&item.source_id),
             engines: item
                 .engines

@@ -15,7 +15,8 @@ use crate::model::{Item, ItemKind, NewItem, SourceState};
 /// Items with the same `story_key` within this window are treated as the same story.
 pub const DUPLICATE_WINDOW_DAYS: i64 = 7;
 
-const MIGRATIONS: &[&str] = &[r#"
+const MIGRATIONS: &[&str] = &[
+    r#"
 CREATE TABLE items (
     id           INTEGER PRIMARY KEY,
     source_id    TEXT NOT NULL,
@@ -56,7 +57,19 @@ CREATE TABLE notifications_sent (
     sent_at TEXT NOT NULL,
     PRIMARY KEY (item_id, channel)
 );
-"#];
+"#,
+    r#"
+-- 1 when the item arrived after its source was seeded, i.e. it should be notified.
+ALTER TABLE items ADD COLUMN notify INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX items_notify ON items (notify, first_seen);
+
+-- When each notification channel was first used, so new channels don't replay history.
+CREATE TABLE notify_channels (
+    name       TEXT PRIMARY KEY,
+    created_at TEXT NOT NULL
+);
+"#,
+];
 
 /// Filters for listing items. `Default` lists the newest non-duplicate items.
 #[derive(Debug, Clone, Default)]
@@ -175,7 +188,8 @@ impl Store {
         let tx = self.conn.transaction()?;
         let mut inserted = Vec::new();
         for it in items {
-            let sort_date = it.published.unwrap_or(now);
+            // Future dates (feed typos) would otherwise pin an item to the top.
+            let sort_date = it.published.map_or(now, |p| p.min(now));
             let duplicate_of: Option<i64> = if it.story_key.is_empty() {
                 None
             } else {
@@ -191,8 +205,8 @@ impl Store {
             };
             let changed = tx.execute(
                 "INSERT INTO items (source_id, guid, kind, title, url, summary, published,
-                                    first_seen, sort_date, story_key, duplicate_of)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                                    first_seen, sort_date, story_key, duplicate_of, notify)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
                  ON CONFLICT (source_id, guid) DO NOTHING",
                 params![
                     it.source_id,
@@ -206,6 +220,7 @@ impl Store {
                     sort_date,
                     it.story_key,
                     duplicate_of,
+                    it.notify,
                 ],
             )?;
             if changed == 0 {
@@ -288,7 +303,40 @@ impl Store {
 
     // -- notifications ------------------------------------------------------
 
-    /// Marks an item as sent to a channel. Returns false if it was already marked.
+    /// Records a channel's first use (idempotent) and returns that time.
+    pub fn register_channel(&self, name: &str) -> anyhow::Result<DateTime<Utc>> {
+        self.conn.execute(
+            "INSERT OR IGNORE INTO notify_channels (name, created_at) VALUES (?1, ?2)",
+            params![name, Utc::now()],
+        )?;
+        Ok(self.conn.query_row(
+            "SELECT created_at FROM notify_channels WHERE name = ?1",
+            [name],
+            |r| r.get(0),
+        )?)
+    }
+
+    /// Notifiable, non-duplicate items first seen at or after `since` that haven't been
+    /// handled for `channel` yet, oldest first.
+    pub fn pending_notifications(
+        &self,
+        channel: &str,
+        since: DateTime<Utc>,
+        limit: u32,
+    ) -> anyhow::Result<Vec<Item>> {
+        let mut stmt = self.conn.prepare_cached(&format!(
+            "{ITEM_SELECT}
+             WHERE i.notify = 1 AND i.duplicate_of IS NULL AND i.first_seen >= ?2
+               AND NOT EXISTS (SELECT 1 FROM notifications_sent n
+                               WHERE n.item_id = i.id AND n.channel = ?1)
+             ORDER BY i.first_seen, i.id LIMIT ?3"
+        ))?;
+        let rows = stmt.query_map(params![channel, since, limit], item_from_row)?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Marks an item as handled for a channel (sent, or skipped by the channel's rules).
+    /// Returns false if it was already marked.
     pub fn mark_notified(&self, item_id: i64, channel: &str) -> anyhow::Result<bool> {
         let changed = self.conn.execute(
             "INSERT OR IGNORE INTO notifications_sent (item_id, channel, sent_at) VALUES (?1, ?2, ?3)",
@@ -349,6 +397,7 @@ mod tests {
             summary: None,
             published: Some(Utc::now()),
             story_key: story.into(),
+            notify: false,
         }
     }
 
@@ -419,5 +468,76 @@ mod tests {
             .remove(0);
         assert!(store.mark_notified(item.id, "discord").unwrap());
         assert!(!store.mark_notified(item.id, "discord").unwrap());
+    }
+
+    #[test]
+    fn pending_notifications_are_durable_until_marked() {
+        let mut store = Store::open_in_memory().unwrap();
+        let notifiable = |guid: &str, story: &str| NewItem {
+            notify: true,
+            ..new_item("a", guid, story)
+        };
+        let backfill = new_item("a", "0", "");
+        let stored = store
+            .insert_items(&[
+                backfill,
+                notifiable("1", "story one x"),
+                notifiable("2", ""),
+            ])
+            .unwrap();
+        // A cross-source duplicate is never pending.
+        store
+            .insert_items(&[NewItem {
+                notify: true,
+                ..new_item("b", "x", "story one x")
+            }])
+            .unwrap();
+
+        let since = Utc::now() - Duration::hours(1);
+        let pending = |s: &Store| -> Vec<String> {
+            s.pending_notifications("discord", since, 10)
+                .unwrap()
+                .into_iter()
+                .map(|i| i.guid)
+                .collect()
+        };
+        assert_eq!(pending(&store), vec!["1", "2"]);
+        store.mark_notified(stored[1].id, "discord").unwrap();
+        assert_eq!(pending(&store), vec!["2"]);
+        // Other channels are independent; items before `since` are ignored.
+        assert_eq!(
+            store
+                .pending_notifications("ntfy", since, 10)
+                .unwrap()
+                .len(),
+            2
+        );
+        let future = Utc::now() + Duration::hours(1);
+        assert!(
+            store
+                .pending_notifications("ntfy", future, 10)
+                .unwrap()
+                .is_empty()
+        );
+
+        let first = store.register_channel("ntfy").unwrap();
+        assert_eq!(store.register_channel("ntfy").unwrap(), first);
+    }
+
+    #[test]
+    fn clamps_future_dates_for_sorting() {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut future = new_item("a", "future", "");
+        future.published = Some(Utc::now() + Duration::days(365));
+        let mut recent = new_item("a", "recent", "");
+        recent.published = Some(Utc::now() - Duration::minutes(1));
+        store.insert_items(&[recent]).unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(5));
+        store.insert_items(&[future]).unwrap();
+        let listed = store.query_items(&ItemQuery::default()).unwrap();
+        // The future item sorts as "now" (its insert time), not a year ahead...
+        assert_eq!(listed[0].guid, "future");
+        // ...and keeps its original published date for display.
+        assert!(listed[0].published.unwrap() > Utc::now());
     }
 }

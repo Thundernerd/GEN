@@ -290,7 +290,11 @@ async fn index_page(st: &AppState, params: ListParams) -> PageResult {
     let filter = params.filter();
     let page = params.page();
     let (mut items, dups) = st
-        .items_with_dups(filter.clone(), PAGE_SIZE + 1, (page - 1) * PAGE_SIZE)
+        .items_with_dups(
+            filter.clone(),
+            PAGE_SIZE + 1,
+            page.saturating_sub(1).saturating_mul(PAGE_SIZE),
+        )
         .await?;
     let has_more = items.len() > PAGE_SIZE as usize;
     items.truncate(PAGE_SIZE as usize);
@@ -379,7 +383,11 @@ async fn engine_page(st: &AppState, id: String, params: ListParams) -> PageResul
     };
     let page = params.page();
     let (mut items, dups) = st
-        .items_with_dups(filter.clone(), PAGE_SIZE + 1, (page - 1) * PAGE_SIZE)
+        .items_with_dups(
+            filter.clone(),
+            PAGE_SIZE + 1,
+            page.saturating_sub(1).saturating_mul(PAGE_SIZE),
+        )
         .await?;
     let has_more = items.len() > PAGE_SIZE as usize;
     items.truncate(PAGE_SIZE as usize);
@@ -556,7 +564,11 @@ async fn api_items_response(st: &AppState, params: ListParams) -> PageResult {
         .clamp(1, API_MAX_LIMIT);
     let page = params.page();
     let (items, dups) = st
-        .items_with_dups(params.filter(), limit, (page - 1) * limit)
+        .items_with_dups(
+            params.filter(),
+            limit,
+            page.saturating_sub(1).saturating_mul(limit),
+        )
         .await?;
     let out: Vec<_> = items
         .iter()

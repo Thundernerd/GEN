@@ -67,6 +67,8 @@ pub struct NewItem {
     pub published: Option<DateTime<Utc>>,
     /// Normalized key used for cross-source dedup (see `classify::story_key`).
     pub story_key: String,
+    /// Whether this item should be notified (false for a source's first, backfill fetch).
+    pub notify: bool,
 }
 
 /// A stored item.

@@ -174,13 +174,39 @@ impl Http {
         };
         let etag = header_str(header::ETAG);
         let last_modified = header_str(header::LAST_MODIFIED);
-        let body = resp.bytes().await?;
+        let body = read_limited(resp, url).await?;
         Ok(Conditional::Body(Response {
             body,
             etag,
             last_modified,
         }))
     }
+}
+
+/// Largest response body accepted from a source.
+const MAX_BODY_BYTES: usize = 10 * 1024 * 1024;
+
+/// Reads the body, failing once it exceeds `MAX_BODY_BYTES`.
+async fn read_limited(mut resp: reqwest::Response, url: &str) -> Result<bytes::Bytes, FetchError> {
+    let too_large = || {
+        FetchError::Parse(format!(
+            "response from {url} exceeds {MAX_BODY_BYTES} bytes"
+        ))
+    };
+    if resp
+        .content_length()
+        .is_some_and(|len| len > MAX_BODY_BYTES as u64)
+    {
+        return Err(too_large());
+    }
+    let mut body = bytes::BytesMut::new();
+    while let Some(chunk) = resp.chunk().await? {
+        if body.len() + chunk.len() > MAX_BODY_BYTES {
+            return Err(too_large());
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(body.freeze())
 }
 
 /// Converts an HTML fragment to collapsed plain text.

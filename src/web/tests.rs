@@ -59,6 +59,7 @@ fn item(source: &str, guid: &str, engines: &[&str], kind: ItemKind, title: &str)
         summary: Some(format!("Summary of {title} <b>bold</b>")),
         published: Some(Utc::now() - Duration::hours(3)),
         story_key: guid.into(),
+        notify: false,
     }
 }
 
@@ -134,6 +135,18 @@ async fn timeline_lists_items() {
     assert!(body.contains(r#"href="/engine/godot""#));
     // Auto-escaping.
     assert!(body.contains("&lt;b&gt;bold"));
+}
+
+#[tokio::test]
+async fn huge_page_numbers_dont_overflow() {
+    for uri in [
+        "/?page=4294967295",
+        "/engine/godot?page=4294967295",
+        "/api/items?page=4294967295&limit=200",
+    ] {
+        let (status, _, _) = get(uri).await;
+        assert_eq!(status, StatusCode::OK, "{uri}");
+    }
 }
 
 #[tokio::test]

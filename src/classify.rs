@@ -105,9 +105,10 @@ impl Classifier {
             engines,
             kind,
             title: raw.title,
-            url: raw.url,
+            url: raw.url.filter(|u| is_http_url(u)),
             summary: raw.summary,
             published: raw.published,
+            notify: false,
         })
     }
 
@@ -157,6 +158,12 @@ fn phrase_regex(phrases: &[String], case_by_alias: bool) -> Option<Regex> {
     let pattern = format!("{LEFT}(?:{}){RIGHT}", alternatives.join("|"));
     // Every phrase is passed through `regex::escape`, so the pattern is always valid.
     Some(Regex::new(&pattern).expect("escaped alias regex is valid"))
+}
+
+/// Whether `url` is an absolute http(s) URL. Anything else (`javascript:`, `data:`,
+/// relative links) from an untrusted source is dropped so it can't become a live link.
+pub fn is_http_url(url: &str) -> bool {
+    url::Url::parse(url).is_ok_and(|u| matches!(u.scheme(), "http" | "https"))
 }
 
 /// Default kind for a source without a category, guessed from the item URL.
@@ -375,6 +382,24 @@ mod tests {
 
     fn engines_of(c: &Classifier, src: &ResolvedSource, title: &str) -> Option<Vec<String>> {
         c.classify(src, raw(title)).map(|i| i.engines)
+    }
+
+    #[test]
+    fn keeps_only_http_urls() {
+        let c = classifier();
+        let src = outlet(false);
+        let with_url = |url: &str| RawItem {
+            url: Some(url.into()),
+            ..raw("Godot news")
+        };
+        let url_of = |u: &str| c.classify(&src, with_url(u)).unwrap().url;
+        assert_eq!(
+            url_of("https://godotengine.org/a").as_deref(),
+            Some("https://godotengine.org/a")
+        );
+        assert_eq!(url_of("javascript:alert(1)"), None);
+        assert_eq!(url_of("data:text/html,<script>x</script>"), None);
+        assert_eq!(url_of("/relative/path"), None);
     }
 
     #[test]

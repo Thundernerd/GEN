@@ -5,8 +5,11 @@ use std::sync::{Arc, Mutex};
 use crate::classify::Classifier;
 use crate::config::ResolvedSource;
 use crate::fetch::{self, FetchOutcome, Http};
-use crate::model::Item;
+use crate::model::{Item, NewItem};
 use crate::store::Store;
+
+/// Upper bound on entries taken from a single fetch.
+const MAX_ITEMS_PER_FETCH: usize = 200;
 
 #[derive(Clone)]
 pub struct Pipeline {
@@ -61,9 +64,17 @@ impl Pipeline {
                 etag,
                 last_modified,
             } => {
+                let mut items = items;
+                // Newest first, so the cap keeps the most recent entries of a huge feed.
+                items.sort_by_key(|i| std::cmp::Reverse(i.published));
+                items.truncate(MAX_ITEMS_PER_FETCH);
                 let classified: Vec<_> = items
                     .into_iter()
                     .filter_map(|raw| self.classifier.classify(source, raw))
+                    .map(|item| NewItem {
+                        notify: was_seeded,
+                        ..item
+                    })
                     .collect();
                 let id = source.id.clone();
                 let new_items = self
