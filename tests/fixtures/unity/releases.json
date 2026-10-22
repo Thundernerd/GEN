@@ -1,0 +1,217 @@
+{
+  "offset": 0,
+  "limit": 6,
+  "total": 1195,
+  "results": [
+    {
+      "version": "7000.0.0a12",
+      "releaseDate": "2026-10-22T09:56:27.460Z",
+      "releaseNotes": {
+        "url": "https://storage.googleapis.com/live-platform-resources-prd/templates/assets/7000_0_0a12_2f5dbf283f/7000_0_0a12_2f5dbf283f.md",
+        "type": "MD"
+      },
+      "downloads": [
+        {
+          "url": "https://download.unity3d.com/download_unity/8751f7c83ed7/LinuxEditorInstaller/Unity-7000.0.0a12.tar.xz",
+          "type": "TAR_XZ",
+          "platform": "LINUX",
+          "architecture": "X86_64",
+          "downloadSize": {
+            "value": 4045329848,
+            "unit": "BYTE"
+          },
+          "installedSize": {
+            "value": 8104417280,
+            "unit": "BYTE"
+          },
+          "modules": [],
+          "integrity": "md5-qsexa6xd9RtMacZZmAHnBQ=="
+        }
+      ],
+      "skuFamily": "CLASSIC",
+      "recommended": false,
+      "unityHubDeepLink": "unityhub://7000.0.0a12/8751f7c83ed7",
+      "shortRevision": "8751f7c83ed7",
+      "thirdPartyNotices": [],
+      "stream": "ALPHA"
+    },
+    {
+      "version": "6000.6.7f1",
+      "releaseDate": "2026-10-21T09:54:08.135Z",
+      "releaseNotes": {
+        "url": "https://storage.googleapis.com/live-platform-resources-prd/templates/assets/6000_6_7f1_cdcffdade6/6000_6_7f1_cdcffdade6.md",
+        "type": "MD"
+      },
+      "downloads": [
+        {
+          "url": "https://download.unity3d.com/download_unity/b22767f04f04/LinuxEditorInstaller/Unity-6000.6.7f1.tar.xz",
+          "type": "TAR_XZ",
+          "platform": "LINUX",
+          "architecture": "X86_64",
+          "downloadSize": {
+            "value": 4138711428,
+            "unit": "BYTE"
+          },
+          "installedSize": {
+            "value": 9152880640,
+            "unit": "BYTE"
+          },
+          "modules": [],
+          "integrity": "md5-4MGptdBzL5X5+kDlc+Ypqg=="
+        }
+      ],
+      "skuFamily": "CLASSIC",
+      "recommended": true,
+      "unityHubDeepLink": "unityhub://6000.6.7f1/b22767f04f04",
+      "shortRevision": "b22767f04f04",
+      "thirdPartyNotices": [
+        {
+          "originalFileName": "Build-Support-Android-IL2CPP-6000.6.7f1.pdf",
+          "url": "https://storage.googleapis.com/live-platform-resources-prd/templates/assets/Build_Support_Android_IL_2_CPP_6000_6_7f1_38964bd388/Build_Support_Android_IL_2_CPP_6000_6_7f1_38964bd388.pdf",
+          "type": "PDF"
+        }
+      ],
+      "stream": "SUPPORTED"
+    },
+    {
+      "version": "6000.7.0b6",
+      "releaseDate": "2026-10-21T09:53:58.835Z",
+      "releaseNotes": {
+        "url": "https://storage.googleapis.com/live-platform-resources-prd/templates/assets/6000_7_0b6_34786d0990/6000_7_0b6_34786d0990.md",
+        "type": "MD"
+      },
+      "downloads": [
+        {
+          "url": "https://download.unity3d.com/download_unity/820f8ee8e58b/LinuxEditorInstaller/Unity-6000.7.0b6.tar.xz",
+          "type": "TAR_XZ",
+          "platform": "LINUX",
+          "architecture": "X86_64",
+          "downloadSize": {
+            "value": 4112749168,
+            "unit": "BYTE"
+          },
+          "installedSize": {
+            "value": 9125591040,
+            "unit": "BYTE"
+          },
+          "modules": [],
+          "integrity": "md5-Pq/1o9y8hZSB5uaQp+tXqw=="
+        }
+      ],
+      "skuFamily": "CLASSIC",
+      "recommended": false,
+      "unityHubDeepLink": "unityhub://6000.7.0b6/820f8ee8e58b",
+      "shortRevision": "820f8ee8e58b",
+      "thirdPartyNotices": [],
+      "stream": "BETA"
+    },
+    {
+      "version": "6000.3.27f1",
+      "releaseDate": "2026-10-20T13:42:16.544Z",
+      "releaseNotes": {
+        "url": "https://storage.googleapis.com/live-platform-resources-prd/templates/assets/6000_3_27f1_3ac986a204/6000_3_27f1_3ac986a204.md",
+        "type": "MD"
+      },
+      "downloads": [
+        {
+          "url": "https://download.unity3d.com/download_unity/672d562a42a7/LinuxEditorInstaller/Unity-6000.3.27f1.tar.xz",
+          "type": "TAR_XZ",
+          "platform": "LINUX",
+          "architecture": "X86_64",
+          "downloadSize": {
+            "value": 4573113148,
+            "unit": "BYTE"
+          },
+          "installedSize": {
+            "value": 8766289920,
+            "unit": "BYTE"
+          },
+          "modules": [],
+          "integrity": "md5-69RDiGob9OioUv1r1ufMTA=="
+        }
+      ],
+      "skuFamily": "CLASSIC",
+      "recommended": false,
+      "unityHubDeepLink": "unityhub://6000.3.27f1/672d562a42a7",
+      "shortRevision": "672d562a42a7",
+      "thirdPartyNotices": [
+        {
+          "originalFileName": "Build-Support-Android-IL2CPP-6000.3.27f1.pdf",
+          "url": "https://storage.googleapis.com/live-platform-resources-prd/templates/assets/Build_Support_Android_IL_2_CPP_6000_3_27f1_2337d63f93/Build_Support_Android_IL_2_CPP_6000_3_27f1_2337d63f93.pdf",
+          "type": "PDF"
+        }
+      ],
+      "stream": "LTS"
+    },
+    {
+      "version": "7000.0.0a11",
+      "releaseDate": "2026-10-20T12:36:29.174Z",
+      "releaseNotes": {
+        "url": "https://storage.googleapis.com/live-platform-resources-prd/templates/assets/7000_0_0a11_b5906b2a2e/7000_0_0a11_b5906b2a2e.md",
+        "type": "MD"
+      },
+      "downloads": [
+        {
+          "url": "https://download.unity3d.com/download_unity/fac09b31727f/LinuxEditorInstaller/Unity-7000.0.0a11.tar.xz",
+          "type": "TAR_XZ",
+          "platform": "LINUX",
+          "architecture": "X86_64",
+          "downloadSize": {
+            "value": 4104339980,
+            "unit": "BYTE"
+          },
+          "installedSize": {
+            "value": 8450897920,
+            "unit": "BYTE"
+          },
+          "modules": [],
+          "integrity": "md5-+Ag7ArVk/SJbIJkzTJDBTw=="
+        }
+      ],
+      "skuFamily": "CLASSIC",
+      "recommended": false,
+      "unityHubDeepLink": "unityhub://7000.0.0a11/fac09b31727f",
+      "shortRevision": "fac09b31727f",
+      "thirdPartyNotices": [],
+      "stream": "ALPHA"
+    },
+    {
+      "version": "6000.0.85f1",
+      "releaseDate": "2026-10-15T11:57:40.778Z",
+      "releaseNotes": {
+        "url": "https://storage.googleapis.com/live-platform-resources-prd/templates/assets/6000_0_85f1_c02551297b/6000_0_85f1_c02551297b.md",
+        "type": "MD"
+      },
+      "downloads": [
+        {
+          "url": "https://download.unity3d.com/download_unity/ee7790f1426a/LinuxEditorInstaller/Unity-6000.0.85f1.tar.xz",
+          "type": "TAR_XZ",
+          "platform": "LINUX",
+          "architecture": "X86_64",
+          "downloadSize": {
+            "value": 4488816456,
+            "unit": "BYTE"
+          },
+          "installedSize": {
+            "value": 8493977600,
+            "unit": "BYTE"
+          },
+          "modules": [],
+          "integrity": "md5-Jf6OqfgF0oJ3I9Tr6ILnJA=="
+        }
+      ],
+      "skuFamily": "CLASSIC",
+      "recommended": false,
+      "unityHubDeepLink": "unityhub://6000.0.85f1/ee7790f1426a",
+      "shortRevision": "ee7790f1426a",
+      "thirdPartyNotices": [
+        {
+          "originalFileName": "Build-Support-Android-IL2CPP-6000.0.85f1.pdf",
+          "url": "https://storage.googleapis.com/live-platform-resources-prd/templates/assets/Build_Support_Android_IL_2_CPP_6000_0_85f1_c70da4b27f/Build_Support_Android_IL_2_CPP_6000_0_85f1_c70da4b27f.pdf",
+          "type": "PDF"
+        }
+      ],
+      "stream": "LTS"
+    }
+  ]
+}

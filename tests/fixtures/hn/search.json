@@ -1,0 +1,305 @@
+{
+  "exhaustive": {
+    "nbHits": true,
+    "typo": true
+  },
+  "exhaustiveNbHits": true,
+  "exhaustiveTypo": true,
+  "hits": [
+    {
+      "_highlightResult": {
+        "author": {
+          "matchLevel": "none",
+          "matchedWords": [],
+          "value": "phaser"
+        },
+        "title": {
+          "fullyHighlighted": false,
+          "matchLevel": "full",
+          "matchedWords": [
+            "game",
+            "engine"
+          ],
+          "value": "Microlandia gets its own <em>game engine</em>"
+        },
+        "url": {
+          "matchLevel": "none",
+          "matchedWords": [],
+          "value": "https://microlandia.city/2026/10/22/version-2-2-0"
+        }
+      },
+      "_tags": [
+        "story",
+        "author_phaser",
+        "story_50193954"
+      ],
+      "author": "phaser",
+      "created_at": "2026-10-22T11:33:54Z",
+      "created_at_i": 1792668834,
+      "num_comments": 0,
+      "objectID": "50193954",
+      "points": 2,
+      "story_id": 50193954,
+      "title": "Microlandia gets its own game engine",
+      "updated_at": "2026-10-22T11:41:21Z",
+      "url": "https://microlandia.city/2026/10/22/version-2-2-0"
+    },
+    {
+      "_highlightResult": {
+        "author": {
+          "matchLevel": "none",
+          "matchedWords": [],
+          "value": "fsloth"
+        },
+        "story_text": {
+          "fullyHighlighted": false,
+          "matchLevel": "full",
+          "matchedWords": [
+            "game",
+            "engine"
+          ],
+          "value": "I got irritated by the maximalism and lack of aesthetics present in modern software when trying to find a nice solitaire.<p>A solitaire does not need a score, levels - and most of all it does not need to download anything, have user log in or do anything else except maintain game state.<p>So since software comes automatically nowadays, I decided as a weekend project to create the last solitaire I'll ever need.<p>The application is built on Rust so I can compile it to native. But it runs just as well as web app!<p>I geeked out completely on design (it may look like &quot;default&quot; but that's the point) to create as non-intruding yet aesthetically pleasing experience as I could.<p>I might have accidentally put in a complete card design system with a content pipeline (maybe I'll do default blackjack next) - but as a player you only see the one pack of cards.<p>Anyway, hope someone here appreciates the minimalistic aesthetics.<p>The game state is saved in the url so if you want to save a nice game you can do it by copypasting the link.<p>The <em>game engine</em> is versioned so if I ever change the engine or state schema there will be support for the current version as well.<p>There _is_ a novelty.<p>If you click the &quot;teach&quot; button it shows all the available free moves as arrows.<p>Hope this is fun for someone!"
+        },
+        "title": {
+          "matchLevel": "none",
+          "matchedWords": [],
+          "value": "Show HN: Overdesigned Simple Solitaire"
+        },
+        "url": {
+          "matchLevel": "none",
+          "matchedWords": [],
+          "value": "https://defaultsolitaire.app/"
+        }
+      },
+      "_tags": [
+        "story",
+        "author_fsloth",
+        "story_50187380",
+        "show_hn"
+      ],
+      "author": "fsloth",
+      "children": [
+        50193639,
+        50189787,
+        50191774
+      ],
+      "created_at": "2026-10-21T20:45:22Z",
+      "created_at_i": 1792615522,
+      "num_comments": 9,
+      "objectID": "50187380",
+      "points": 5,
+      "story_id": 50187380,
+      "story_text": "I got irritated by the maximalism and lack of aesthetics present in modern software when trying to find a nice solitaire.<p>A solitaire does not need a score, levels - and most of all it does not need to download anything, have user log in or do anything else except maintain game state.<p>So since software comes automatically nowadays, I decided as a weekend project to create the last solitaire I&#x27;ll ever need.<p>The application is built on Rust so I can compile it to native. But it runs just as well as web app!<p>I geeked out completely on design (it may look like &quot;default&quot; but that&#x27;s the point) to create as non-intruding yet aesthetically pleasing experience as I could.<p>I might have accidentally put in a complete card design system with a content pipeline (maybe I&#x27;ll do default blackjack next) - but as a player you only see the one pack of cards.<p>Anyway, hope someone here appreciates the minimalistic aesthetics.<p>The game state is saved in the url so if you want to save a nice game you can do it by copypasting the link.<p>The game engine is versioned so if I ever change the engine or state schema there will be support for the current version as well.<p>There _is_ a novelty.<p>If you click the &quot;teach&quot; button it shows all the available free moves as arrows.<p>Hope this is fun for someone!",
+      "title": "Show HN: Overdesigned Simple Solitaire",
+      "updated_at": "2026-10-22T17:04:08Z",
+      "url": "https://defaultsolitaire.app/"
+    },
+    {
+      "_highlightResult": {
+        "author": {
+          "matchLevel": "none",
+          "matchedWords": [],
+          "value": "janandonly"
+        },
+        "title": {
+          "fullyHighlighted": false,
+          "matchLevel": "full",
+          "matchedWords": [
+            "game",
+            "engine"
+          ],
+          "value": "Fishfolk/bones: An easy-to-use <em>game engine</em> for making real games"
+        },
+        "url": {
+          "matchLevel": "none",
+          "matchedWords": [],
+          "value": "https://github.com/fishfolk/bones/"
+        }
+      },
+      "_tags": [
+        "story",
+        "author_janandonly",
+        "story_50152804"
+      ],
+      "author": "janandonly",
+      "created_at": "2026-10-19T14:15:46Z",
+      "created_at_i": 1792419346,
+      "num_comments": 0,
+      "objectID": "50152804",
+      "points": 1,
+      "story_id": 50152804,
+      "title": "Fishfolk/bones: An easy-to-use game engine for making real games",
+      "updated_at": "2026-10-19T14:18:14Z",
+      "url": "https://github.com/fishfolk/bones/"
+    },
+    {
+      "_highlightResult": {
+        "author": {
+          "matchLevel": "none",
+          "matchedWords": [],
+          "value": "normalocity"
+        },
+        "story_text": {
+          "matchLevel": "none",
+          "matchedWords": [],
+          "value": "Here's a demo video I recorded for a friend that I decided to repost. Sorry for the terrible sound quality and my cough -- hope it's mostly understandable.<p><a href=\"https://s3.us-east-2.amazonaws.com/jeffluntgames.com/the-surprise-demo.mp4\" rel=\"nofollow\">https://s3.us-east-2.amazonaws.com/jeffluntgames.com/the-sur...</a><p>---<p>Here's the technical breakdown of what I did:<p>* Worked  with an AI agent (of course)\n* Described the basic features of the NES\n  * Sprite engine\n  * Input handling\n  * Sound and music<p>Had the AI build what I'll call a microengine around this. Why do I call it a microengine? Because games on the NES were, I assume, written in assembly, without game engines. But my micro engine (which I named `neo8`) looks like a high-level language, has a basic camera system, and event-based sound system, a polling and event-based input  handler that maps inputs to in-game events, a way to model game entities (entity attributes, rendering, animation state machines, etc.), but really just the very basics of what you'd need to create NES-style games on modern hardware.<p>To be clear, `neo8` is _not_ an emulator. It cannot run NES ROMs. But part of the engine, for the purpose of this demo, involved creating an image, audio, and code structure analysis tool so that I could convert the raw binary data from an actual ROM into .png files, mp3 files, and high-level code.<p>That high-level code is then compiled to a zero-dependency, native binary, and the little engine supports win/mac/linux as binary outputs.<p>Anyway, it was fun. Why not just port Contra directly (the &quot;reverse engineer anything&quot; repo, I'm sure could do it direct from the ROM to Rust or something). But I didn't want Contra, because I could just play the real Contra on original hardware or an emulator. Recreating Contra wasn't the point.<p>The point was to create the engine so I could create new, cross-platform NES-style games using a tiny engine. The Contra demo was simply a proof-of-concept to see if my little engine could replicate Contra's gameplay style, and sure enough it pretty much worked."
+        },
+        "title": {
+          "fullyHighlighted": false,
+          "matchLevel": "full",
+          "matchedWords": [
+            "game",
+            "engine"
+          ],
+          "value": "Show HN: I recreated Contra in a custom NES <em>game engine</em> (NOT an emulator)"
+        }
+      },
+      "_tags": [
+        "story",
+        "author_normalocity",
+        "story_50143302",
+        "show_hn"
+      ],
+      "author": "normalocity",
+      "created_at": "2026-10-18T17:35:03Z",
+      "created_at_i": 1792344903,
+      "num_comments": 0,
+      "objectID": "50143302",
+      "points": 1,
+      "story_id": 50143302,
+      "story_text": "Here&#x27;s a demo video I recorded for a friend that I decided to repost. Sorry for the terrible sound quality and my cough -- hope it&#x27;s mostly understandable.<p><a href=\"https:&#x2F;&#x2F;s3.us-east-2.amazonaws.com&#x2F;jeffluntgames.com&#x2F;the-surprise-demo.mp4\" rel=\"nofollow\">https:&#x2F;&#x2F;s3.us-east-2.amazonaws.com&#x2F;jeffluntgames.com&#x2F;the-sur...</a><p>---<p>Here&#x27;s the technical breakdown of what I did:<p>* Worked  with an AI agent (of course)\n* Described the basic features of the NES\n  * Sprite engine\n  * Input handling\n  * Sound and music<p>Had the AI build what I&#x27;ll call a microengine around this. Why do I call it a microengine? Because games on the NES were, I assume, written in assembly, without game engines. But my micro engine (which I named `neo8`) looks like a high-level language, has a basic camera system, and event-based sound system, a polling and event-based input  handler that maps inputs to in-game events, a way to model game entities (entity attributes, rendering, animation state machines, etc.), but really just the very basics of what you&#x27;d need to create NES-style games on modern hardware.<p>To be clear, `neo8` is _not_ an emulator. It cannot run NES ROMs. But part of the engine, for the purpose of this demo, involved creating an image, audio, and code structure analysis tool so that I could convert the raw binary data from an actual ROM into .png files, mp3 files, and high-level code.<p>That high-level code is then compiled to a zero-dependency, native binary, and the little engine supports win&#x2F;mac&#x2F;linux as binary outputs.<p>Anyway, it was fun. Why not just port Contra directly (the &quot;reverse engineer anything&quot; repo, I&#x27;m sure could do it direct from the ROM to Rust or something). But I didn&#x27;t want Contra, because I could just play the real Contra on original hardware or an emulator. Recreating Contra wasn&#x27;t the point.<p>The point was to create the engine so I could create new, cross-platform NES-style games using a tiny engine. The Contra demo was simply a proof-of-concept to see if my little engine could replicate Contra&#x27;s gameplay style, and sure enough it pretty much worked.",
+      "title": "Show HN: I recreated Contra in a custom NES game engine (NOT an emulator)",
+      "updated_at": "2026-10-18T17:40:26Z"
+    },
+    {
+      "_highlightResult": {
+        "author": {
+          "matchLevel": "none",
+          "matchedWords": [],
+          "value": "amirrajan"
+        },
+        "title": {
+          "fullyHighlighted": false,
+          "matchLevel": "full",
+          "matchedWords": [
+            "game",
+            "engine"
+          ],
+          "value": "DragonRuby \u2013 I never wanted to create a <em>game engine</em>"
+        },
+        "url": {
+          "matchLevel": "none",
+          "matchedWords": [],
+          "value": "https://gist.github.com/amirrajan/9e71d13f3108e5e66ebc98c752337ca5"
+        }
+      },
+      "_tags": [
+        "story",
+        "author_amirrajan",
+        "story_50127320"
+      ],
+      "author": "amirrajan",
+      "created_at": "2026-10-17T02:31:42Z",
+      "created_at_i": 1792204302,
+      "num_comments": 0,
+      "objectID": "50127320",
+      "points": 3,
+      "story_id": 50127320,
+      "title": "DragonRuby \u2013 I never wanted to create a game engine",
+      "updated_at": "2026-10-17T10:06:22Z",
+      "url": "https://gist.github.com/amirrajan/9e71d13f3108e5e66ebc98c752337ca5"
+    },
+    {
+      "_highlightResult": {
+        "author": {
+          "matchLevel": "none",
+          "matchedWords": [],
+          "value": "isthimius"
+        },
+        "story_text": {
+          "fullyHighlighted": false,
+          "matchLevel": "full",
+          "matchedWords": [
+            "game",
+            "engine"
+          ],
+          "value": "Gondwana is a 2D/2.5D <em>game engine</em> for C#/.NET 8 that I\u2019ve been building over the past 16 months, using SkiaSharp for rendering. I've spent my career creating web and distributed apps and that has influenced the engine's development, so it will feel very familiar to anyone with a similar background. The engine is deliberately code-first in its implementation but still includes visual authoring tools and a custom CLI.<p>I started creating Gondwana to host my own RTS and SNES-style games, to offload the game ideas percolating in my brain. I wanted to focus more on creating gameplay systems and was less concerned with 3D graphics. The predictability and transparency of the old Win32/GDI era were the ideal for what I was shooting for, but I also wanted something faster and more portable than GDI32. To that end, I am not trying to emulate the bigger engines.<p>Spot! became my primary dogfooding project that I\u2019ve since pushed up to itch.io. Getting a game to that point really helped burn away the cruft that accumulates from trying to create something like this. I was able to get Spot! to render at a consistent 120 fps on my dev machine. I experienced the absolute ecstasy of getting WebGL to cooperate with the engine cycle. And I discovered that even if Gondwana is code-first, you don\u2019t want to hand-code platformer levels, so I added Gondwana Studio to the repository. Studio uses the same file formats that are understood by the core engine. Asset handling was beefed up, UI widgets were added for things like game HUD elements and engine diagnostics, and I fleshed out the CI/release pipeline to keep it organized.<p>As it stands currently, Gondwana supports GPU-backed OpenGL rendering with WinForms and Avalonia hosts, and a dedicated WebGL path with Blazor. Recently a good bit of effort has been put into optimizing the rendering hot-path, reducing contention between simulation and presentation, and into making the visual tooling easy to use by people other than just me. I even was able to get itch.io deployment down to a single command in the custom CLI.<p>The engine is still actively evolving feature-wise, but the core rendering is pretty solid right now. I expect Gondwana will remain 2D/2.5D with parallax support, so I am not trying to supplant Unity, Godot, et al. Also worth noting, Gondwana intentionally does not have an explicit ECS framework built in, although one could absolutely work well with the engine if desired.<p>The project is MIT licensed, the source is hosted on GitHub, the packages are on NuGet, and Spot! is playable in the browser at itch.io. I will include several links in the first comment under this. I\u2019d love to see what other hobbyists or indie game devs think of the project. Feedback on usability, as well as praise and/or criticism of the architecture would be awesome."
+        },
+        "title": {
+          "fullyHighlighted": false,
+          "matchLevel": "full",
+          "matchedWords": [
+            "game",
+            "engine"
+          ],
+          "value": "Show HN: Gondwana, a code-first C#/.NET <em>game engine</em> with WebGL"
+        },
+        "url": {
+          "matchLevel": "none",
+          "matchedWords": [],
+          "value": "https://github.com/Isthimius/Gondwana"
+        }
+      },
+      "_tags": [
+        "story",
+        "author_isthimius",
+        "story_50123777",
+        "show_hn"
+      ],
+      "author": "isthimius",
+      "children": [
+        50124419,
+        50123798
+      ],
+      "created_at": "2026-10-16T20:01:59Z",
+      "created_at_i": 1792180919,
+      "num_comments": 2,
+      "objectID": "50123777",
+      "points": 4,
+      "story_id": 50123777,
+      "story_text": "Gondwana is a 2D&#x2F;2.5D game engine for C#&#x2F;.NET 8 that I\u2019ve been building over the past 16 months, using SkiaSharp for rendering. I&#x27;ve spent my career creating web and distributed apps and that has influenced the engine&#x27;s development, so it will feel very familiar to anyone with a similar background. The engine is deliberately code-first in its implementation but still includes visual authoring tools and a custom CLI.<p>I started creating Gondwana to host my own RTS and SNES-style games, to offload the game ideas percolating in my brain. I wanted to focus more on creating gameplay systems and was less concerned with 3D graphics. The predictability and transparency of the old Win32&#x2F;GDI era were the ideal for what I was shooting for, but I also wanted something faster and more portable than GDI32. To that end, I am not trying to emulate the bigger engines.<p>Spot! became my primary dogfooding project that I\u2019ve since pushed up to itch.io. Getting a game to that point really helped burn away the cruft that accumulates from trying to create something like this. I was able to get Spot! to render at a consistent 120 fps on my dev machine. I experienced the absolute ecstasy of getting WebGL to cooperate with the engine cycle. And I discovered that even if Gondwana is code-first, you don\u2019t want to hand-code platformer levels, so I added Gondwana Studio to the repository. Studio uses the same file formats that are understood by the core engine. Asset handling was beefed up, UI widgets were added for things like game HUD elements and engine diagnostics, and I fleshed out the CI&#x2F;release pipeline to keep it organized.<p>As it stands currently, Gondwana supports GPU-backed OpenGL rendering with WinForms and Avalonia hosts, and a dedicated WebGL path with Blazor. Recently a good bit of effort has been put into optimizing the rendering hot-path, reducing contention between simulation and presentation, and into making the visual tooling easy to use by people other than just me. I even was able to get itch.io deployment down to a single command in the custom CLI.<p>The engine is still actively evolving feature-wise, but the core rendering is pretty solid right now. I expect Gondwana will remain 2D&#x2F;2.5D with parallax support, so I am not trying to supplant Unity, Godot, et al. Also worth noting, Gondwana intentionally does not have an explicit ECS framework built in, although one could absolutely work well with the engine if desired.<p>The project is MIT licensed, the source is hosted on GitHub, the packages are on NuGet, and Spot! is playable in the browser at itch.io. I will include several links in the first comment under this. I\u2019d love to see what other hobbyists or indie game devs think of the project. Feedback on usability, as well as praise and&#x2F;or criticism of the architecture would be awesome.",
+      "title": "Show HN: Gondwana, a code-first C#/.NET game engine with WebGL",
+      "updated_at": "2026-10-17T13:41:22Z",
+      "url": "https://github.com/Isthimius/Gondwana"
+    }
+  ],
+  "hitsPerPage": 30,
+  "nbHits": 1529,
+  "nbPages": 34,
+  "page": 0,
+  "params": "query=%22game+engine%22&tags=story&hitsPerPage=30&advancedSyntax=true&analyticsTags=backend",
+  "processingTimeMS": 12,
+  "processingTimingsMS": {
+    "_request": {
+      "roundTrip": 25
+    },
+    "afterFetch": {
+      "format": {
+        "highlighting": 2,
+        "total": 3
+      },
+      "merge": {
+        "mergeLoop": {
+          "prepareNextHit": 1,
+          "total": 1
+        },
+        "total": 2
+      },
+      "total": 2
+    },
+    "fetch": {
+      "scanning": 5,
+      "total": 6
+    },
+    "getIdx": {
+      "load": {
+        "gens": 2,
+        "total": 2
+      },
+      "total": 3
+    },
+    "total": 12
+  },
+  "query": "\"game engine\"",
+  "serverTimeMS": 16
+}
