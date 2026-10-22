@@ -137,7 +137,8 @@ a:hover { text-decoration-thickness: 2px; }
 .site-nav a:hover { color: var(--text); background: var(--surface-2); }
 .site-nav a[aria-current="page"] { color: var(--accent-text); background: var(--accent); }
 
-main { padding-top: 1.5rem; padding-bottom: 3rem; }
+/* `main.wrap` so this wins over `.wrap`'s padding shorthand. */
+main.wrap { padding-top: 2.5rem; padding-bottom: 3rem; }
 
 .page-title { font-size: 1.75rem; line-height: 1.2; margin: 0 0 1rem; }
 
@@ -181,7 +182,8 @@ main { padding-top: 1.5rem; padding-bottom: 3rem; }
   font-weight: 600;
   cursor: pointer;
 }
-.filters .reset { padding-bottom: 0.45rem; }
+.filter-actions { display: flex; align-items: center; gap: 0.75rem; margin-left: auto; }
+.filters .reset { white-space: nowrap; }
 
 .notice {
   background: var(--surface-2);
@@ -191,7 +193,7 @@ main { padding-top: 1.5rem; padding-bottom: 3rem; }
 
 /* -- item list ---------------------------------------------------------- */
 
-.items { list-style: none; margin: 0; padding: 0; max-width: var(--measure); }
+.items { list-style: none; margin: 0; padding: 0; }
 
 .item {
   background: var(--surface);
@@ -244,7 +246,6 @@ main { padding-top: 1.5rem; padding-bottom: 3rem; }
   display: flex;
   justify-content: space-between;
   align-items: center;
-  max-width: var(--measure);
   margin-top: 1rem;
 }
 .pager-page { color: var(--muted); font-size: 0.875rem; }

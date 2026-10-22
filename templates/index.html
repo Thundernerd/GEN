@@ -27,10 +27,12 @@
     <input type="checkbox" name="csharp" value="1"{% if filter.csharp %} checked{% endif %}>
     <span>C# only</span>
   </label>
-  <button type="submit">Filter</button>
-  {%- if filter.active %}
-  <a class="reset" href="/">Reset</a>
-  {%- endif %}
+  <div class="filter-actions">
+    {%- if filter.active %}
+    <a class="reset" href="/">Reset</a>
+    {%- endif %}
+    <button type="submit">Filter</button>
+  </div>
 </form>
 {%- if filter.tier %}
 <p class="notice">Showing tier {{ filter.tier }} engines only. <a href="/">Show all</a></p>
