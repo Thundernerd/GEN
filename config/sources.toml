@@ -28,7 +28,7 @@ name = "Unity"
 tier = 1
 csharp = "native (C# scripting)"
 homepage = "https://unity.com"
-aliases = ["unity", "unity3d", "unity engine", "unity 6", "unity technologies"]
+aliases = ["Unity", "UNITY", "unity3d", "unity engine", "unity 6", "unity technologies"]
 exclude = ["ubuntu unity", "unity desktop", "unity shell", "unitypoint"]
   [[engine.source]]
   kind = "feed"
