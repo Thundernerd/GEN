@@ -223,6 +223,8 @@ main.wrap { padding-top: 2.5rem; padding-bottom: 3rem; }
   letter-spacing: 0.05em;
   padding: 0.12rem 0.5rem;
   border-radius: 999px;
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 .badge-release { background: var(--release-bg); color: var(--release-fg); }
 .badge-prerelease { background: var(--prerelease-bg); color: var(--prerelease-fg); }
@@ -239,6 +241,8 @@ main.wrap { padding-top: 2.5rem; padding-bottom: 3rem; }
   background: var(--surface-2);
   color: var(--text);
   text-decoration: none;
+  white-space: nowrap;
+  overflow-wrap: normal;
 }
 .chip:hover { border-color: var(--accent); color: var(--link); }
 
@@ -321,27 +325,69 @@ main.wrap { padding-top: 2.5rem; padding-bottom: 3rem; }
 
 /* -- sources table ------------------------------------------------------- */
 
-.table-wrap { overflow-x: auto; max-width: 100%; }
+.table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.engine-sources .table-wrap { margin: 0.5rem 0 0.4rem; }
 
 table.sources {
   width: 100%;
   border-collapse: collapse;
   font-size: 0.875rem;
-  background: var(--surface);
 }
 table.sources th, table.sources td {
   text-align: left;
   vertical-align: top;
-  padding: 0.5rem 0.6rem;
+  padding: 0.7rem 0.85rem;
   border-bottom: 1px solid var(--border);
 }
-table.sources th { color: var(--muted); font-weight: 600; white-space: nowrap; }
-table.sources th .sort-link { color: inherit; text-decoration: none; }
-table.sources th .sort-link:hover { color: var(--link); }
-table.sources th[aria-sort="ascending"] .sort-link, table.sources th[aria-sort="descending"] .sort-link { color: var(--text); }
-.sort-arrow { margin-left: 0.3rem; font-size: 0.75em; opacity: 0.7; }
+table.sources th {
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  white-space: nowrap;
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
+}
+table.sources tbody:last-child tr:last-child td { border-bottom: 0; }
+
+/* One tbody per owner, introduced by a header row. */
+table.sources tr.group-head th {
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-transform: none;
+  letter-spacing: normal;
+  white-space: normal;
+  padding: 0.6rem 0.85rem;
+  border-top: 1px solid var(--border);
+}
+table.sources tbody:first-of-type tr.group-head th { border-top: 0; }
+table.sources tr.group-head:hover th { background: var(--bg); }
+.group-name { font-weight: 700; color: var(--text); text-decoration: none; }
+a.group-name:hover { color: var(--link); text-decoration: underline; }
+.group-kind, .group-count { color: var(--muted); font-size: 0.8rem; font-weight: 500; margin-left: 0.6rem; }
+.group-kind::before, .group-count::before { content: "·"; margin-right: 0.6rem; }
+
+.sources-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem; }
+.sources-toolbar .summary-line { margin: 0; }
+.segmented { display: inline-flex; align-items: center; gap: 0.15rem; font-size: 0.85rem; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 0.15rem; }
+.segmented-label { color: var(--muted); padding: 0 0.5rem 0 0.6rem; }
+.segmented a { color: var(--text); text-decoration: none; padding: 0.2rem 0.7rem; border-radius: 999px; }
+.segmented a:hover { color: var(--link); }
+.segmented a[aria-current="true"] { background: var(--accent); color: var(--accent-text); font-weight: 600; }
+table.sources tbody tr:hover td { background: color-mix(in srgb, var(--surface-2) 55%, transparent); }
 table.sources .center { text-align: center; vertical-align: middle; }
 table.sources .num { font-variant-numeric: tabular-nums; }
+table.sources td.last-ok { white-space: nowrap; }
 .source-kind {
   font-family: var(--mono);
   font-size: 0.75rem;
@@ -353,12 +399,11 @@ table.sources .num { font-variant-numeric: tabular-nums; }
 .source-meta { color: var(--muted); font-size: 0.8rem; }
 .error-text { color: var(--fail); font-family: var(--mono); font-size: 0.78rem; max-width: 22rem; }
 
-.status { font-weight: 600; white-space: nowrap; }
-.status::before { content: "●"; margin-right: 0.3rem; }
-.status-ok { color: var(--ok); }
-.status-failing { color: var(--fail); }
-.status-pending { color: var(--pending); }
-.summary-line { display: flex; flex-wrap: wrap; gap: 0.4rem 1rem; color: var(--muted); }
+/* Source status badges share the item badge shape (`.badge`). */
+.badge.status-ok { background: var(--release-bg); color: var(--release-fg); }
+.badge.status-failing { background: var(--video-bg); color: var(--video-fg); }
+.badge.status-pending, .badge.status-disabled { background: var(--surface-2); color: var(--muted); border: 1px solid var(--border); }
+.summary-line { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; color: var(--muted); margin: 0 0 1rem; }
 
 /* -- error page ---------------------------------------------------------- */
 
@@ -377,8 +422,11 @@ table.sources .num { font-variant-numeric: tabular-nums; }
   /* Stack the sources table into cards. */
   table.sources thead { display: none; }
   table.sources, table.sources tbody, table.sources tr, table.sources td { display: block; width: 100%; }
-  table.sources tr { border-bottom: 1px solid var(--border); padding: 0.4rem 0; }
-  table.sources td { border: 0; padding: 0.15rem 0.6rem; }
+  table.sources tr { border-bottom: 1px solid var(--border); padding: 0.5rem 0; }
+  table.sources tbody:last-child tr:last-child { border-bottom: 0; }
+  table.sources tr.group-head { padding: 0; }
+  table.sources tr.group-head th { display: block; }
+  table.sources td { border: 0; padding: 0.2rem 0.85rem; }
   table.sources td.center { text-align: left; }
   table.sources td.num::before { content: "Failures: "; color: var(--muted); }
   .error-text { max-width: none; }
@@ -392,7 +440,6 @@ table.sources .num { font-variant-numeric: tabular-nums; }
 
 .page-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem; }
 .page-head .page-title { margin: 0; }
-.status-disabled { color: var(--muted); }
 table.sources tr.is-disabled td { opacity: 0.6; }
 table.sources tr.is-disabled td:last-child { opacity: 1; }
 .toggle-form { margin: 0; }

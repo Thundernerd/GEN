@@ -463,7 +463,9 @@ async fn engine_page(st: &AppState, id: String, params: ListParams, admin: bool)
                 "homepage": engine.homepage,
                 "enabled": engine.enabled,
             },
-            "sources": sources,
+            "source_count": sources.len(),
+            "groups": group_by_owner(&sources),
+            "grouped": false,
             "admin": admin,
             "next": base.clone(),
             "tabs": tabs,
@@ -494,32 +496,40 @@ async fn sources(
 async fn sources_page(st: &AppState, admin: bool, params: SourcesParams) -> PageResult {
     let states = st.with_store(|s| s.source_states()).await?;
     let now = Utc::now();
-    let mut rows: Vec<_> = st
+    let rows: Vec<_> = st
         .sources
         .manageable_sources()
         .iter()
         .map(|s| source_row(st, s, states.get(&s.id), now))
         .collect();
 
-    let by_owner = params.sort.as_deref() == Some("owner");
-    let desc = by_owner && params.dir.as_deref() == Some("desc");
-    if by_owner {
-        // Stable, so each owner's sources keep their config order.
-        let owner = |r: &serde_json::Value| r["owner"].as_str().unwrap_or_default().to_lowercase();
-        rows.sort_by_key(owner);
-        if desc {
-            rows.reverse();
+    // Group order: config order by default, or owner name A–Z / Z–A.
+    let order = match (params.sort.as_deref(), params.dir.as_deref()) {
+        (Some("owner"), Some("desc")) => "desc",
+        (Some("owner"), _) => "asc",
+        _ => "config",
+    };
+    let mut groups = group_by_owner(&rows);
+    if order != "config" {
+        groups.sort_by_key(|g| g["owner"].as_str().unwrap_or_default().to_lowercase());
+        if order == "desc" {
+            groups.reverse();
         }
     }
-    let sort = json!({
-        "owner": if !by_owner { "none" } else if desc { "descending" } else { "ascending" },
-        "owner_url": if by_owner && !desc { "/sources?sort=owner&dir=desc" } else { "/sources?sort=owner" },
-    });
-    let next = match (by_owner, desc) {
-        (true, true) => "/sources?sort=owner&dir=desc",
-        (true, false) => "/sources?sort=owner",
-        _ => "/sources",
-    };
+    let order_links: Vec<_> = [
+        ("config", "Config", "/sources"),
+        ("asc", "A–Z", "/sources?sort=owner"),
+        ("desc", "Z–A", "/sources?sort=owner&dir=desc"),
+    ]
+    .into_iter()
+    .map(|(key, label, url)| json!({"label": label, "url": url, "active": key == order}))
+    .collect();
+    let next = order_links
+        .iter()
+        .find(|l| l["active"] == true)
+        .and_then(|l| l["url"].as_str())
+        .unwrap_or("/sources")
+        .to_string();
     let count = |status: &str| rows.iter().filter(|r| r["status"] == status).count();
     let summary = json!({
         "total": rows.len(),
@@ -533,14 +543,42 @@ async fn sources_page(st: &AppState, admin: bool, params: SourcesParams) -> Page
         "sources.html",
         json!({
             "nav": "sources",
-            "sources": rows,
+            "groups": groups,
+            "grouped": true,
+            "order_links": order_links,
             "summary": summary,
             "admin": admin,
             "login_available": st.admin_token().is_some(),
             "next": next,
-            "sort": sort,
         }),
     )
+}
+
+/// Groups source rows by owner, keeping the order in which owners first appear.
+fn group_by_owner(rows: &[serde_json::Value]) -> Vec<serde_json::Value> {
+    let mut groups: Vec<(String, Vec<serde_json::Value>)> = Vec::new();
+    for row in rows {
+        let key = format!("{}:{}", row["owner_kind"], row["owner_id"]);
+        match groups.iter_mut().find(|(k, _)| *k == key) {
+            Some((_, members)) => members.push(row.clone()),
+            None => groups.push((key, vec![row.clone()])),
+        }
+    }
+    groups
+        .into_iter()
+        .map(|(_, members)| {
+            let first = &members[0];
+            let enabled = members.iter().filter(|r| r["enabled"] == true).count();
+            json!({
+                "owner": first["owner"],
+                "owner_kind": first["owner_kind"],
+                "owner_id": first["owner_id"],
+                "enabled": enabled,
+                "total": members.len(),
+                "sources": members,
+            })
+        })
+        .collect()
 }
 
 #[derive(Deserialize)]

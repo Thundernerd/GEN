@@ -152,25 +152,34 @@ async fn login(st: &AppState) -> String {
 }
 
 #[tokio::test]
-async fn sources_sort_by_owner() {
+async fn sources_grouped_by_owner() {
     let pos = |body: &str, owner: &str| body.find(&format!(">{owner}<")).unwrap();
+    let active =
+        |body: &str, label: &str| body.contains(&format!(r#"aria-current="true">{label}<"#));
+
+    // Default: groups in config order (Godot, Bevy, then the outlet), one header each.
+    let (_, _, body) = get("/sources?sort=bogus").await;
+    assert!(pos(&body, "Godot") < pos(&body, "Bevy"));
+    assert!(pos(&body, "Bevy") < pos(&body, "GameFromScratch"));
+    assert_eq!(body.matches(r#"class="group-head""#).count(), 3);
+    assert!(body.contains("news outlet"));
+    assert!(body.contains("1 of 1 enabled"));
+    assert!(active(&body, "Config"));
+
     let (_, _, body) = get("/sources?sort=owner").await;
     assert!(pos(&body, "Bevy") < pos(&body, "GameFromScratch"));
     assert!(pos(&body, "GameFromScratch") < pos(&body, "Godot"));
-    assert!(body.contains(r#"aria-sort="ascending""#));
-    assert!(
-        body.contains("dir=desc"),
-        "header links to the reverse order"
-    );
+    assert!(active(&body, "A–Z"));
 
     let (_, _, body) = get("/sources?sort=owner&dir=desc").await;
     assert!(pos(&body, "Godot") < pos(&body, "GameFromScratch"));
     assert!(pos(&body, "GameFromScratch") < pos(&body, "Bevy"));
+    assert!(active(&body, "Z–A"));
 
-    // Default: config order (Godot, Bevy, then the outlet).
-    let (_, _, body) = get("/sources?sort=bogus").await;
-    assert!(pos(&body, "Godot") < pos(&body, "Bevy"));
-    assert!(body.contains(r#"aria-sort="none""#));
+    // Engine pages list their sources without group headers.
+    let (_, _, body) = get("/engine/godot").await;
+    assert!(!body.contains(r#"class="group-head""#));
+    assert!(body.contains(r#"class="source-kind""#));
 }
 
 #[tokio::test]

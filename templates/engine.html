@@ -17,9 +17,9 @@
   {%- endif %}
 </header>
 
-{%- if sources %}
+{%- if source_count %}
 <details class="engine-sources">
-  <summary>Sources ({{ sources | length }})</summary>
+  <summary>Sources ({{ source_count }})</summary>
   {% include "_sources_table.html" %}
 </details>
 {%- endif %}

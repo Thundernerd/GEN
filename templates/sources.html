@@ -9,12 +9,20 @@
   <a class="btn-small btn-quiet" href="/login?next=/sources">Manage sources</a>
   {%- endif %}
 </div>
-<p class="summary-line">
-  {{ summary.enabled }} of {{ summary.total }} sources enabled:
-  <span class="status status-ok">{{ summary.ok }} ok</span>
-  <span class="status status-failing">{{ summary.failing }} failing</span>
-  <span class="status status-pending">{{ summary.pending }} pending</span>
-  <span class="status status-disabled">{{ summary.disabled }} disabled</span>
-</p>
+<div class="sources-toolbar">
+  <p class="summary-line">
+    {{ summary.enabled }} of {{ summary.total }} sources enabled:
+    <span class="badge status-ok">{{ summary.ok }} ok</span>
+    <span class="badge status-failing">{{ summary.failing }} failing</span>
+    <span class="badge status-pending">{{ summary.pending }} pending</span>
+    <span class="badge status-disabled">{{ summary.disabled }} disabled</span>
+  </p>
+  <nav class="segmented" aria-label="Group order">
+    <span class="segmented-label">Order</span>
+    {%- for l in order_links %}
+    <a href="{{ l.url }}"{% if l.active %} aria-current="true"{% endif %}>{{ l.label }}</a>
+    {%- endfor %}
+  </nav>
+</div>
 {% include "_sources_table.html" %}
 {% endblock %}
