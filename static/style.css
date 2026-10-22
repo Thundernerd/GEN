@@ -429,4 +429,3 @@ table.sources td.actions { vertical-align: middle; }
 }
 .login-form button { align-self: flex-start; font-size: 0.95rem; padding: 0.5rem 1rem; }
 .form-error { color: var(--fail); font-weight: 600; }
-.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

@@ -2,7 +2,7 @@
 <div class="table-wrap">
 <table class="sources">
   <thead>
-    <tr><th class="center">Status</th>{% if sort %}<th class="center" aria-sort="{{ sort.owner }}"><a class="sort-link" href="{{ sort.owner_url }}">Owner<span class="sort-arrow" aria-hidden="true">{{ "▲" if sort.owner == "ascending" else "▼" if sort.owner == "descending" else "↕" }}</span></a></th>{% else %}<th class="center">Owner</th>{% endif %}<th>Source</th><th class="center">Last OK</th><th class="center">Failures</th><th>Last error</th>{% if admin %}<th><span class="visually-hidden">Actions</span></th>{% endif %}</tr>
+    <tr><th class="center">Status</th>{% if sort %}<th class="center" aria-sort="{{ sort.owner }}"><a class="sort-link" href="{{ sort.owner_url }}">Owner<span class="sort-arrow" aria-hidden="true">{{ "▲" if sort.owner == "ascending" else "▼" if sort.owner == "descending" else "↕" }}</span></a></th>{% else %}<th class="center">Owner</th>{% endif %}<th>Source</th><th class="center">Last OK</th><th class="center">Failures</th><th>Last error</th>{% if admin %}<th class="center">Actions</th>{% endif %}</tr>
   </thead>
   <tbody>
     {%- for s in sources %}
@@ -18,7 +18,7 @@
       <td class="center num">{{ s.failures }}</td>
       <td class="error-text">{{ s.last_error or "" }}</td>
       {%- if admin %}
-      <td class="actions">
+      <td class="center actions">
         <form method="post" action="/sources/toggle" class="toggle-form">
           <input type="hidden" name="source_id" value="{{ s.id }}">
           <input type="hidden" name="enabled" value="{{ "0" if s.enabled else "1" }}">
