@@ -34,7 +34,7 @@
         <label>
           <span>Kind</span>
           <select name="kind" required>
-            {%- for value, label in [("feed", "RSS / Atom / JSON feed"), ("github", "GitHub repository"), ("hn", "Hacker News search"), ("html", "HTML page (scraped)"), ("unity", "Unity releases API")] %}
+            {%- for value, label in [("feed", "RSS / Atom / JSON feed"), ("github", "GitHub repository"), ("html", "HTML page (scraped)")] %}
             <option value="{{ value }}"{% if value == f.kind %} selected{% endif %}>{{ label }}</option>
             {%- endfor %}
           </select>
@@ -62,10 +62,6 @@
         </div>
       </fieldset>
       <fieldset>
-        <legend>Hacker News</legend>
-        <label><span>Search query</span><input name="query" value="{{ f.query or "" }}"></label>
-      </fieldset>
-      <fieldset>
         <legend>HTML page</legend>
         <label><span>Page URL</span><input type="url" name="html_url" value="{{ f.html_url or "" }}"></label>
         <div class="form-row">
@@ -74,10 +70,6 @@
           <label><span>Link selector</span><input name="link" value="{{ f.link or "" }}" placeholder="a"></label>
           <label><span>Date selector (optional)</span><input name="date" value="{{ f.date or "" }}" placeholder="time"></label>
         </div>
-      </fieldset>
-      <fieldset>
-        <legend>Unity releases</legend>
-        <label><span>Releases per fetch</span><input type="number" name="limit" min="1" max="100" value="{{ f.limit or "" }}" placeholder="25"></label>
       </fieldset>
       <fieldset>
         <legend>Options</legend>

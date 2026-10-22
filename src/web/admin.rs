@@ -11,9 +11,7 @@ use serde_json::json;
 
 use super::{AppError, AppState, PageResult, SourcesParams, non_empty, safe_next, sources_page};
 use crate::catalog;
-use crate::config::{
-    EngineConfig, GithubMode, OutletConfig, SourceConfig, SourceSpec, default_unity_limit,
-};
+use crate::config::{EngineConfig, GithubMode, OutletConfig, SourceConfig, SourceSpec};
 use crate::model::ItemKind;
 use crate::registry::{EditError, NewOwner, SourceEdit};
 
@@ -51,7 +49,8 @@ fn require_admin(st: &AppState, headers: &HeaderMap) -> Result<(), AppError> {
 
 /// The add-source form. Every field is optional text, so a bad submission re-renders the
 /// form with a message instead of failing to deserialize. Only the fields of the chosen
-/// `kind` are used.
+/// `kind` are used. Unity releases and Hacker News searches can't be added here; the
+/// Unity source comes from the catalog's suggestions.
 #[derive(Debug, Default, Deserialize, Serialize)]
 pub(super) struct AddSourceForm {
     owner_id: Option<String>,
@@ -61,8 +60,6 @@ pub(super) struct AddSourceForm {
     repo: Option<String>,
     mode: Option<String>,
     tag_prefix: Option<String>,
-    limit: Option<String>,
-    query: Option<String>,
     html_url: Option<String>,
     item: Option<String>,
     title: Option<String>,
@@ -93,17 +90,6 @@ impl AddSourceForm {
                     Some(other) => return Err(format!("Unknown GitHub mode “{other}”.")),
                 },
                 tag_prefix: non_empty(&self.tag_prefix),
-            },
-            Some("unity") => SourceSpec::Unity {
-                limit: match non_empty(&self.limit) {
-                    None => default_unity_limit(),
-                    Some(l) => l
-                        .parse()
-                        .map_err(|_| "The Unity limit must be a number.".to_string())?,
-                },
-            },
-            Some("hn") => SourceSpec::Hn {
-                query: required(&self.query, "a Hacker News search query")?,
             },
             Some("html") => SourceSpec::Html {
                 url: required(&self.html_url, "the page URL")?,

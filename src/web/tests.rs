@@ -442,7 +442,7 @@ async fn get_as(st: &AppState, uri: &str, cookie: &str) -> (StatusCode, String) 
 async fn managing_sources_requires_admin() {
     let st = state();
     for (uri, body) in [
-        ("/sources/add", "owner_id=bevy&kind=hn&query=bevy"),
+        ("/sources/add", "owner_id=bevy&kind=github&repo=a%2Fb"),
         (
             "/sources/remove",
             &*format!("source_id={}", urlenc(GODOT_SRC)),
@@ -525,11 +525,16 @@ async fn invalid_sources_rerender_the_form() {
             "invalid item selector",
         ),
         (
-            "owner_id=bevy&kind=hn&query=bevy&interval_minutes=soon",
+            "owner_id=bevy&kind=github&repo=a%2Fb&interval_minutes=soon",
             "whole number of minutes",
         ),
-        ("owner_id=nope&kind=hn&query=bevy", "no engine or outlet"),
-        ("kind=hn&query=bevy", "Choose the engine or outlet"),
+        (
+            "owner_id=nope&kind=github&repo=a%2Fb",
+            "no engine or outlet",
+        ),
+        ("kind=github&repo=a%2Fb", "Choose the engine or outlet"),
+        ("owner_id=bevy&kind=hn&query=bevy", "Unknown kind of source"),
+        ("owner_id=bevy&kind=unity", "Unknown kind of source"),
         (
             "owner_id=godot&kind=github&repo=godotengine%2Fgodot",
             "Godot already has this source",
@@ -548,13 +553,13 @@ async fn invalid_sources_rerender_the_form() {
         &st,
         post_form(
             "/sources/add",
-            "owner_id=bevy&kind=hn&query=bevy+news&interval_minutes=soon",
+            "owner_id=bevy&kind=github&repo=bevy%2Fnews&interval_minutes=soon",
             Some(&cookie),
         ),
     )
     .await;
-    assert!(body.contains(r#"value="bevy news""#));
-    assert!(body.contains(r#"<option value="hn" selected>"#));
+    assert!(body.contains(r#"value="bevy&#x2f;news""#));
+    assert!(body.contains(r#"<option value="github" selected>"#));
     assert_eq!(st.registry.current().config.all_sources().len(), 3);
 }
 
