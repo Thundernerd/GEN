@@ -20,6 +20,8 @@ use crate::pipeline::Pipeline;
 const MAX_BACKOFF: Duration = Duration::from_secs(24 * 60 * 60);
 /// Initial polls are spread over this window so startup doesn't hit every host at once.
 const STARTUP_SPREAD: Duration = Duration::from_secs(60);
+/// How often a disabled source re-checks its toggle without being woken.
+const DISABLED_RECHECK: Duration = Duration::from_secs(5 * 60);
 /// How often the notifier retries pending notifications without being woken.
 const NOTIFY_RETRY_INTERVAL: Duration = Duration::from_secs(5 * 60);
 /// Pending notifications older than this are given up on.
@@ -33,7 +35,8 @@ pub fn spawn(pipeline: Pipeline, sources: Arc<SourcesConfig>, app: Arc<AppConfig
     let permits = Arc::new(Semaphore::new(app.polling.concurrency.max(1)));
     let wake = Arc::new(Notify::new());
     let mut tasks = JoinSet::new();
-    for source in sources.enabled_sources() {
+    // Every source of an enabled owner gets a task; disabled ones wait until switched on.
+    for source in sources.manageable_sources() {
         let poller = Poller {
             pipeline: pipeline.clone(),
             app: app.clone(),
@@ -42,7 +45,11 @@ pub fn spawn(pipeline: Pipeline, sources: Arc<SourcesConfig>, app: Arc<AppConfig
         };
         tasks.spawn(async move { poller.run(source).await });
     }
-    let sources_count = tasks.len();
+    let sources_count = sources
+        .manageable_sources()
+        .iter()
+        .filter(|s| pipeline.toggles.is_enabled(s))
+        .count();
     let notifier = Notifier {
         pipeline,
         sources,
@@ -74,6 +81,13 @@ impl Poller {
 
         let mut failures: u32 = 0;
         loop {
+            while !self.pipeline.toggles.is_enabled(&source) {
+                // The timeout is a fallback; toggles wake waiters directly.
+                tokio::select! {
+                    () = self.pipeline.toggles.changed() => {}
+                    () = tokio::time::sleep(DISABLED_RECHECK) => {}
+                }
+            }
             let result = {
                 let Ok(_permit) = self.permits.acquire().await else {
                     return;

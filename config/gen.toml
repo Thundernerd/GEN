@@ -3,6 +3,8 @@
 [server]
 bind = "127.0.0.1:8080"
 base_url = "http://localhost:8080"
+# Enables the admin login (switch sources on/off on the Sources page). Long random value.
+# admin_token = "${GEN_ADMIN_TOKEN}"
 
 [database]
 path = "data/gen.db"

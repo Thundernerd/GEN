@@ -1,12 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Sources — GEN{% endblock %}
 {% block content %}
-<h1 class="page-title">Sources</h1>
+<div class="page-head">
+  <h1 class="page-title">Sources</h1>
+  {%- if admin %}
+  <form method="post" action="/logout"><button type="submit" class="btn-small btn-quiet">Log out</button></form>
+  {%- elif login_available %}
+  <a class="btn-small btn-quiet" href="/login?next=/sources">Manage sources</a>
+  {%- endif %}
+</div>
 <p class="summary-line">
-  {{ summary.total }} enabled sources:
+  {{ summary.enabled }} of {{ summary.total }} sources enabled:
   <span class="status status-ok">{{ summary.ok }} ok</span>
   <span class="status status-failing">{{ summary.failing }} failing</span>
   <span class="status status-pending">{{ summary.pending }} pending</span>
+  <span class="status status-disabled">{{ summary.disabled }} disabled</span>
 </p>
 {% include "_sources_table.html" %}
 {% endblock %}

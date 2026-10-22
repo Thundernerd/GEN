@@ -382,3 +382,45 @@ table.sources .num { text-align: right; font-variant-numeric: tabular-nums; }
 @media (prefers-reduced-motion: no-preference) {
   a, .chip, .site-nav a { transition: color 0.12s, background-color 0.12s, border-color 0.12s; }
 }
+
+/* -- admin: source toggles and login -------------------------------------- */
+
+.page-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem; }
+.page-head .page-title { margin: 0; }
+.status-disabled { color: var(--muted); }
+table.sources tr.is-disabled td { opacity: 0.6; }
+table.sources tr.is-disabled td:last-child { opacity: 1; }
+.toggle-form { margin: 0; }
+
+.btn-small, .login-form button {
+  display: inline-block;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+  color: var(--accent-text);
+  background: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 0.35rem 0.75rem;
+}
+.btn-small.btn-quiet { color: var(--text); background: var(--surface-2); border-color: var(--border); }
+.btn-small:hover, .login-form button:hover { filter: brightness(1.08); }
+
+.login-page { max-width: 26rem; padding: 1rem 0 2rem; }
+.login-form { display: flex; flex-direction: column; gap: 0.9rem; }
+.login-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; color: var(--muted); }
+.login-form input {
+  font: inherit;
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+}
+.login-form button { align-self: flex-start; font-size: 0.95rem; padding: 0.5rem 1rem; }
+.form-error { color: var(--fail); font-weight: 600; }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }

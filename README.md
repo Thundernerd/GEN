@@ -121,6 +121,7 @@ bind = "127.0.0.1:8080"            # default 0.0.0.0:8080
 base_url = "http://localhost:8080" # public URL, used in /feed.xml and notifications
 templates_dir = "templates"        # default
 static_dir = "static"              # default
+# admin_token = "${GEN_ADMIN_TOKEN}" # enables the admin login; see "Switching sources on and off"
 
 [database]
 path = "data/gen.db"               # SQLite file; parent dir must be writable
@@ -279,10 +280,20 @@ gen notify-test --channel phone
 | `/` | Latest items from all enabled sources. |
 | `/engines` | Engine list with tier, C# support and recent activity. |
 | `/engine/{id}` | Items for one engine. |
-| `/sources` | Every source with its last fetch time and errors. |
+| `/sources` | Every source with its last fetch time and errors. Admins can switch sources on and off here. |
+| `/login`, `/logout` | Admin login with `server.admin_token`. |
 | `/feed.xml` | Combined Atom feed. |
 | `/api/items` | JSON API for items. |
 | `/health` | Liveness check that returns `ok`. |
+
+## Switching sources on and off
+
+With `admin_token` set under `[server]`, the Sources page shows a **Manage sources** link. Log in with the token, and each source (on `/sources` and on every engine page) gets an **Enable** / **Disable** button.
+
+- The choice is stored in the database as an override of `enabled` in `sources.toml`, so it survives restarts and leaves the config file untouched. Sources marked `enabled = false` in the config can be switched on the same way.
+- It takes effect immediately: a disabled source stops polling, and a re-enabled one polls right away. Items it already fetched stay visible.
+- Only sources of enabled engines and outlets are listed; switch a whole engine on with `enabled = true` in `sources.toml`.
+- The login sets an `HttpOnly`, `SameSite=Strict` cookie holding a hash of the token (also `Secure` when `base_url` is `https://`). Use a long random token, e.g. `openssl rand -hex 32`. Without a token the toggles are off.
 
 ## Development
 

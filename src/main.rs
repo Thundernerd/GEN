@@ -6,6 +6,7 @@ mod notify;
 mod pipeline;
 mod scheduler;
 mod store;
+mod toggles;
 mod web;
 
 use std::path::PathBuf;
@@ -21,6 +22,7 @@ use crate::config::{AppConfig, SourcesConfig};
 use crate::fetch::Http;
 use crate::pipeline::Pipeline;
 use crate::store::Store;
+use crate::toggles::SourceToggles;
 
 #[derive(Parser)]
 #[command(name = "gen", version, about = "GEN — Game Engine News aggregator")]
@@ -110,8 +112,9 @@ async fn fetch_once(
 ) -> anyhow::Result<()> {
     let pipeline = build_pipeline(app, sources)?;
     let selected: Vec<_> = sources
-        .enabled_sources()
+        .manageable_sources()
         .into_iter()
+        .filter(|s| pipeline.toggles.is_enabled(s))
         .filter(|s| filter.is_none_or(|f| s.id.contains(f)))
         .collect();
     let results: Vec<_> = futures::stream::iter(selected)
@@ -197,7 +200,12 @@ async fn notify_test(
 
 async fn serve(app: AppConfig, sources: SourcesConfig) -> anyhow::Result<()> {
     let pipeline = build_pipeline(&app, &sources)?;
-    let state = web::AppState::new(pipeline.store.clone(), sources, app)?;
+    let state = web::AppState::new(
+        pipeline.store.clone(),
+        pipeline.toggles.clone(),
+        sources,
+        app,
+    )?;
     let listener = tokio::net::TcpListener::bind(&state.config.server.bind)
         .await
         .with_context(|| format!("binding {}", state.config.server.bind))?;
@@ -235,9 +243,11 @@ async fn shutdown_signal() {
 
 fn build_pipeline(app: &AppConfig, sources: &SourcesConfig) -> anyhow::Result<Pipeline> {
     let store = Store::open(&app.database.path)?;
+    let toggles = SourceToggles::new(store.source_overrides()?);
     Ok(Pipeline {
         http: Http::new(&app.polling.user_agent, app.polling.github_token.clone())?,
         store: Arc::new(Mutex::new(store)),
         classifier: Arc::new(Classifier::new(sources)),
+        toggles: Arc::new(toggles),
     })
 }

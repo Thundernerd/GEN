@@ -12,6 +12,7 @@ use super::{AppState, router};
 use crate::config::{AppConfig, SourcesConfig};
 use crate::model::{ItemKind, NewItem};
 use crate::store::Store;
+use crate::toggles::SourceToggles;
 
 const SOURCES: &str = r#"
 [[engine]]
@@ -107,7 +108,143 @@ fn state() -> AppState {
     config.server.templates_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/templates").into();
     config.server.static_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/static").into();
     config.server.base_url = "https://gen.example.org/".into();
-    AppState::new(Arc::new(Mutex::new(store)), sources, config).unwrap()
+    config.server.admin_token = Some(ADMIN_TOKEN.into());
+    let toggles = Arc::new(SourceToggles::default());
+    AppState::new(Arc::new(Mutex::new(store)), toggles, sources, config).unwrap()
+}
+
+const ADMIN_TOKEN: &str = "test-admin-token";
+
+/// Sends a request to a router sharing `st`, returning status, headers and body.
+async fn send(st: &AppState, req: Request<Body>) -> (StatusCode, axum::http::HeaderMap, String) {
+    let resp = router(st.clone()).oneshot(req).await.unwrap();
+    let (status, headers) = (resp.status(), resp.headers().clone());
+    let body = resp.into_body().collect().await.unwrap().to_bytes();
+    (status, headers, String::from_utf8(body.to_vec()).unwrap())
+}
+
+fn post_form(uri: &str, body: &str, cookie: Option<&str>) -> Request<Body> {
+    let mut req =
+        Request::post(uri).header(header::CONTENT_TYPE, "application/x-www-form-urlencoded");
+    if let Some(c) = cookie {
+        req = req.header(header::COOKIE, c);
+    }
+    req.body(Body::from(body.to_string())).unwrap()
+}
+
+/// Logs in and returns the `name=value` admin cookie.
+async fn login(st: &AppState) -> String {
+    let (status, headers, _) = send(
+        st,
+        post_form(
+            "/login",
+            &format!("token={ADMIN_TOKEN}&next=%2Fsources"),
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(headers[header::LOCATION], "/sources");
+    let set_cookie = headers[header::SET_COOKIE].to_str().unwrap();
+    assert!(set_cookie.contains("HttpOnly") && set_cookie.contains("SameSite=Strict"));
+    assert!(set_cookie.contains("Secure"), "base_url is https");
+    set_cookie.split(';').next().unwrap().to_string()
+}
+
+#[tokio::test]
+async fn toggling_sources_requires_admin() {
+    let st = state();
+    let toggle = format!("source_id={}&enabled=0&next=%2Fsources", urlenc(GODOT_SRC));
+
+    let (status, _, _) = send(&st, post_form("/sources/toggle", &toggle, None)).await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    let (status, _, _) = send(
+        &st,
+        post_form("/sources/toggle", &toggle, Some("gen_admin=deadbeef")),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    let (status, _, body) = send(&st, post_form("/login", "token=wrong", None)).await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert!(body.contains("not correct"));
+
+    // Not logged in: no toggle buttons, but a way to log in.
+    let (_, _, body) = send(&st, Request::get("/sources").body(Body::empty()).unwrap()).await;
+    assert!(!body.contains("/sources/toggle"));
+    assert!(body.contains("/login?next=/sources") || body.contains("/login?next=&#x2f;sources"));
+}
+
+#[tokio::test]
+async fn admin_can_disable_and_enable_sources() {
+    let st = state();
+    let cookie = login(&st).await;
+    let source = st
+        .sources
+        .manageable_sources()
+        .into_iter()
+        .find(|s| s.id == GODOT_SRC)
+        .unwrap();
+
+    let (_, _, body) = send(
+        &st,
+        Request::get("/sources")
+            .header(header::COOKIE, &cookie)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert!(body.contains("Disable"));
+
+    let disable = format!(
+        "source_id={}&enabled=0&next=%2Fengine%2Fgodot",
+        urlenc(GODOT_SRC)
+    );
+    let (status, headers, _) =
+        send(&st, post_form("/sources/toggle", &disable, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(headers[header::LOCATION], "/engine/godot");
+    assert!(!st.toggles.is_enabled(&source));
+    let stored = st.store.lock().unwrap().source_overrides().unwrap();
+    assert_eq!(stored.get(GODOT_SRC), Some(&false));
+
+    let (_, _, body) = send(
+        &st,
+        Request::get("/sources")
+            .header(header::COOKIE, &cookie)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert!(body.contains("status-disabled\">disabled"));
+    assert!(body.contains("Enable"));
+
+    let enable = format!(
+        "source_id={}&enabled=1&next=https%3A%2F%2Fevil.example",
+        urlenc(GODOT_SRC)
+    );
+    let (status, headers, _) =
+        send(&st, post_form("/sources/toggle", &enable, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(headers[header::LOCATION], "/sources", "no open redirect");
+    assert!(st.toggles.is_enabled(&source));
+
+    let unknown = "source_id=nope&enabled=0";
+    let (status, _, _) = send(&st, post_form("/sources/toggle", unknown, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::NOT_FOUND);
+
+    let (status, headers, _) = send(&st, post_form("/logout", "", Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert!(
+        headers[header::SET_COOKIE]
+            .to_str()
+            .unwrap()
+            .contains("Max-Age=0")
+    );
+}
+
+fn urlenc(s: &str) -> String {
+    url::form_urlencoded::byte_serialize(s.as_bytes()).collect()
 }
 
 async fn get(uri: &str) -> (StatusCode, Option<String>, String) {

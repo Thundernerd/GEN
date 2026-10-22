@@ -7,6 +7,7 @@ use crate::config::ResolvedSource;
 use crate::fetch::{self, FetchOutcome, Http};
 use crate::model::{Item, NewItem};
 use crate::store::Store;
+use crate::toggles::SourceToggles;
 
 /// Upper bound on entries taken from a single fetch.
 const MAX_ITEMS_PER_FETCH: usize = 200;
@@ -16,6 +17,7 @@ pub struct Pipeline {
     pub http: Http,
     pub store: Arc<Mutex<Store>>,
     pub classifier: Arc<Classifier>,
+    pub toggles: Arc<SourceToggles>,
 }
 
 #[derive(Debug)]

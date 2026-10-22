@@ -137,6 +137,8 @@ pub struct ResolvedSource {
     pub owner: Owner,
     /// Display name of the owner.
     pub owner_name: String,
+    /// The source's own `enabled` flag from the config (runtime overrides may differ).
+    pub enabled: bool,
     pub category: Option<ItemKind>,
     pub interval_minutes: Option<u64>,
     pub keywords: Vec<String>,
@@ -203,48 +205,61 @@ impl SourcesConfig {
 
     /// Every source of every engine and outlet, including disabled ones.
     pub fn all_sources(&self) -> Vec<ResolvedSource> {
-        self.resolve(false)
+        self.resolve().into_iter().map(|(s, _)| s).collect()
     }
 
-    /// Sources whose owner and the source itself are enabled.
+    /// Sources whose owner and the source itself are enabled in the config.
     pub fn enabled_sources(&self) -> Vec<ResolvedSource> {
-        self.resolve(true)
+        self.resolve()
+            .into_iter()
+            .filter(|(s, owner_enabled)| *owner_enabled && s.enabled)
+            .map(|(s, _)| s)
+            .collect()
     }
 
-    fn resolve(&self, enabled_only: bool) -> Vec<ResolvedSource> {
+    /// Sources of enabled engines and outlets, including sources disabled in the config.
+    /// These are the ones that can be switched on or off at runtime.
+    pub fn manageable_sources(&self) -> Vec<ResolvedSource> {
+        self.resolve()
+            .into_iter()
+            .filter(|(_, owner_enabled)| *owner_enabled)
+            .map(|(s, _)| s)
+            .collect()
+    }
+
+    /// Every source, paired with whether its owner is enabled.
+    fn resolve(&self) -> Vec<(ResolvedSource, bool)> {
         let mut out = Vec::new();
         for e in &self.engines {
-            if enabled_only && !e.enabled {
-                continue;
-            }
-            for s in e.sources.iter().filter(|s| !enabled_only || s.enabled) {
-                out.push(ResolvedSource {
+            for s in &e.sources {
+                let source = ResolvedSource {
                     id: format!("{}:{}", e.id, s.spec.key()),
                     owner: Owner::Engine(e.id.clone()),
                     owner_name: e.name.clone(),
+                    enabled: s.enabled,
                     category: s.category,
                     interval_minutes: s.interval_minutes,
                     keywords: s.keywords.clone(),
                     require_engine_match: false,
                     spec: s.spec.clone(),
-                });
+                };
+                out.push((source, e.enabled));
             }
         }
         for o in &self.outlets {
-            if enabled_only && !o.enabled {
-                continue;
-            }
-            for s in o.sources.iter().filter(|s| !enabled_only || s.enabled) {
-                out.push(ResolvedSource {
+            for s in &o.sources {
+                let source = ResolvedSource {
                     id: format!("{}:{}", o.id, s.spec.key()),
                     owner: Owner::Outlet(o.id.clone()),
                     owner_name: o.name.clone(),
+                    enabled: s.enabled,
                     category: s.category,
                     interval_minutes: s.interval_minutes,
                     keywords: s.keywords.clone(),
                     require_engine_match: o.require_engine_match,
                     spec: s.spec.clone(),
-                });
+                };
+                out.push((source, o.enabled));
             }
         }
         out
@@ -280,6 +295,9 @@ pub struct ServerConfig {
     pub templates_dir: PathBuf,
     #[serde(default = "default_static_dir")]
     pub static_dir: PathBuf,
+    /// Enables the admin login (e.g. for switching sources on and off). Unset or empty
+    /// means admin features are off. Use a long random value.
+    pub admin_token: Option<String>,
 }
 
 impl Default for ServerConfig {
@@ -289,6 +307,7 @@ impl Default for ServerConfig {
             base_url: default_base_url(),
             templates_dir: default_templates_dir(),
             static_dir: default_static_dir(),
+            admin_token: None,
         }
     }
 }

@@ -69,6 +69,14 @@ CREATE TABLE notify_channels (
     created_at TEXT NOT NULL
 );
 "#,
+    r#"
+-- Runtime on/off switches for sources, overriding `enabled` in sources.toml.
+CREATE TABLE source_overrides (
+    source_id  TEXT PRIMARY KEY,
+    enabled    INTEGER NOT NULL,
+    updated_at TEXT NOT NULL
+);
+"#,
 ];
 
 /// Filters for listing items. `Default` lists the newest non-duplicate items.
@@ -173,6 +181,25 @@ impl Store {
                  last_error = excluded.last_error,
                  consecutive_failures = consecutive_failures + 1",
             params![source_id, error],
+        )?;
+        Ok(())
+    }
+
+    /// Runtime on/off overrides per source id.
+    pub fn source_overrides(&self) -> anyhow::Result<HashMap<String, bool>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT source_id, enabled FROM source_overrides")?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    pub fn set_source_override(&self, source_id: &str, enabled: bool) -> anyhow::Result<()> {
+        self.conn.execute(
+            "INSERT INTO source_overrides (source_id, enabled, updated_at) VALUES (?1, ?2, ?3)
+             ON CONFLICT (source_id) DO UPDATE SET
+                 enabled = excluded.enabled, updated_at = excluded.updated_at",
+            params![source_id, enabled, Utc::now()],
         )?;
         Ok(())
     }
@@ -522,6 +549,18 @@ mod tests {
 
         let first = store.register_channel("ntfy").unwrap();
         assert_eq!(store.register_channel("ntfy").unwrap(), first);
+    }
+
+    #[test]
+    fn stores_source_overrides() {
+        let store = Store::open_in_memory().unwrap();
+        assert!(store.source_overrides().unwrap().is_empty());
+        store.set_source_override("a", false).unwrap();
+        store.set_source_override("b", true).unwrap();
+        store.set_source_override("a", true).unwrap();
+        let overrides = store.source_overrides().unwrap();
+        assert_eq!(overrides.get("a"), Some(&true));
+        assert_eq!(overrides.get("b"), Some(&true));
     }
 
     #[test]

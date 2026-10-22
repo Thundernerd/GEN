@@ -14,10 +14,10 @@ use std::sync::{Arc, Mutex};
 
 use anyhow::Context;
 use axum::Router;
-use axum::extract::{Path, Query, State};
-use axum::http::{StatusCode, header};
-use axum::response::{Html, IntoResponse, Json, Response};
-use axum::routing::get;
+use axum::extract::{Form, Path, Query, State};
+use axum::http::{HeaderMap, StatusCode, header};
+use axum::response::{Html, IntoResponse, Json, Redirect, Response};
+use axum::routing::{get, post};
 use chrono::Utc;
 use minijinja::Environment;
 use minijinja::value::Serde;
@@ -29,6 +29,7 @@ use tower_http::services::ServeDir;
 use crate::config::{AppConfig, Owner, SourceSpec, SourcesConfig};
 use crate::model::{Item, ItemKind, SourceState};
 use crate::store::Store;
+use crate::toggles::SourceToggles;
 
 use self::queries::{EngineStats, ItemFilter};
 use self::view::{DateView, ItemView, Lookup, query_string};
@@ -41,6 +42,10 @@ const FEED_SIZE: u32 = 100;
 const API_DEFAULT_LIMIT: u32 = 50;
 const API_MAX_LIMIT: u32 = 200;
 
+/// Cookie holding a hash of the admin token once logged in.
+const ADMIN_COOKIE: &str = "gen_admin";
+const ADMIN_COOKIE_MAX_AGE: u32 = 30 * 24 * 60 * 60;
+
 const TIER_LABELS: [(u8, &str); 3] = [
     (1, "Major C# engines"),
     (2, "Niche C# engines"),
@@ -52,6 +57,7 @@ pub struct AppState {
     pub store: Arc<Mutex<Store>>,
     pub sources: Arc<SourcesConfig>,
     pub config: Arc<AppConfig>,
+    pub toggles: Arc<SourceToggles>,
     templates: Arc<Environment<'static>>,
     lookup: Arc<Lookup>,
 }
@@ -60,6 +66,7 @@ impl AppState {
     /// Builds the state and sets up the template environment from `server.templates_dir`.
     pub fn new(
         store: Arc<Mutex<Store>>,
+        toggles: Arc<SourceToggles>,
         sources: SourcesConfig,
         config: AppConfig,
     ) -> anyhow::Result<Self> {
@@ -74,6 +81,7 @@ impl AppState {
             lookup: Arc::new(Lookup::new(&sources)),
             sources: Arc::new(sources),
             config: Arc::new(config),
+            toggles,
             templates: Arc::new(env),
         })
     }
@@ -111,6 +119,25 @@ impl AppState {
         .await
     }
 
+    fn admin_token(&self) -> Option<&str> {
+        self.config
+            .server
+            .admin_token
+            .as_deref()
+            .filter(|t| !t.is_empty())
+    }
+
+    /// Whether the request carries a valid admin cookie.
+    fn is_admin(&self, headers: &HeaderMap) -> bool {
+        let Some(token) = self.admin_token() else {
+            return false;
+        };
+        cookie(headers, ADMIN_COOKIE)
+            .and_then(|v| blake3::Hash::from_hex(v).ok())
+            // `blake3::Hash` equality is constant-time.
+            .is_some_and(|h| h == admin_cookie_hash(token))
+    }
+
     fn base_url(&self) -> &str {
         self.config.server.base_url.trim_end_matches('/')
     }
@@ -132,6 +159,7 @@ impl AppState {
         };
         let (status, message) = match &err {
             AppError::NotFound(what) => (StatusCode::NOT_FOUND, what.clone()),
+            AppError::Forbidden(what) => (StatusCode::FORBIDDEN, what.clone()),
             AppError::Internal(e) => {
                 tracing::error!("request failed: {e:#}");
                 (
@@ -152,7 +180,9 @@ impl AppState {
                 tracing::error!("rendering error page failed: {e:#}");
                 (status, message).into_response()
             }
-            Err(AppError::NotFound(_)) => (status, message).into_response(),
+            Err(AppError::NotFound(_) | AppError::Forbidden(_)) => {
+                (status, message).into_response()
+            }
         }
     }
 
@@ -167,6 +197,7 @@ impl AppState {
 
 enum AppError {
     NotFound(String),
+    Forbidden(String),
     Internal(anyhow::Error),
 }
 
@@ -185,6 +216,9 @@ pub fn router(state: AppState) -> Router {
         .route("/engines", get(engines))
         .route("/engine/{id}", get(engine))
         .route("/sources", get(sources))
+        .route("/sources/toggle", post(toggle_source))
+        .route("/login", get(login_form).post(login))
+        .route("/logout", post(logout))
         .route("/feed.xml", get(feed))
         .route("/api/items", get(api_items))
         .route("/health", get(health))
@@ -367,12 +401,14 @@ async fn engine(
     State(st): State<AppState>,
     Path(id): Path<String>,
     Query(params): Query<ListParams>,
+    headers: HeaderMap,
 ) -> Response {
-    let result = engine_page(&st, id, params).await;
+    let admin = st.is_admin(&headers);
+    let result = engine_page(&st, id, params, admin).await;
     st.respond(result)
 }
 
-async fn engine_page(st: &AppState, id: String, params: ListParams) -> PageResult {
+async fn engine_page(st: &AppState, id: String, params: ListParams, admin: bool) -> PageResult {
     let Some(engine) = st.sources.engine(&id) else {
         return Err(AppError::NotFound(format!("Unknown engine “{id}”.")));
     };
@@ -396,7 +432,7 @@ async fn engine_page(st: &AppState, id: String, params: ListParams) -> PageResul
     let now = Utc::now();
     let sources: Vec<_> = st
         .sources
-        .enabled_sources()
+        .manageable_sources()
         .into_iter()
         .filter(|s| s.owner == Owner::Engine(engine.id.clone()))
         .map(|s| source_row(st, &s, states.get(&s.id), now))
@@ -428,6 +464,8 @@ async fn engine_page(st: &AppState, id: String, params: ListParams) -> PageResul
                 "enabled": engine.enabled,
             },
             "sources": sources,
+            "admin": admin,
+            "next": base.clone(),
             "tabs": tabs,
             "items": st.item_views(&items, &dups),
             "pagination": pagination(&base, &kind_pair, page, has_more),
@@ -436,31 +474,176 @@ async fn engine_page(st: &AppState, id: String, params: ListParams) -> PageResul
     )
 }
 
-async fn sources(State(st): State<AppState>) -> Response {
-    let result = sources_page(&st).await;
+async fn sources(State(st): State<AppState>, headers: HeaderMap) -> Response {
+    let admin = st.is_admin(&headers);
+    let result = sources_page(&st, admin).await;
     st.respond(result)
 }
 
-async fn sources_page(st: &AppState) -> PageResult {
+async fn sources_page(st: &AppState, admin: bool) -> PageResult {
     let states = st.with_store(|s| s.source_states()).await?;
     let now = Utc::now();
     let rows: Vec<_> = st
         .sources
-        .enabled_sources()
+        .manageable_sources()
         .iter()
         .map(|s| source_row(st, s, states.get(&s.id), now))
         .collect();
     let count = |status: &str| rows.iter().filter(|r| r["status"] == status).count();
     let summary = json!({
         "total": rows.len(),
+        "enabled": rows.len() - count("disabled"),
         "ok": count("ok"),
         "failing": count("failing"),
         "pending": count("pending"),
+        "disabled": count("disabled"),
     });
     st.render(
         "sources.html",
-        json!({"nav": "sources", "sources": rows, "summary": summary}),
+        json!({
+            "nav": "sources",
+            "sources": rows,
+            "summary": summary,
+            "admin": admin,
+            "login_available": st.admin_token().is_some(),
+            "next": "/sources",
+        }),
     )
+}
+
+#[derive(Deserialize)]
+struct ToggleForm {
+    source_id: String,
+    /// "1" to enable, anything else to disable.
+    enabled: String,
+    next: Option<String>,
+}
+
+async fn toggle_source(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    Form(form): Form<ToggleForm>,
+) -> Response {
+    let result = toggle_source_inner(&st, &headers, form).await;
+    st.respond(result)
+}
+
+async fn toggle_source_inner(st: &AppState, headers: &HeaderMap, form: ToggleForm) -> PageResult {
+    if !st.is_admin(headers) {
+        return Err(AppError::Forbidden(
+            "Log in as admin to switch sources on or off.".into(),
+        ));
+    }
+    if !st
+        .sources
+        .manageable_sources()
+        .iter()
+        .any(|s| s.id == form.source_id)
+    {
+        return Err(AppError::NotFound(format!(
+            "Unknown source “{}”.",
+            form.source_id
+        )));
+    }
+    let enabled = form.enabled == "1";
+    let id = form.source_id.clone();
+    st.with_store(move |s| s.set_source_override(&id, enabled))
+        .await?;
+    st.toggles.set(&form.source_id, enabled);
+    tracing::info!(source = %form.source_id, enabled, "source toggled");
+    Ok(Redirect::to(&safe_next(form.next.as_deref())).into_response())
+}
+
+#[derive(Deserialize)]
+struct LoginForm {
+    token: String,
+    next: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct LoginQuery {
+    next: Option<String>,
+}
+
+async fn login_form(State(st): State<AppState>, Query(q): Query<LoginQuery>) -> Response {
+    let result = render_login(&st, q.next.as_deref(), None);
+    st.respond(result)
+}
+
+async fn login(State(st): State<AppState>, Form(form): Form<LoginForm>) -> Response {
+    let next = safe_next(form.next.as_deref());
+    let ok = st.admin_token().is_some_and(|token| {
+        // Compare hashes so the comparison is constant-time.
+        blake3::hash(form.token.as_bytes()) == blake3::hash(token.as_bytes())
+    });
+    if !ok {
+        tracing::warn!("failed admin login");
+        let result = render_login(&st, Some(&next), Some("That token is not correct."))
+            .map(|resp| (StatusCode::UNAUTHORIZED, resp).into_response());
+        return st.respond(result);
+    }
+    let token = st.admin_token().unwrap_or_default();
+    let cookie = format!(
+        "{ADMIN_COOKIE}={}; Path=/; Max-Age={ADMIN_COOKIE_MAX_AGE}; HttpOnly; SameSite=Strict{}",
+        admin_cookie_hash(token).to_hex(),
+        secure_attr(&st),
+    );
+    ([(header::SET_COOKIE, cookie)], Redirect::to(&next)).into_response()
+}
+
+async fn logout(State(st): State<AppState>) -> Response {
+    let cookie = format!(
+        "{ADMIN_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict{}",
+        secure_attr(&st)
+    );
+    ([(header::SET_COOKIE, cookie)], Redirect::to("/sources")).into_response()
+}
+
+fn render_login(st: &AppState, next: Option<&str>, error: Option<&str>) -> PageResult {
+    st.render(
+        "login.html",
+        json!({
+            "nav": "sources",
+            "available": st.admin_token().is_some(),
+            "next": safe_next(next),
+            "error": error,
+        }),
+    )
+}
+
+/// Value stored in the admin cookie: a hash of the token, so the token itself never sits
+/// in the browser.
+fn admin_cookie_hash(token: &str) -> blake3::Hash {
+    blake3::hash(format!("gen-admin-cookie-v1:{token}").as_bytes())
+}
+
+fn secure_attr(st: &AppState) -> &'static str {
+    if st.base_url().starts_with("https://") {
+        "; Secure"
+    } else {
+        ""
+    }
+}
+
+/// Reads one cookie from the request headers.
+fn cookie<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a str> {
+    headers
+        .get_all(header::COOKIE)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .flat_map(|v| v.split(';'))
+        .filter_map(|pair| pair.trim().split_once('='))
+        .find(|(k, _)| *k == name)
+        .map(|(_, v)| v)
+}
+
+/// A same-site path to redirect to; anything else (absolute or protocol-relative URLs)
+/// falls back to the sources page.
+fn safe_next(next: Option<&str>) -> String {
+    match next {
+        Some(n) if n.starts_with('/') && !n.starts_with("//") && !n.contains('\\') => n.to_string(),
+        _ => "/sources".to_string(),
+    }
 }
 
 /// One source with its health, for the engine and sources pages.
@@ -471,7 +654,10 @@ fn source_row(
     now: chrono::DateTime<Utc>,
 ) -> serde_json::Value {
     let state = state.cloned().unwrap_or_default();
-    let status = if state.consecutive_failures > 0 {
+    let enabled = st.toggles.is_enabled(s);
+    let status = if !enabled {
+        "disabled"
+    } else if state.consecutive_failures > 0 {
         "failing"
     } else if state.last_ok.is_some() {
         "ok"
@@ -499,6 +685,8 @@ fn source_row(
     };
     json!({
         "id": s.id,
+        "enabled": enabled,
+        "config_enabled": s.enabled,
         "owner": s.owner_name,
         "owner_kind": owner_kind,
         "owner_id": owner_id,

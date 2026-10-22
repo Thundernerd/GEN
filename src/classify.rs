@@ -350,6 +350,7 @@ mod tests {
             id: "test:feed:x".into(),
             owner,
             owner_name: "Test".into(),
+            enabled: true,
             category,
             interval_minutes: None,
             keywords: Vec::new(),

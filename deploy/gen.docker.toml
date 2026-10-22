@@ -8,6 +8,8 @@ bind = "0.0.0.0:8080"
 base_url = "http://localhost:8080"
 templates_dir = "/app/templates"
 static_dir = "/app/static"
+# Enables the admin login for switching sources on and off. Use a long random value.
+# admin_token = "${GEN_ADMIN_TOKEN}"
 
 [database]
 path = "/data/gen.db"

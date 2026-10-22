@@ -1,22 +1,32 @@
-{#- Source health table. Expects `sources` (rows built by `source_row`). -#}
+{#- Source health table. Expects `sources` (rows built by `source_row`), `admin` and `next`. -#}
 <div class="table-wrap">
 <table class="sources">
   <thead>
-    <tr><th>Status</th><th>Owner</th><th>Source</th><th>Last OK</th><th>Failures</th><th>Last error</th></tr>
+    <tr><th>Status</th><th>Owner</th><th>Source</th><th>Last OK</th><th>Failures</th><th>Last error</th>{% if admin %}<th><span class="visually-hidden">Actions</span></th>{% endif %}</tr>
   </thead>
   <tbody>
     {%- for s in sources %}
-    <tr>
+    <tr{% if not s.enabled %} class="is-disabled"{% endif %}>
       <td><span class="status status-{{ s.status }}">{{ s.status }}</span></td>
       <td>{% if s.owner_kind == "engine" %}<a href="/engine/{{ s.owner_id }}">{{ s.owner }}</a>{% else %}{{ s.owner }}{% endif %}</td>
       <td>
         <span class="source-kind">{{ s.kind }}</span>
         {% if s.target_url %}<a href="{{ s.target_url }}" rel="noopener">{{ s.target }}</a>{% else %}{{ s.target }}{% endif %}
-        <div class="source-meta">every {{ s.interval }} min{% if s.category %} · {{ s.category }}{% endif %}</div>
+        <div class="source-meta">every {{ s.interval }} min{% if s.category %} · {{ s.category }}{% endif %}{% if s.enabled != s.config_enabled %} · overrides config{% endif %}</div>
       </td>
       <td>{% if s.last_ok %}<time datetime="{{ s.last_ok.iso }}" title="{{ s.last_ok.abs }}">{{ s.last_ok.rel }}</time>{% else %}never{% endif %}</td>
       <td class="num">{{ s.failures }}</td>
       <td class="error-text">{{ s.last_error or "" }}</td>
+      {%- if admin %}
+      <td>
+        <form method="post" action="/sources/toggle" class="toggle-form">
+          <input type="hidden" name="source_id" value="{{ s.id }}">
+          <input type="hidden" name="enabled" value="{{ "0" if s.enabled else "1" }}">
+          <input type="hidden" name="next" value="{{ next }}">
+          <button type="submit" class="btn-small{% if s.enabled %} btn-quiet{% endif %}">{{ "Disable" if s.enabled else "Enable" }}</button>
+        </form>
+      </td>
+      {%- endif %}
     </tr>
     {%- endfor %}
   </tbody>
