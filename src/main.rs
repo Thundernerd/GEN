@@ -7,6 +7,7 @@ mod fetch;
 mod model;
 mod notify;
 mod pipeline;
+mod scheduler;
 mod store;
 mod web;
 
