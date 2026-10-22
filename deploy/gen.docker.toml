@@ -1,0 +1,51 @@
+# GEN app settings for containers (mounted as /app/config/gen.toml).
+# Values like ${NAME} are read from environment variables. A referenced
+# variable that is unset is a startup error, so only uncomment what you use.
+
+[server]
+bind = "0.0.0.0:8080"
+# Public URL, used for links in /feed.xml and in notifications.
+base_url = "http://localhost:8080"
+templates_dir = "/app/templates"
+static_dir = "/app/static"
+
+[database]
+path = "/data/gen.db"
+
+[polling]
+default_interval_minutes = 60
+concurrency = 8
+# The GITHUB_TOKEN env var is picked up automatically when set, so there is
+# no need to reference it here.
+
+# Notification channels. Empty rule lists mean "everything".
+#
+# [[notify.channel]]
+# name = "discord-releases"
+# kind = "discord"
+# webhook_url = "${GEN_DISCORD_WEBHOOK}"
+#   [notify.channel.rules]
+#   engines = ["godot", "unity", "stride", "flax"]
+#   kinds = ["release"]
+#
+# [[notify.channel]]
+# name = "phone"
+# kind = "ntfy"
+# server = "https://ntfy.sh"
+# topic = "${GEN_NTFY_TOPIC}"
+#   [notify.channel.rules]
+#   kinds = ["release", "news"]
+#
+# [[notify.channel]]
+# name = "mail-digest"
+# kind = "email"
+# smtp_host = "smtp.example.com"
+# smtp_port = 587
+# username = "${GEN_SMTP_USER}"
+# password = "${GEN_SMTP_PASSWORD}"
+# from = "GEN <gen@example.com>"
+# to = ["you@example.com"]
+# digest = true
+#   [notify.channel.rules]
+#   exclude_kinds = ["community"]
+#   include_untagged = true

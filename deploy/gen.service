@@ -1,0 +1,39 @@
+# systemd unit for running the GEN binary directly on a home server.
+# See README.md, "Home server with systemd", for the install steps.
+
+[Unit]
+Description=GEN - Game Engine News aggregator
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=gen
+Group=gen
+WorkingDirectory=/opt/gen
+Environment=GEN_CONFIG=/opt/gen/config/gen.toml
+Environment=GEN_SOURCES=/opt/gen/config/sources.toml
+Environment=RUST_LOG=info
+# Secrets referenced as ${NAME} in gen.toml. The leading "-" makes it optional.
+EnvironmentFile=-/etc/gen/gen.env
+ExecStart=/usr/local/bin/gen serve
+Restart=on-failure
+RestartSec=10
+
+# Hardening. The only writable path is the data directory; gen.toml must
+# set [database] path = "/var/lib/gen/gen.db".
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+ReadWritePaths=/var/lib/gen
+
+[Install]
+WantedBy=multi-user.target

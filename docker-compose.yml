@@ -1,0 +1,21 @@
+services:
+  gen:
+    build: .
+    image: gen:latest
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    # Optional: tokens and secrets referenced from gen.toml as ${NAME}.
+    # Create it with: cp deploy/.env.example .env
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - gen-data:/data
+      - ./deploy/gen.docker.toml:/app/config/gen.toml:ro
+      # Optional: edit sources without rebuilding (restart the container
+      # afterwards). Remove this line to use the copy baked into the image.
+      - ./config/sources.toml:/app/config/sources.toml:ro
+
+volumes:
+  gen-data:
