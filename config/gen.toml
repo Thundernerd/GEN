@@ -1,0 +1,39 @@
+# GEN app settings. Values like ${NAME} are read from environment variables.
+
+[server]
+bind = "127.0.0.1:8080"
+base_url = "http://localhost:8080"
+
+[database]
+path = "data/gen.db"
+
+[polling]
+default_interval_minutes = 60
+concurrency = 8
+# github_token = "${GITHUB_TOKEN}"   # optional; also read from the GITHUB_TOKEN env var
+
+# Notification channels. Empty rule lists mean "everything".
+# [[notify.channel]]
+# name = "discord-releases"
+# kind = "discord"
+# webhook_url = "${GEN_DISCORD_WEBHOOK}"
+#   [notify.channel.rules]
+#   engines = ["godot", "unity", "stride", "flax"]
+#   kinds = ["release"]
+#
+# [[notify.channel]]
+# name = "phone"
+# kind = "ntfy"
+# topic = "${GEN_NTFY_TOPIC}"
+#   [notify.channel.rules]
+#   kinds = ["release", "news"]
+#
+# [[notify.channel]]
+# name = "mail-digest"
+# kind = "email"
+# smtp_host = "smtp.example.com"
+# username = "${GEN_SMTP_USER}"
+# password = "${GEN_SMTP_PASSWORD}"
+# from = "GEN <gen@example.com>"
+# to = ["you@example.com"]
+# digest = true

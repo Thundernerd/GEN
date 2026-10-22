@@ -1,0 +1,44 @@
+# Engines, general news outlets and their sources.
+# Source kinds: feed, github (mode = releases|tags|commits), unity, hn, html.
+# Categories: release, prerelease, news, video, community.
+
+[[engine]]
+id = "godot"
+name = "Godot"
+tier = 1
+csharp = "first-class (.NET build)"
+homepage = "https://godotengine.org"
+aliases = ["godot", "godot engine", "gdscript"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://godotengine.org/rss.xml"
+  category = "news"
+  [[engine.source]]
+  kind = "github"
+  repo = "godotengine/godot"
+  category = "release"
+
+[[engine]]
+id = "flax"
+name = "Flax Engine"
+tier = 1
+csharp = "native"
+homepage = "https://flaxengine.com"
+aliases = ["flax engine", "flaxengine", "flax"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://flaxengine.com/blog/feed/"
+  category = "news"
+  [[engine.source]]
+  kind = "github"
+  repo = "FlaxEngine/FlaxEngine"
+  category = "release"
+
+[[outlet]]
+id = "gamefromscratch"
+name = "GameFromScratch"
+homepage = "https://gamefromscratch.com"
+  [[outlet.source]]
+  kind = "feed"
+  url = "https://gamefromscratch.com/feed/"
+  category = "news"
