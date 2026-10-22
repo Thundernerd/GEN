@@ -1,8 +1,40 @@
 // Submits forms marked `data-inline` in the background and swaps in the page the server
-// answers with, so admin actions don't reload the page. Without this script the forms
-// work as ordinary posts.
+// answers with, so admin actions don't reload the page, and runs the add-source and
+// add-engine/outlet dialogs. Without this script the forms work as ordinary posts, and
+// dialogs rendered `open` show in place.
 (() => {
   "use strict";
+
+  // A dialog the server rendered open (a failed submission, or an owner to preselect)
+  // becomes a modal again.
+  function reopen(root) {
+    for (const dialog of root.querySelectorAll("dialog[data-reopen][open]")) {
+      dialog.removeAttribute("data-reopen");
+      dialog.close();
+      dialog.showModal();
+    }
+  }
+
+  document.addEventListener("click", (event) => {
+    // "Add source" next to an engine or outlet: open the dialog with it preselected.
+    const link = event.target.closest("a[data-add-source]");
+    const dialog = document.getElementById("add-source");
+    if (link && dialog) {
+      event.preventDefault();
+      const select = dialog.querySelector('select[name="owner_id"]');
+      if (select) select.value = link.dataset.addSource;
+      dialog.showModal();
+      return;
+    }
+    // `commandfor` buttons, for browsers without invoker commands.
+    const button = event.target.closest("button[commandfor]");
+    if (button && !("command" in HTMLButtonElement.prototype)) {
+      const target = document.getElementById(button.getAttribute("commandfor"));
+      if (!(target instanceof HTMLDialogElement)) return;
+      if (button.getAttribute("command") === "show-modal") target.showModal();
+      if (button.getAttribute("command") === "close") target.close();
+    }
+  });
 
   let status;
   function announce(text) {
@@ -65,8 +97,11 @@
       return;
     }
 
-    // Close the confirmation popover (it lives in the top layer) before its DOM goes.
+    // Close the confirmation popover or dialog (they live in the top layer) before its
+    // DOM goes.
     form.closest("[popover]")?.hidePopover?.();
+    const dialog = form.closest("dialog");
+    dialog?.close();
     main.replaceWith(next);
     document.title = doc.title;
     for (const id of open) {
@@ -76,13 +111,26 @@
     if (response.redirected && response.url !== location.href) {
       history.replaceState(null, "", response.url + location.hash);
     }
+    reopen(next);
     const error = next.querySelector(".form-error, .error-page");
     if (error) {
       error.scrollIntoView({ block: "nearest" });
       announce(error.textContent.trim());
     } else {
-      refocus(next, action, key, index);
+      // Back to the button that opened the dialog, or the form's counterpart.
+      const opener = dialog?.id && next.querySelector(`[commandfor="${dialog.id}"][command="show-modal"]`);
+      if (opener) opener.focus({ preventScroll: true });
+      else refocus(next, action, key, index);
       announce(form.dataset.inline || "Saved.");
     }
   });
+
+  reopen(document);
+  // The owner to preselect has done its job; don't reopen the dialog on reload.
+  const url = new URL(location.href);
+  if (url.searchParams.has("owner") || url.hash === "#add-source") {
+    url.searchParams.delete("owner");
+    url.hash = "";
+    history.replaceState(null, "", url);
+  }
 })();

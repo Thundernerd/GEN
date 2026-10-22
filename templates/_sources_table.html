@@ -16,7 +16,7 @@
         <span class="group-kind">{{ "engine" if g.owner_kind == "engine" else "news outlet" }}</span>
         <span class="group-count">{{ g.enabled }} of {{ g.total }} enabled</span>
         {%- if admin %}
-        <a class="group-action" href="/sources?owner={{ g.owner_id }}#add-source">Add source</a>
+        <a class="group-action" href="/sources?owner={{ g.owner_id }}#add-source" data-add-source="{{ g.owner_id }}">Add source</a>
         {%- set what = "engine" if g.owner_kind == "engine" else "outlet" %}
         {%- set dialog = "remove-" ~ g.owner_kind ~ "-" ~ g.owner_id %}
         <button type="button" class="group-action link-button" popovertarget="{{ dialog }}">Remove {{ what }}</button>

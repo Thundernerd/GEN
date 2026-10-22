@@ -473,7 +473,7 @@ async fn admin_adds_and_removes_a_source() {
     let st = state();
     let cookie = login(&st).await;
     let (_, body) = get_as(&st, "/sources?owner=bevy", &cookie).await;
-    assert!(body.contains(r#"id="add-source" class="panel" open"#));
+    assert!(body.contains(r#"aria-labelledby="add-source-title" open data-reopen"#));
     assert!(body.contains(r#"<option value="bevy" selected>"#));
 
     let form = "owner_id=bevy&kind=github&repo=bevyengine%2Fbevy&mode=releases\
@@ -544,7 +544,7 @@ async fn invalid_sources_rerender_the_form() {
         assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{form}");
         assert!(body.contains(message), "{form}: {message}");
         assert!(
-            body.contains(r#"id="add-source" class="panel" open"#),
+            body.contains(r#"aria-labelledby="add-source-title" open data-reopen"#),
             "{form}"
         );
     }
@@ -682,7 +682,7 @@ async fn invalid_owners_rerender_the_form() {
         assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{form}");
         assert!(body.contains(message), "{form}: {message}");
         assert!(
-            body.contains(r#"id="add-owner" class="panel" open"#),
+            body.contains(r#"aria-labelledby="add-owner-title" open data-reopen"#),
             "{form}"
         );
     }
