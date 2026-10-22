@@ -200,11 +200,7 @@ async fn notify_test(
 
 async fn serve(app: AppConfig, sources: SourcesConfig) -> anyhow::Result<()> {
     let pipeline = build_pipeline(&app, &sources)?;
-    let state = web::AppState {
-        store: pipeline.store.clone(),
-        sources: Arc::new(sources),
-        config: Arc::new(app),
-    };
+    let state = web::AppState::new(pipeline.store.clone(), sources, app)?;
     let listener = tokio::net::TcpListener::bind(&state.config.server.bind)
         .await
         .with_context(|| format!("binding {}", state.config.server.bind))?;

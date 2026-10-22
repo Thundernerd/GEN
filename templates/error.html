@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}{{ status }} {{ reason }} — GEN{% endblock %}
+{% block content %}
+<section class="error-page">
+  <p class="error-code">{{ status }}</p>
+  <h1 class="page-title">{{ reason }}</h1>
+  <p>{{ message }}</p>
+  <p><a href="/">Back to the latest news</a></p>
+</section>
+{% endblock %}

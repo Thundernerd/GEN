@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}{{ engine.name }} — GEN{% endblock %}
+{% block content %}
+<header class="engine-header">
+  <p class="crumbs"><a href="/engines">Engines</a> / tier {{ engine.tier }}</p>
+  <h1 class="page-title">{{ engine.name }}</h1>
+  <dl class="facts">
+    <dt>Tier</dt><dd>{{ engine.tier }}{% if engine.tier_label %} · {{ engine.tier_label }}{% endif %}</dd>
+    <dt>C# support</dt><dd>{{ engine.csharp }}</dd>
+    {%- if engine.homepage %}
+    <dt>Homepage</dt><dd><a href="{{ engine.homepage }}" rel="noopener">{{ engine.homepage }}</a></dd>
+    {%- endif %}
+    <dt>Feed</dt><dd><a href="{{ feed_url }}">Atom feed for {{ engine.name }}</a></dd>
+  </dl>
+  {%- if not engine.enabled %}
+  <p class="notice">This engine is disabled in the configuration and is no longer polled.</p>
+  {%- endif %}
+</header>
+
+{%- if sources %}
+<details class="engine-sources">
+  <summary>Sources ({{ sources | length }})</summary>
+  {% include "_sources_table.html" %}
+</details>
+{%- endif %}
+
+<nav class="tabs" aria-label="Kind">
+  {%- for t in tabs %}
+  <a href="{{ t.url }}"{% if t.active %} aria-current="page"{% endif %}>{{ t.label }}</a>
+  {%- endfor %}
+</nav>
+{% include "_items.html" %}
+{% endblock %}

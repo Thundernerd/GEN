@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Engines — GEN{% endblock %}
+{% block content %}
+<h1 class="page-title">Engines</h1>
+{%- for group in tiers %}
+{%- if group.engines %}
+<section class="tier">
+  <h2 class="tier-title">{{ group.label }} <a class="tier-link" href="/?tier={{ group.tier }}">tier {{ group.tier }} news →</a></h2>
+  <ul class="engine-grid">
+    {%- for e in group.engines %}
+    <li class="engine-card">
+      <h3><a href="/engine/{{ e.id }}">{{ e.name }}</a></h3>
+      <dl>
+        <dt>C#</dt><dd>{{ e.csharp }}</dd>
+        <dt>Items</dt><dd>{{ e.items }}</dd>
+        <dt>Latest</dt><dd>{% if e.latest %}<time datetime="{{ e.latest.iso }}" title="{{ e.latest.abs }}">{{ e.latest.rel }}</time>{% else %}—{% endif %}</dd>
+      </dl>
+      {%- if e.homepage %}
+      <a class="homepage" href="{{ e.homepage }}" rel="noopener">{{ e.homepage | replace("https://", "") | replace("http://", "") }}</a>
+      {%- endif %}
+    </li>
+    {%- endfor %}
+  </ul>
+</section>
+{%- endif %}
+{%- endfor %}
+{% endblock %}
