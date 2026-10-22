@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Sources — GEN{% endblock %}
+{% block content %}
+<h1 class="page-title">Sources</h1>
+<p class="summary-line">
+  {{ summary.total }} enabled sources:
+  <span class="status status-ok">{{ summary.ok }} ok</span>
+  <span class="status status-failing">{{ summary.failing }} failing</span>
+  <span class="status status-pending">{{ summary.pending }} pending</span>
+</p>
+{% include "_sources_table.html" %}
+{% endblock %}

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>{% block title %}GEN — Game Engine News{% endblock %}</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/static/style.css">
+  <link rel="alternate" type="application/atom+xml" title="GEN — Game Engine News" href="{{ feed_url or '/feed.xml' }}">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header">
+    <div class="wrap header-inner">
+      <a class="brand" href="/">
+        <img src="/static/favicon.svg" alt="" width="28" height="28">
+        <span><strong>GEN</strong> <span class="brand-sub">— Game Engine News</span></span>
+      </a>
+      <nav class="site-nav" aria-label="Main">
+        {%- for key, label, href in [("latest", "Latest", "/"), ("engines", "Engines", "/engines"), ("sources", "Sources", "/sources"), ("feed", "Feed", feed_url or "/feed.xml")] %}
+        <a href="{{ href }}"{% if nav == key %} aria-current="page"{% endif %}>{{ label }}</a>
+        {%- endfor %}
+      </nav>
+    </div>
+  </header>
+  <main id="main" class="wrap">
+    {% block content %}{% endblock %}
+  </main>
+  <footer class="site-footer">
+    <div class="wrap">
+      GEN collects releases and news from game engines and game-dev outlets.
+      Titles link to the original source.
+    </div>
+  </footer>
+</body>
+</html>

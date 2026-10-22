@@ -1,0 +1,39 @@
+{#- Item list. Expects `items` (list of ItemView) and `pagination`. -#}
+{% if items %}
+<ol class="items">
+  {%- for item in items %}
+  <li class="item" id="item-{{ item.id }}">
+    <div class="item-meta">
+      <span class="badge badge-{{ item.kind }}">{{ item.kind }}</span>
+      {%- for e in item.engines %}
+      <a class="chip" href="/engine/{{ e.id }}">{{ e.name }}</a>
+      {%- endfor %}
+    </div>
+    <h2 class="item-title">
+      {%- if item.url %}<a href="{{ item.url }}" rel="noopener">{{ item.title }}</a>{% else %}{{ item.title }}{% endif -%}
+    </h2>
+    <p class="item-byline">
+      <span class="source">{{ item.source }}</span>
+      <span aria-hidden="true">·</span>
+      <time datetime="{{ item.date.iso }}" title="{{ item.date.abs }}">{{ item.date.rel }}</time>
+      {%- if item.also_on %}
+      <span aria-hidden="true">·</span>
+      <span class="also-on">also on: {{ item.also_on | join(", ") }}</span>
+      {%- endif %}
+    </p>
+    {%- if item.summary %}
+    <p class="item-summary">{{ item.summary }}</p>
+    {%- endif %}
+  </li>
+  {%- endfor %}
+</ol>
+{% if pagination.prev or pagination.next %}
+<nav class="pager" aria-label="Pagination">
+  {% if pagination.prev %}<a href="{{ pagination.prev }}" rel="prev">← Newer</a>{% else %}<span></span>{% endif %}
+  <span class="pager-page">Page {{ pagination.page }}</span>
+  {% if pagination.next %}<a href="{{ pagination.next }}" rel="next">Older →</a>{% else %}<span></span>{% endif %}
+</nav>
+{% endif %}
+{% else %}
+<p class="empty">Nothing here yet. Items appear once sources have been polled.</p>
+{% endif %}

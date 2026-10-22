@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<h1 class="page-title">Latest</h1>
+<form class="filters" method="get" action="/">
+  <label>
+    <span>Engine</span>
+    <select name="engine">
+      <option value="">All engines</option>
+      {%- for e in engines %}
+      <option value="{{ e.id }}"{% if filter.engine == e.id %} selected{% endif %}>{{ e.name }}</option>
+      {%- endfor %}
+    </select>
+  </label>
+  <label>
+    <span>Kind</span>
+    <select name="kind">
+      <option value="">All kinds</option>
+      {%- for k in kinds %}
+      <option value="{{ k }}"{% if filter.kind == k %} selected{% endif %}>{{ k }}</option>
+      {%- endfor %}
+    </select>
+  </label>
+  {%- if filter.tier %}
+  <input type="hidden" name="tier" value="{{ filter.tier }}">
+  {%- endif %}
+  <label class="toggle">
+    <input type="checkbox" name="csharp" value="1"{% if filter.csharp %} checked{% endif %}>
+    <span>C# only</span>
+  </label>
+  <button type="submit">Filter</button>
+  {%- if filter.active %}
+  <a class="reset" href="/">Reset</a>
+  {%- endif %}
+</form>
+{%- if filter.tier %}
+<p class="notice">Showing tier {{ filter.tier }} engines only. <a href="/">Show all</a></p>
+{%- endif %}
+{% include "_items.html" %}
+{% endblock %}
