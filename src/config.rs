@@ -32,7 +32,8 @@ pub struct EngineConfig {
     pub homepage: Option<String>,
     #[serde(default = "default_true")]
     pub enabled: bool,
-    /// Case-insensitive whole-word phrases that tag outlet items with this engine.
+    /// Whole-word phrases that tag outlet items with this engine. All-lowercase aliases match
+    /// in any case; an alias with an uppercase letter (e.g. "Unity") matches case-sensitively.
     #[serde(default)]
     pub aliases: Vec<String>,
     /// Phrases that veto an alias match (e.g. "ubuntu unity").
