@@ -26,13 +26,14 @@ use serde_json::json;
 use tower_http::compression::CompressionLayer;
 use tower_http::services::ServeDir;
 
-use crate::config::{AppConfig, Owner, SourceSpec, SourcesConfig};
+use crate::config::{AppConfig, Owner, SourceSpec};
 use crate::model::{Item, ItemKind, SourceState};
+use crate::registry::SourceRegistry;
 use crate::store::Store;
 use crate::toggles::SourceToggles;
 
 use self::queries::{EngineStats, ItemFilter};
-use self::view::{DateView, ItemView, Lookup, query_string};
+use self::view::{DateView, ItemView, query_string};
 
 /// Items per HTML page.
 const PAGE_SIZE: u32 = 50;
@@ -55,11 +56,10 @@ const TIER_LABELS: [(u8, &str); 3] = [
 #[derive(Clone)]
 pub struct AppState {
     pub store: Arc<Mutex<Store>>,
-    pub sources: Arc<SourcesConfig>,
+    pub registry: Arc<SourceRegistry>,
     pub config: Arc<AppConfig>,
     pub toggles: Arc<SourceToggles>,
     templates: Arc<Environment<'static>>,
-    lookup: Arc<Lookup>,
 }
 
 impl AppState {
@@ -67,7 +67,7 @@ impl AppState {
     pub fn new(
         store: Arc<Mutex<Store>>,
         toggles: Arc<SourceToggles>,
-        sources: SourcesConfig,
+        registry: Arc<SourceRegistry>,
         config: AppConfig,
     ) -> anyhow::Result<Self> {
         let dir = config.server.templates_dir.clone();
@@ -78,8 +78,7 @@ impl AppState {
             .with_context(|| format!("loading templates from {}", dir.display()))?;
         Ok(AppState {
             store,
-            lookup: Arc::new(Lookup::new(&sources)),
-            sources: Arc::new(sources),
+            registry,
             config: Arc::new(config),
             toggles,
             templates: Arc::new(env),
@@ -109,9 +108,16 @@ impl AppState {
         limit: u32,
         offset: u32,
     ) -> anyhow::Result<(Vec<Item>, HashMap<i64, Vec<String>>)> {
-        let (sources, lookup) = (self.sources.clone(), self.lookup.clone());
+        let snapshot = self.registry.current();
         self.with_store(move |s| {
-            let items = queries::list_items(s, &sources, &lookup, &filter, limit, offset)?;
+            let items = queries::list_items(
+                s,
+                &snapshot.config,
+                &snapshot.lookup,
+                &filter,
+                limit,
+                offset,
+            )?;
             let ids: Vec<i64> = items.iter().map(|i| i.id).collect();
             let dups = s.duplicate_sources(&ids)?;
             Ok((items, dups))
@@ -188,9 +194,10 @@ impl AppState {
 
     fn item_views(&self, items: &[Item], dups: &HashMap<i64, Vec<String>>) -> Vec<ItemView> {
         let now = Utc::now();
+        let snapshot = self.registry.current();
         items
             .iter()
-            .map(|i| ItemView::new(i, &self.lookup, dups, now))
+            .map(|i| ItemView::new(i, &snapshot.lookup, dups, now))
             .collect()
     }
 }
@@ -335,7 +342,9 @@ async fn index_page(st: &AppState, params: ListParams) -> PageResult {
 
     let pairs = filter_pairs(&filter);
     let engines: Vec<_> = st
-        .sources
+        .registry
+        .current()
+        .config
         .enabled_engines()
         .map(|e| json!({"id": e.id, "name": e.name, "tier": e.tier}))
         .collect();
@@ -369,11 +378,12 @@ async fn engines(State(st): State<AppState>) -> Response {
 async fn engines_page(st: &AppState) -> PageResult {
     let stats = st.with_store(queries::engine_stats).await?;
     let now = Utc::now();
+    let snapshot = st.registry.current();
     let tiers: Vec<_> = TIER_LABELS
         .iter()
         .map(|&(tier, label)| {
-            let engines: Vec<_> = st
-                .sources
+            let engines: Vec<_> = snapshot
+                .config
                 .enabled_engines()
                 .filter(|e| e.tier == tier)
                 .map(|e| {
@@ -409,7 +419,8 @@ async fn engine(
 }
 
 async fn engine_page(st: &AppState, id: String, params: ListParams, admin: bool) -> PageResult {
-    let Some(engine) = st.sources.engine(&id) else {
+    let snapshot = st.registry.current();
+    let Some(engine) = snapshot.config.engine(&id) else {
         return Err(AppError::NotFound(format!("Unknown engine “{id}”.")));
     };
     let filter = ItemFilter {
@@ -430,8 +441,8 @@ async fn engine_page(st: &AppState, id: String, params: ListParams, admin: bool)
 
     let states = st.with_store(|s| s.source_states()).await?;
     let now = Utc::now();
-    let sources: Vec<_> = st
-        .sources
+    let sources: Vec<_> = snapshot
+        .config
         .manageable_sources()
         .into_iter()
         .filter(|s| s.owner == Owner::Engine(engine.id.clone()))
@@ -497,7 +508,9 @@ async fn sources_page(st: &AppState, admin: bool, params: SourcesParams) -> Page
     let states = st.with_store(|s| s.source_states()).await?;
     let now = Utc::now();
     let rows: Vec<_> = st
-        .sources
+        .registry
+        .current()
+        .config
         .manageable_sources()
         .iter()
         .map(|s| source_row(st, s, states.get(&s.id), now))
@@ -605,7 +618,9 @@ async fn toggle_source_inner(st: &AppState, headers: &HeaderMap, form: ToggleFor
         ));
     }
     if !st
-        .sources
+        .registry
+        .current()
+        .config
         .manageable_sources()
         .iter()
         .any(|s| s.id == form.source_id)
@@ -785,15 +800,16 @@ async fn feed_response(st: &AppState, params: ListParams) -> PageResult {
         ..Default::default()
     };
     let (items, _) = st.items_with_dups(filter.clone(), FEED_SIZE, 0).await?;
+    let lookup = &st.registry.current().lookup;
     let mut title = "GEN — Game Engine News".to_string();
     if let Some(e) = &filter.engine {
-        title.push_str(&format!(" — {}", st.lookup.engine_name(e)));
+        title.push_str(&format!(" — {}", lookup.engine_name(e)));
     }
     if let Some(k) = filter.kind {
         title.push_str(&format!(" ({})", k.as_str()));
     }
     let query = query_string(&filter_pairs(&filter));
-    let feed = feed::build(&items, &st.lookup, st.base_url(), &query, &title);
+    let feed = feed::build(&items, lookup, st.base_url(), &query, &title);
     Ok((
         [(header::CONTENT_TYPE, "application/atom+xml; charset=utf-8")],
         feed.to_string(),
@@ -828,11 +844,12 @@ async fn api_items_response(st: &AppState, params: ListParams) -> PageResult {
             page.saturating_sub(1).saturating_mul(limit),
         )
         .await?;
+    let snapshot = st.registry.current();
     let out: Vec<_> = items
         .iter()
         .map(|item| ApiItem {
             item,
-            also_on: st.lookup.also_on(item, dups.get(&item.id)),
+            also_on: snapshot.lookup.also_on(item, dups.get(&item.id)),
         })
         .collect();
     Ok(Json(json!({"items": out, "page": page, "limit": limit})).into_response())

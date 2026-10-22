@@ -130,7 +130,7 @@ pub enum Owner {
 }
 
 /// A source flattened out of its owner, with a stable id.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct ResolvedSource {
     /// Stable id derived from owner + spec, e.g. `godot:github:godotengine/godot`.
     pub id: String,

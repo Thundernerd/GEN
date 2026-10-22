@@ -11,6 +11,7 @@ use tower::ServiceExt;
 use super::{AppState, router};
 use crate::config::{AppConfig, SourcesConfig};
 use crate::model::{ItemKind, NewItem};
+use crate::registry::SourceRegistry;
 use crate::store::Store;
 use crate::toggles::SourceToggles;
 
@@ -110,7 +111,8 @@ fn state() -> AppState {
     config.server.base_url = "https://gen.example.org/".into();
     config.server.admin_token = Some(ADMIN_TOKEN.into());
     let toggles = Arc::new(SourceToggles::default());
-    AppState::new(Arc::new(Mutex::new(store)), toggles, sources, config).unwrap()
+    let registry = Arc::new(SourceRegistry::new(sources).unwrap());
+    AppState::new(Arc::new(Mutex::new(store)), toggles, registry, config).unwrap()
 }
 
 const ADMIN_TOKEN: &str = "test-admin-token";
@@ -211,7 +213,9 @@ async fn admin_can_disable_and_enable_sources() {
     let st = state();
     let cookie = login(&st).await;
     let source = st
-        .sources
+        .registry
+        .current()
+        .config
         .manageable_sources()
         .into_iter()
         .find(|s| s.id == GODOT_SRC)

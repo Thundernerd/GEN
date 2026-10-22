@@ -2,10 +2,10 @@
 
 use std::sync::{Arc, Mutex};
 
-use crate::classify::Classifier;
 use crate::config::ResolvedSource;
 use crate::fetch::{self, FetchOutcome, Http};
 use crate::model::{Item, NewItem};
+use crate::registry::SourceRegistry;
 use crate::store::Store;
 use crate::toggles::SourceToggles;
 
@@ -16,7 +16,7 @@ const MAX_ITEMS_PER_FETCH: usize = 200;
 pub struct Pipeline {
     pub http: Http,
     pub store: Arc<Mutex<Store>>,
-    pub classifier: Arc<Classifier>,
+    pub registry: Arc<SourceRegistry>,
     pub toggles: Arc<SourceToggles>,
 }
 
@@ -70,9 +70,10 @@ impl Pipeline {
                 // Newest first, so the cap keeps the most recent entries of a huge feed.
                 items.sort_by_key(|i| std::cmp::Reverse(i.published));
                 items.truncate(MAX_ITEMS_PER_FETCH);
+                let snapshot = self.registry.current();
                 let classified: Vec<_> = items
                     .into_iter()
-                    .filter_map(|raw| self.classifier.classify(source, raw))
+                    .filter_map(|raw| snapshot.classifier.classify(source, raw))
                     .map(|item| NewItem {
                         notify: was_seeded,
                         ..item

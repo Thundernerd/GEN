@@ -4,6 +4,7 @@ mod fetch;
 mod model;
 mod notify;
 mod pipeline;
+mod registry;
 mod scheduler;
 mod store;
 mod toggles;
@@ -17,10 +18,10 @@ use clap::{Parser, Subcommand};
 use futures::StreamExt;
 use tracing_subscriber::EnvFilter;
 
-use crate::classify::Classifier;
 use crate::config::{AppConfig, SourcesConfig};
 use crate::fetch::Http;
 use crate::pipeline::Pipeline;
+use crate::registry::SourceRegistry;
 use crate::store::Store;
 use crate::toggles::SourceToggles;
 
@@ -81,7 +82,7 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command.unwrap_or(Command::Serve) {
         Command::CheckConfig => check_config(&app, &sources),
-        Command::Fetch { source } => fetch_once(&app, &sources, source.as_deref()).await,
+        Command::Fetch { source } => fetch_once(&app, sources, source.as_deref()).await,
         Command::Serve => serve(app, sources).await,
         Command::NotifyTest { channel } => notify_test(&app, &sources, &channel).await,
     }
@@ -107,11 +108,14 @@ fn check_config(app: &AppConfig, sources: &SourcesConfig) -> anyhow::Result<()> 
 
 async fn fetch_once(
     app: &AppConfig,
-    sources: &SourcesConfig,
+    sources: SourcesConfig,
     filter: Option<&str>,
 ) -> anyhow::Result<()> {
     let pipeline = build_pipeline(app, sources)?;
-    let selected: Vec<_> = sources
+    let selected: Vec<_> = pipeline
+        .registry
+        .current()
+        .config
         .manageable_sources()
         .into_iter()
         .filter(|s| pipeline.toggles.is_enabled(s))
@@ -199,11 +203,11 @@ async fn notify_test(
 }
 
 async fn serve(app: AppConfig, sources: SourcesConfig) -> anyhow::Result<()> {
-    let pipeline = build_pipeline(&app, &sources)?;
+    let pipeline = build_pipeline(&app, sources)?;
     let state = web::AppState::new(
         pipeline.store.clone(),
         pipeline.toggles.clone(),
-        sources,
+        pipeline.registry.clone(),
         app,
     )?;
     let listener = tokio::net::TcpListener::bind(&state.config.server.bind)
@@ -211,7 +215,7 @@ async fn serve(app: AppConfig, sources: SourcesConfig) -> anyhow::Result<()> {
         .with_context(|| format!("binding {}", state.config.server.bind))?;
     tracing::info!("listening on http://{}", listener.local_addr()?);
     // Dropping the JoinSet when `serve` returns aborts the polling tasks.
-    let _scheduler = scheduler::spawn(pipeline, state.sources.clone(), state.config.clone());
+    let _scheduler = scheduler::spawn(pipeline, state.config.clone());
     axum::serve(listener, web::router(state))
         .with_graceful_shutdown(shutdown_signal())
         .await?;
@@ -241,13 +245,13 @@ async fn shutdown_signal() {
     }
 }
 
-fn build_pipeline(app: &AppConfig, sources: &SourcesConfig) -> anyhow::Result<Pipeline> {
+fn build_pipeline(app: &AppConfig, sources: SourcesConfig) -> anyhow::Result<Pipeline> {
     let store = Store::open(&app.database.path)?;
     let toggles = SourceToggles::new(store.source_overrides()?);
     Ok(Pipeline {
         http: Http::new(&app.polling.user_agent, app.polling.github_token.clone())?,
         store: Arc::new(Mutex::new(store)),
-        classifier: Arc::new(Classifier::new(sources)),
+        registry: Arc::new(SourceRegistry::new(sources)?),
         toggles: Arc::new(toggles),
     })
 }

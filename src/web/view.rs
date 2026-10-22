@@ -1,75 +1,15 @@
 //! Template-facing view models and small formatting helpers.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 use serde::Serialize;
 
-use crate::config::{Owner, SourcesConfig};
 use crate::model::Item;
+pub use crate::registry::Lookup;
 
 /// Maximum length of a summary snippet on list pages, in characters.
 const SNIPPET_CHARS: usize = 280;
-
-/// Name lookups derived once from `sources.toml`.
-pub struct Lookup {
-    /// Source id -> owner display name, for every source (including disabled ones).
-    pub source_names: HashMap<String, String>,
-    /// Ids of sources that belong to general outlets rather than an engine.
-    pub outlet_sources: HashSet<String>,
-    /// Engine id -> display name.
-    pub engine_names: HashMap<String, String>,
-}
-
-impl Lookup {
-    pub fn new(sources: &SourcesConfig) -> Self {
-        let all = sources.all_sources();
-        Lookup {
-            source_names: all
-                .iter()
-                .map(|s| (s.id.clone(), s.owner_name.clone()))
-                .collect(),
-            outlet_sources: all
-                .iter()
-                .filter(|s| matches!(s.owner, Owner::Outlet(_)))
-                .map(|s| s.id.clone())
-                .collect(),
-            engine_names: sources
-                .engines
-                .iter()
-                .map(|e| (e.id.clone(), e.name.clone()))
-                .collect(),
-        }
-    }
-
-    /// Display name of a source's owner, falling back to the raw id for unknown sources.
-    pub fn source_name(&self, source_id: &str) -> String {
-        self.source_names
-            .get(source_id)
-            .cloned()
-            .unwrap_or_else(|| source_id.to_string())
-    }
-
-    pub fn engine_name(&self, engine_id: &str) -> String {
-        self.engine_names
-            .get(engine_id)
-            .cloned()
-            .unwrap_or_else(|| engine_id.to_string())
-    }
-
-    /// Distinct owner names of the given duplicate sources, minus the item's own owner.
-    pub fn also_on(&self, item: &Item, dup_sources: Option<&Vec<String>>) -> Vec<String> {
-        let own = self.source_name(&item.source_id);
-        let mut names: Vec<String> = Vec::new();
-        for id in dup_sources.into_iter().flatten() {
-            let name = self.source_name(id);
-            if name != own && !names.contains(&name) {
-                names.push(name);
-            }
-        }
-        names
-    }
-}
 
 #[derive(Debug, Serialize)]
 pub struct EngineChip {
