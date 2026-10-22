@@ -2,7 +2,7 @@
 <div class="table-wrap">
 <table class="sources">
   <thead>
-    <tr><th>Status</th><th>Owner</th><th>Source</th><th>Last OK</th><th>Failures</th><th>Last error</th>{% if admin %}<th><span class="visually-hidden">Actions</span></th>{% endif %}</tr>
+    <tr><th>Status</th><th>Owner</th><th>Source</th><th>Last OK</th><th class="num">Failures</th><th>Last error</th>{% if admin %}<th><span class="visually-hidden">Actions</span></th>{% endif %}</tr>
   </thead>
   <tbody>
     {%- for s in sources %}

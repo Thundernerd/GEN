@@ -336,7 +336,7 @@ table.sources th, table.sources td {
   border-bottom: 1px solid var(--border);
 }
 table.sources th { color: var(--muted); font-weight: 600; white-space: nowrap; }
-table.sources .num { text-align: right; font-variant-numeric: tabular-nums; }
+table.sources .num { text-align: center; vertical-align: middle; font-variant-numeric: tabular-nums; }
 .source-kind {
   font-family: var(--mono);
   font-size: 0.75rem;
