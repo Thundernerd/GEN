@@ -1,0 +1,116 @@
+{#- Admin forms on /sources: add a source, restore removed ones. Expects `owners`,
+    `categories`, `default_interval`, `preselect_owner`, `removed` and `feedback` (a failed
+    submission: `panel`, `error` and the posted `form`). -#}
+{%- set failed = feedback.panel if feedback else none %}
+{%- set f = feedback.form if feedback else {} %}
+<section class="admin-panel" aria-label="Manage sources">
+  <details id="add-source" class="panel"{% if failed == "add-source" or preselect_owner %} open{% endif %}>
+    <summary>Add a source</summary>
+    {%- if failed == "add-source" %}
+    <p class="form-error" role="alert">{{ feedback.error }}</p>
+    {%- endif %}
+    <form method="post" action="/sources/add" class="stack-form">
+      {%- set owner = f.owner_id or preselect_owner %}
+      <div class="form-row">
+        <label>
+          <span>Engine or outlet</span>
+          <select name="owner_id" required>
+            <option value="">Choose…</option>
+            <optgroup label="Engines">
+              {%- for o in owners.engines %}
+              <option value="{{ o.id }}"{% if o.id == owner %} selected{% endif %}>{{ o.name }}</option>
+              {%- endfor %}
+            </optgroup>
+            {%- if owners.outlets %}
+            <optgroup label="News outlets">
+              {%- for o in owners.outlets %}
+              <option value="{{ o.id }}"{% if o.id == owner %} selected{% endif %}>{{ o.name }}</option>
+              {%- endfor %}
+            </optgroup>
+            {%- endif %}
+          </select>
+        </label>
+        <label>
+          <span>Kind</span>
+          <select name="kind" required>
+            {%- for value, label in [("feed", "RSS / Atom / JSON feed"), ("github", "GitHub repository"), ("hn", "Hacker News search"), ("html", "HTML page (scraped)"), ("unity", "Unity releases API")] %}
+            <option value="{{ value }}"{% if value == f.kind %} selected{% endif %}>{{ label }}</option>
+            {%- endfor %}
+          </select>
+        </label>
+      </div>
+      <p class="form-hint">Fill in the fields for the chosen kind; the others are ignored.</p>
+      <fieldset>
+        <legend>Feed</legend>
+        <label><span>Feed URL</span><input type="url" name="feed_url" value="{{ f.feed_url or "" }}" placeholder="https://example.com/feed.xml"></label>
+        <label class="check"><input type="checkbox" name="cache_bust" value="1"{% if f.cache_bust %} checked{% endif %}> Bypass caches (for feeds behind a stale CDN)</label>
+      </fieldset>
+      <fieldset>
+        <legend>GitHub</legend>
+        <div class="form-row">
+          <label><span>Repository</span><input name="repo" value="{{ f.repo or "" }}" placeholder="owner/repo"></label>
+          <label>
+            <span>Watch</span>
+            <select name="mode">
+              {%- for m in ["releases", "tags", "commits"] %}
+              <option value="{{ m }}"{% if m == f.mode %} selected{% endif %}>{{ m }}</option>
+              {%- endfor %}
+            </select>
+          </label>
+          <label><span>Tag prefix (optional)</span><input name="tag_prefix" value="{{ f.tag_prefix or "" }}" placeholder="releases/"></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Hacker News</legend>
+        <label><span>Search query</span><input name="query" value="{{ f.query or "" }}"></label>
+      </fieldset>
+      <fieldset>
+        <legend>HTML page</legend>
+        <label><span>Page URL</span><input type="url" name="html_url" value="{{ f.html_url or "" }}"></label>
+        <div class="form-row">
+          <label><span>Item selector</span><input name="item" value="{{ f.item or "" }}" placeholder="article"></label>
+          <label><span>Title selector</span><input name="title" value="{{ f.title or "" }}" placeholder="h2"></label>
+          <label><span>Link selector</span><input name="link" value="{{ f.link or "" }}" placeholder="a"></label>
+          <label><span>Date selector (optional)</span><input name="date" value="{{ f.date or "" }}" placeholder="time"></label>
+        </div>
+      </fieldset>
+      <fieldset>
+        <legend>Unity releases</legend>
+        <label><span>Releases per fetch</span><input type="number" name="limit" min="1" max="100" value="{{ f.limit or "" }}" placeholder="25"></label>
+      </fieldset>
+      <fieldset>
+        <legend>Options</legend>
+        <div class="form-row">
+          <label>
+            <span>Category</span>
+            <select name="category">
+              <option value="">Automatic</option>
+              {%- for c in categories %}
+              <option value="{{ c }}"{% if c == f.category %} selected{% endif %}>{{ c }}</option>
+              {%- endfor %}
+            </select>
+          </label>
+          <label><span>Interval (minutes)</span><input type="number" name="interval_minutes" min="1" value="{{ f.interval_minutes or "" }}" placeholder="{{ default_interval }}"></label>
+        </div>
+        <label><span>Keywords (optional, comma-separated: keep only items mentioning one)</span><input name="keywords" value="{{ f.keywords or "" }}"></label>
+      </fieldset>
+      <button type="submit">Add source</button>
+    </form>
+  </details>
+  {%- if removed %}
+  <details id="removed-sources" class="panel">
+    <summary>Removed from sources.toml ({{ removed|length }})</summary>
+    <ul class="removed-list">
+      {%- for r in removed %}
+      <li>
+        <span><strong>{{ r.owner }}</strong> <span class="source-kind">{{ r.kind }}</span> {{ r.target }}</span>
+        <form method="post" action="/sources/restore">
+          <input type="hidden" name="source_id" value="{{ r.id }}">
+          <button type="submit" class="btn-small btn-quiet">Restore</button>
+        </form>
+      </li>
+      {%- endfor %}
+    </ul>
+  </details>
+  {%- endif %}
+</section>

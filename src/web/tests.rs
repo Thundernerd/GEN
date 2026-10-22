@@ -111,7 +111,7 @@ fn state() -> AppState {
     config.server.base_url = "https://gen.example.org/".into();
     config.server.admin_token = Some(ADMIN_TOKEN.into());
     let toggles = Arc::new(SourceToggles::default());
-    let registry = Arc::new(SourceRegistry::new(sources).unwrap());
+    let registry = Arc::new(SourceRegistry::load(sources, &store).unwrap());
     AppState::new(Arc::new(Mutex::new(store)), toggles, registry, config).unwrap()
 }
 
@@ -422,4 +422,170 @@ async fn health_and_static() {
     let (status, ctype, _) = get("/static/style.css").await;
     assert_eq!(status, StatusCode::OK);
     assert!(ctype.unwrap().starts_with("text/css"));
+}
+
+/// GET with the admin cookie.
+async fn get_as(st: &AppState, uri: &str, cookie: &str) -> (StatusCode, String) {
+    let (status, _, body) = send(
+        st,
+        Request::get(uri)
+            .header(header::COOKIE, cookie)
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    (status, body)
+}
+
+#[tokio::test]
+async fn managing_sources_requires_admin() {
+    let st = state();
+    for (uri, body) in [
+        ("/sources/add", "owner_id=bevy&kind=hn&query=bevy"),
+        (
+            "/sources/remove",
+            &*format!("source_id={}", urlenc(GODOT_SRC)),
+        ),
+        (
+            "/sources/restore",
+            &*format!("source_id={}", urlenc(GODOT_SRC)),
+        ),
+    ] {
+        let (status, _, _) = send(&st, post_form(uri, body, None)).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{uri}");
+    }
+    assert_eq!(st.registry.current().config.all_sources().len(), 3);
+
+    let (_, _, body) = send(&st, Request::get("/sources").body(Body::empty()).unwrap()).await;
+    assert!(!body.contains("/sources/add"));
+    assert!(!body.contains("/sources/remove"));
+}
+
+#[tokio::test]
+async fn admin_adds_and_removes_a_source() {
+    let st = state();
+    let cookie = login(&st).await;
+    let (_, body) = get_as(&st, "/sources?owner=bevy", &cookie).await;
+    assert!(body.contains(r#"id="add-source" class="panel" open"#));
+    assert!(body.contains(r#"<option value="bevy" selected>"#));
+
+    let form = "owner_id=bevy&kind=github&repo=bevyengine%2Fbevy&mode=releases\
+                &feed_url=https%3A%2F%2Fignored.example&category=release&interval_minutes=30";
+    let (status, headers, _) = send(&st, post_form("/sources/add", form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(headers[header::LOCATION], "/sources");
+    let id = "bevy:github:bevyengine/bevy";
+    let added = st
+        .registry
+        .current()
+        .config
+        .manageable_sources()
+        .into_iter()
+        .find(|s| s.id == id)
+        .unwrap();
+    assert_eq!(added.interval_minutes, Some(30));
+    assert_eq!(added.category, Some(ItemKind::Release));
+    let (_, body) = get_as(&st, "/sources", &cookie).await;
+    assert!(body.contains("bevyengine&#x2f;bevy (releases)"));
+    assert!(body.contains("added here"));
+
+    let remove = format!("source_id={}&next=%2Fengine%2Fbevy", urlenc(id));
+    let (status, headers, _) =
+        send(&st, post_form("/sources/remove", &remove, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(headers[header::LOCATION], "/engine/bevy");
+    assert!(
+        st.store
+            .lock()
+            .unwrap()
+            .custom_sources()
+            .unwrap()
+            .is_empty()
+    );
+    let (_, body) = get_as(&st, "/sources", &cookie).await;
+    assert!(!body.contains("bevyengine&#x2f;bevy"));
+    assert!(
+        !body.contains("Removed from sources.toml"),
+        "nothing to restore"
+    );
+}
+
+#[tokio::test]
+async fn invalid_sources_rerender_the_form() {
+    let st = state();
+    let cookie = login(&st).await;
+    for (form, message) in [
+        (
+            "owner_id=bevy&kind=feed&feed_url=ftp%3A%2F%2Fx.org",
+            "not an http(s) URL",
+        ),
+        (
+            "owner_id=bevy&kind=github&repo=",
+            "Enter the GitHub repository",
+        ),
+        (
+            "owner_id=bevy&kind=html&html_url=https%3A%2F%2Fx.org&item=a%5B&title=h2&link=a",
+            "invalid item selector",
+        ),
+        (
+            "owner_id=bevy&kind=hn&query=bevy&interval_minutes=soon",
+            "whole number of minutes",
+        ),
+        ("owner_id=nope&kind=hn&query=bevy", "no engine or outlet"),
+        ("kind=hn&query=bevy", "Choose the engine or outlet"),
+        (
+            "owner_id=godot&kind=github&repo=godotengine%2Fgodot",
+            "Godot already has this source",
+        ),
+    ] {
+        let (status, _, body) = send(&st, post_form("/sources/add", form, Some(&cookie))).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{form}");
+        assert!(body.contains(message), "{form}: {message}");
+        assert!(
+            body.contains(r#"id="add-source" class="panel" open"#),
+            "{form}"
+        );
+    }
+    // The posted values are filled in again.
+    let (_, _, body) = send(
+        &st,
+        post_form(
+            "/sources/add",
+            "owner_id=bevy&kind=hn&query=bevy+news&interval_minutes=soon",
+            Some(&cookie),
+        ),
+    )
+    .await;
+    assert!(body.contains(r#"value="bevy news""#));
+    assert!(body.contains(r#"<option value="hn" selected>"#));
+    assert_eq!(st.registry.current().config.all_sources().len(), 3);
+}
+
+#[tokio::test]
+async fn removing_a_config_source_purges_it_until_restored() {
+    let st = state();
+    let cookie = login(&st).await;
+    let remove = format!("source_id={}", urlenc(GODOT_SRC));
+    let (status, _, _) = send(&st, post_form("/sources/remove", &remove, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+
+    // Its item is gone, so the outlet's duplicate is shown instead.
+    let (_, _, body) = send(&st, Request::get("/").body(Body::empty()).unwrap()).await;
+    assert!(!body.contains("Godot 4.8 released"));
+    assert!(body.contains("Godot 4.8<"));
+    let (_, body) = get_as(&st, "/sources", &cookie).await;
+    assert!(body.contains("Removed from sources.toml (1)"));
+    // Only the restore form still refers to it.
+    let godot_value = r#"value="godot:github:godotengine&#x2f;godot""#;
+    assert_eq!(body.matches(godot_value).count(), 1);
+
+    // Removing it again is refused.
+    let (status, _, _) = send(&st, post_form("/sources/remove", &remove, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+
+    let (status, _, _) = send(&st, post_form("/sources/restore", &remove, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    let (_, body) = get_as(&st, "/sources", &cookie).await;
+    assert!(!body.contains("Removed from sources.toml"));
+    assert!(body.contains("godotengine&#x2f;godot"));
 }

@@ -445,7 +445,7 @@ table.sources tr.is-disabled td:last-child { opacity: 1; }
 .toggle-form { margin: 0; }
 table.sources td.actions { vertical-align: middle; }
 
-.btn-small, .login-form button {
+.btn-small, .login-form button, .stack-form button[type="submit"] {
   display: inline-block;
   font: inherit;
   font-size: 0.85rem;
@@ -461,12 +461,13 @@ table.sources td.actions { vertical-align: middle; }
   padding: 0.35rem 0.75rem;
 }
 .btn-small.btn-quiet { color: var(--text); background: var(--surface-2); border-color: var(--border); }
-.btn-small:hover, .login-form button:hover { filter: brightness(1.08); }
+.btn-small:hover, .login-form button:hover, .stack-form button[type="submit"]:hover { filter: brightness(1.08); }
+.btn-small.btn-danger { color: #fff; background: var(--fail); border-color: var(--fail); }
 
 .login-page { max-width: 26rem; padding: 1rem 0 2rem; }
-.login-form { display: flex; flex-direction: column; gap: 0.9rem; }
-.login-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; color: var(--muted); }
-.login-form input {
+.login-form, .stack-form { display: flex; flex-direction: column; gap: 0.9rem; }
+.login-form label, .stack-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; color: var(--muted); }
+.login-form input, .stack-form input:not([type="checkbox"]), .stack-form select {
   font: inherit;
   color: var(--text);
   background: var(--surface-2);
@@ -474,5 +475,36 @@ table.sources td.actions { vertical-align: middle; }
   border-radius: 8px;
   padding: 0.5rem 0.65rem;
 }
-.login-form button { align-self: flex-start; font-size: 0.95rem; padding: 0.5rem 1rem; }
+.login-form button, .stack-form button[type="submit"] { align-self: flex-start; font-size: 0.95rem; padding: 0.5rem 1rem; }
 .form-error { color: var(--fail); font-weight: 600; }
+
+/* -- admin: adding, removing and restoring sources ------------------------ */
+
+.admin-panel { display: flex; flex-direction: column; gap: 0.75rem; margin-bottom: 1rem; }
+details.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0 1rem;
+}
+details.panel > summary { cursor: pointer; font-weight: 600; padding: 0.75rem 0; }
+details.panel[open] { padding-bottom: 1rem; }
+details.panel .form-error { margin-top: 0; }
+.stack-form fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 0; padding: 0.6rem 0.85rem 0.85rem; display: flex; flex-direction: column; gap: 0.7rem; }
+.stack-form legend { font-weight: 600; font-size: 0.85rem; padding: 0 0.3rem; }
+.stack-form label.check { flex-direction: row; align-items: center; gap: 0.45rem; }
+.stack-form input[type="checkbox"] { width: 1.05rem; height: 1.05rem; accent-color: var(--accent); }
+.form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.7rem; }
+.form-hint { color: var(--muted); font-size: 0.85rem; margin: 0; }
+
+.group-action { font-size: 0.8rem; font-weight: 500; margin-left: 0.6rem; }
+.group-action::before { content: "·"; margin-right: 0.6rem; color: var(--muted); }
+
+table.sources td.actions > * + * { margin-top: 0.35rem; }
+details.confirm > summary { list-style: none; }
+details.confirm > summary::-webkit-details-marker { display: none; }
+details.confirm form { margin-top: 0.35rem; }
+
+.removed-list { list-style: none; margin: 0; padding: 0; }
+.removed-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.45rem 0; border-top: 1px solid var(--border); font-size: 0.875rem; overflow-wrap: anywhere; }
+.removed-list form { margin: 0; }

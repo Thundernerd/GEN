@@ -248,10 +248,11 @@ async fn shutdown_signal() {
 fn build_pipeline(app: &AppConfig, sources: SourcesConfig) -> anyhow::Result<Pipeline> {
     let store = Store::open(&app.database.path)?;
     let toggles = SourceToggles::new(store.source_overrides()?);
+    let registry = SourceRegistry::load(sources, &store)?;
     Ok(Pipeline {
         http: Http::new(&app.polling.user_agent, app.polling.github_token.clone())?,
         store: Arc::new(Mutex::new(store)),
-        registry: Arc::new(SourceRegistry::new(sources)?),
+        registry: Arc::new(registry),
         toggles: Arc::new(toggles),
     })
 }

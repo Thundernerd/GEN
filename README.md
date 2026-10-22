@@ -121,7 +121,7 @@ bind = "127.0.0.1:8080"            # default 0.0.0.0:8080
 base_url = "http://localhost:8080" # public URL, used in /feed.xml and notifications
 templates_dir = "templates"        # default
 static_dir = "static"              # default
-# admin_token = "${GEN_ADMIN_TOKEN}" # enables the admin login; see "Switching sources on and off"
+# admin_token = "${GEN_ADMIN_TOKEN}" # enables the admin login; see "Managing sources from the web"
 
 [database]
 path = "data/gen.db"               # SQLite file; parent dir must be writable
@@ -280,20 +280,34 @@ gen notify-test --channel phone
 | `/` | Latest items from all enabled sources. |
 | `/engines` | Engine list with tier, C# support and recent activity. |
 | `/engine/{id}` | Items for one engine. |
-| `/sources` | Every source with its last fetch time and errors. Admins can switch sources on and off here. |
+| `/sources` | Every source with its last fetch time and errors. Admins can switch sources on and off, add, remove and restore them here. |
 | `/login`, `/logout` | Admin login with `server.admin_token`. |
 | `/feed.xml` | Combined Atom feed. |
 | `/api/items` | JSON API for items. |
 | `/health` | Liveness check that returns `ok`. |
 
-## Switching sources on and off
+## Managing sources from the web
 
-With `admin_token` set under `[server]`, the Sources page shows a **Manage sources** link. Log in with the token, and each source (on `/sources` and on every engine page) gets an **Enable** / **Disable** button.
+With `admin_token` set under `[server]`, the Sources page shows a **Manage sources** link. Log in with the token to manage sources without editing `sources.toml` or restarting. All changes are stored in the database and take effect right away; `sources.toml` is never written, so it can stay mounted read-only.
+
+### Switching sources on and off
+
+Each source (on `/sources` and on every engine page) gets an **Enable** / **Disable** button.
 
 - The choice is stored in the database as an override of `enabled` in `sources.toml`, so it survives restarts and leaves the config file untouched. Sources marked `enabled = false` in the config can be switched on the same way.
 - It takes effect immediately: a disabled source stops polling, and a re-enabled one polls right away. Items it already fetched stay visible.
 - Only sources of enabled engines and outlets are listed; switch a whole engine on with `enabled = true` in `sources.toml`.
-- The login sets an `HttpOnly`, `SameSite=Strict` cookie holding a hash of the token (also `Secure` when `base_url` is `https://`). Use a long random token, e.g. `openssl rand -hex 32`. Without a token the toggles are off.
+
+### Adding, removing and restoring sources
+
+- **Add a source** (at the top of `/sources`, or the **Add source** link next to an engine or outlet) takes the same settings as a `[[engine.source]]` entry: a feed, GitHub repository, Hacker News search, scraped HTML page or the Unity releases API, plus an optional category, interval and keywords. Input is checked first (URLs, `owner/repo`, CSS selectors), and a source that already exists is refused. A new source is polled straight away; its first fetch is stored without sending notifications.
+- **Remove** (next to Enable / Disable) asks for confirmation, then stops polling the source and **deletes its stored items**, fetch state and on/off override. Items elsewhere that were duplicates of its items are shown in their place.
+- A removed source that comes from `sources.toml` is kept as a tombstone in the database and listed under **Removed from sources.toml**, where **Restore** brings it back (it then fetches its items again). A source added in the web UI is simply deleted.
+- `gen check-config` validates only the config files; it doesn't include changes made in the web UI.
+
+### Admin login
+
+- The login sets an `HttpOnly`, `SameSite=Strict` cookie holding a hash of the token (also `Secure` when `base_url` is `https://`). Use a long random token, e.g. `openssl rand -hex 32`. Without a token, source management is off.
 
 ## Development
 
@@ -312,7 +326,8 @@ Layout of `src/`:
 | `model.rs` | Shared types: `ItemKind`, `RawItem`, `NewItem`, `Item`, `SourceState`. |
 | `fetch/` | HTTP client and one fetcher per source kind: `feed`, `github`, `unity`, `hn`, `html`. |
 | `classify.rs` | Item kind detection, engine tagging by alias and story keys for deduplication. |
-| `store.rs` | SQLite storage: items, source state and queries for the web UI. |
+| `store.rs` | SQLite storage: items, source state, web UI source edits and queries for the web UI. |
+| `registry.rs` | The live set of sources: `sources.toml` plus web UI edits, published to the web UI, pipeline and scheduler. |
 | `pipeline.rs` | Polls a source: fetch, classify, dedupe and store. |
 | `notify/` | Rule matching and delivery: `discord`, `ntfy`, `email`. |
 | `web/` | axum router: HTML pages (minijinja templates), Atom feed, JSON API. |

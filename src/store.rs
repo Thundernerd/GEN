@@ -1,4 +1,5 @@
-//! SQLite persistence: items, engine tags, per-source fetch state and sent notifications.
+//! SQLite persistence: items, engine tags, per-source fetch state, sent notifications and
+//! the source edits made in the web UI.
 //!
 //! `Store` is synchronous; async code shares it as `Arc<Mutex<Store>>` and calls it from
 //! `tokio::task::spawn_blocking` (queries are small and fast).
@@ -77,7 +78,48 @@ CREATE TABLE source_overrides (
     updated_at TEXT NOT NULL
 );
 "#,
+    r#"
+-- Engines and outlets added in the web UI. `config` is the JSON of EngineConfig/OutletConfig.
+CREATE TABLE custom_owners (
+    id         TEXT PRIMARY KEY,
+    kind       TEXT NOT NULL CHECK (kind IN ('engine', 'outlet')),
+    config     TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+-- Sources added in the web UI. `config` is the JSON of SourceConfig.
+CREATE TABLE custom_sources (
+    id         TEXT PRIMARY KEY,
+    owner_id   TEXT NOT NULL,
+    config     TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+-- Engines, outlets and sources from sources.toml that were removed in the web UI.
+CREATE TABLE removed (
+    kind       TEXT NOT NULL CHECK (kind IN ('owner', 'source')),
+    id         TEXT NOT NULL,
+    removed_at TEXT NOT NULL,
+    PRIMARY KEY (kind, id)
+);
+"#,
 ];
+
+/// What a tombstone in the `removed` table refers to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Removed {
+    Owner,
+    Source,
+}
+
+impl Removed {
+    fn as_str(self) -> &'static str {
+        match self {
+            Removed::Owner => "owner",
+            Removed::Source => "source",
+        }
+    }
+}
 
 /// Filters for listing items. `Default` lists the newest non-duplicate items.
 #[derive(Debug, Clone, Default)]
@@ -200,6 +242,98 @@ impl Store {
              ON CONFLICT (source_id) DO UPDATE SET
                  enabled = excluded.enabled, updated_at = excluded.updated_at",
             params![source_id, enabled, Utc::now()],
+        )?;
+        Ok(())
+    }
+
+    // -- source edits from the web UI ---------------------------------------
+
+    /// Engines and outlets added in the web UI, oldest first: (id, kind, config JSON).
+    pub fn custom_owners(&self) -> anyhow::Result<Vec<(String, String, String)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, kind, config FROM custom_owners ORDER BY created_at, rowid")?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Sources added in the web UI, oldest first: (source id, owner id, config JSON).
+    pub fn custom_sources(&self) -> anyhow::Result<Vec<(String, String, String)>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT id, owner_id, config FROM custom_sources ORDER BY created_at, rowid",
+        )?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Ids of removed engines/outlets or sources from sources.toml.
+    pub fn removed(&self, kind: Removed) -> anyhow::Result<Vec<String>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id FROM removed WHERE kind = ?1 ORDER BY id")?;
+        let rows = stmt.query_map([kind.as_str()], |r| r.get(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    pub fn add_custom_owner(&self, id: &str, kind: &str, config: &str) -> anyhow::Result<()> {
+        self.conn.execute(
+            "INSERT INTO custom_owners (id, kind, config, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![id, kind, config, Utc::now()],
+        )?;
+        Ok(())
+    }
+
+    pub fn add_custom_source(&self, id: &str, owner_id: &str, config: &str) -> anyhow::Result<()> {
+        self.conn.execute(
+            "INSERT INTO custom_sources (id, owner_id, config, created_at) VALUES (?1, ?2, ?3, ?4)",
+            params![id, owner_id, config, Utc::now()],
+        )?;
+        Ok(())
+    }
+
+    /// Removes a source with its items, fetch state and override. A source from
+    /// sources.toml gets a tombstone (`tombstone`); one added in the web UI is deleted.
+    pub fn remove_source(&mut self, id: &str, tombstone: bool) -> anyhow::Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM custom_sources WHERE id = ?1", [id])?;
+        if tombstone {
+            insert_tombstone(&tx, Removed::Source, id)?;
+        }
+        purge_source_data(&tx, id)?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Removes an engine or outlet together with `source_ids` (its current sources) and
+    /// their data. An engine's tags on other sources' items are removed too.
+    pub fn remove_owner(
+        &mut self,
+        id: &str,
+        is_engine: bool,
+        tombstone: bool,
+        source_ids: &[String],
+    ) -> anyhow::Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM custom_owners WHERE id = ?1", [id])?;
+        tx.execute("DELETE FROM custom_sources WHERE owner_id = ?1", [id])?;
+        if tombstone {
+            insert_tombstone(&tx, Removed::Owner, id)?;
+        }
+        for source_id in source_ids {
+            purge_source_data(&tx, source_id)?;
+        }
+        if is_engine {
+            tx.execute("DELETE FROM item_engines WHERE engine_id = ?1", [id])?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    /// Deletes a tombstone, bringing the engine/outlet or source from sources.toml back.
+    pub fn restore(&self, kind: Removed, id: &str) -> anyhow::Result<()> {
+        self.conn.execute(
+            "DELETE FROM removed WHERE kind = ?1 AND id = ?2",
+            params![kind.as_str(), id],
         )?;
         Ok(())
     }
@@ -378,6 +512,31 @@ const ITEM_SELECT: &str = "SELECT i.id, i.source_id, i.guid, i.kind, i.title, i.
         (SELECT group_concat(engine_id, ',') FROM item_engines e WHERE e.item_id = i.id)
     FROM items i";
 
+fn insert_tombstone(conn: &Connection, kind: Removed, id: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "INSERT OR IGNORE INTO removed (kind, id, removed_at) VALUES (?1, ?2, ?3)",
+        params![kind.as_str(), id, Utc::now()],
+    )?;
+    Ok(())
+}
+
+/// Deletes a source's items (with their engine tags and sent notifications), fetch state
+/// and override. Items of other sources that were duplicates of these become primaries.
+fn purge_source_data(conn: &Connection, source_id: &str) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE items SET duplicate_of = NULL
+         WHERE duplicate_of IN (SELECT id FROM items WHERE source_id = ?1)",
+        [source_id],
+    )?;
+    conn.execute("DELETE FROM items WHERE source_id = ?1", [source_id])?;
+    conn.execute("DELETE FROM source_state WHERE source_id = ?1", [source_id])?;
+    conn.execute(
+        "DELETE FROM source_overrides WHERE source_id = ?1",
+        [source_id],
+    )?;
+    Ok(())
+}
+
 fn item_from_row(r: &Row) -> rusqlite::Result<Item> {
     let kind: String = r.get(3)?;
     let engines: Option<String> = r.get(11)?;
@@ -549,6 +708,79 @@ mod tests {
 
         let first = store.register_channel("ntfy").unwrap();
         assert_eq!(store.register_channel("ntfy").unwrap(), first);
+    }
+
+    #[test]
+    fn stores_and_removes_custom_sources() {
+        let mut store = Store::open_in_memory().unwrap();
+        store
+            .add_custom_source("godot:hn:godot", "godot", "{}")
+            .unwrap();
+        store.add_custom_owner("stride", "engine", "{}").unwrap();
+        assert_eq!(
+            store.custom_sources().unwrap(),
+            [(
+                "godot:hn:godot".to_string(),
+                "godot".to_string(),
+                "{}".to_string()
+            )]
+        );
+        assert_eq!(store.custom_owners().unwrap().len(), 1);
+
+        store.remove_source("godot:hn:godot", false).unwrap();
+        assert!(store.custom_sources().unwrap().is_empty());
+        assert!(store.removed(Removed::Source).unwrap().is_empty());
+
+        store.remove_source("a", true).unwrap();
+        store.remove_source("a", true).unwrap();
+        assert_eq!(store.removed(Removed::Source).unwrap(), ["a"]);
+        store.restore(Removed::Source, "a").unwrap();
+        assert!(store.removed(Removed::Source).unwrap().is_empty());
+    }
+
+    #[test]
+    fn removing_a_source_purges_its_data() {
+        let mut store = Store::open_in_memory().unwrap();
+        let first = store
+            .insert_items(&[new_item("a", "1", "godot 4 8")])
+            .unwrap();
+        let dup = store
+            .insert_items(&[new_item("b", "x", "godot 4 8")])
+            .unwrap();
+        assert_eq!(dup[0].duplicate_of, Some(first[0].id));
+        store.record_fetch_ok("a", None, None).unwrap();
+        store.set_source_override("a", false).unwrap();
+
+        store.remove_source("a", true).unwrap();
+        let listed = store.query_items(&ItemQuery::default()).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert_eq!(listed[0].source_id, "b");
+        assert_eq!(
+            listed[0].duplicate_of, None,
+            "the duplicate became the primary"
+        );
+        assert!(!store.source_state("a").unwrap().is_seeded());
+        assert!(store.source_overrides().unwrap().is_empty());
+    }
+
+    #[test]
+    fn removing_an_engine_drops_its_tags() {
+        let mut store = Store::open_in_memory().unwrap();
+        store.insert_items(&[new_item("a", "1", "one")]).unwrap();
+        store.insert_items(&[new_item("b", "2", "two")]).unwrap();
+        store.add_custom_owner("godot", "engine", "{}").unwrap();
+
+        store
+            .remove_owner("godot", true, false, &["a".to_string()])
+            .unwrap();
+        assert!(store.custom_owners().unwrap().is_empty());
+        assert!(store.removed(Removed::Owner).unwrap().is_empty());
+        let listed = store.query_items(&ItemQuery::default()).unwrap();
+        assert_eq!(listed.len(), 1);
+        assert!(listed[0].engines.is_empty());
+
+        store.remove_owner("bevy", true, true, &[]).unwrap();
+        assert_eq!(store.removed(Removed::Owner).unwrap(), ["bevy"]);
     }
 
     #[test]

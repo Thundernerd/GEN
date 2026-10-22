@@ -40,6 +40,13 @@ impl SourceToggles {
         self.changed.notify_waiters();
     }
 
+    /// Drops the override of a removed source (the caller deletes the stored one).
+    pub fn forget(&self, source_id: &str) {
+        if let Ok(mut o) = self.overrides.write() {
+            o.remove(source_id);
+        }
+    }
+
     /// Resolves the next time any toggle changes.
     pub async fn changed(&self) {
         self.changed.notified().await;

@@ -3,7 +3,7 @@
 use std::path::{Path, PathBuf};
 
 use anyhow::{Context, bail};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::model::{EngineId, ItemKind};
 
@@ -20,7 +20,7 @@ pub struct SourcesConfig {
     pub outlets: Vec<OutletConfig>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct EngineConfig {
     pub id: EngineId,
@@ -43,7 +43,7 @@ pub struct EngineConfig {
     pub sources: Vec<SourceConfig>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct OutletConfig {
     pub id: String,
@@ -59,7 +59,7 @@ pub struct OutletConfig {
     pub sources: Vec<SourceConfig>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct SourceConfig {
     /// Default kind for items from this source; the classifier may refine it
     /// (e.g. `release` -> `prerelease`).
@@ -75,7 +75,7 @@ pub struct SourceConfig {
     pub spec: SourceSpec,
 }
 
-#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum SourceSpec {
     /// RSS / Atom / JSON Feed.
@@ -113,7 +113,7 @@ pub enum SourceSpec {
     },
 }
 
-#[derive(Debug, Clone, Copy, Default, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "lowercase")]
 pub enum GithubMode {
     #[default]
@@ -127,6 +127,19 @@ pub enum GithubMode {
 pub enum Owner {
     Engine(EngineId),
     Outlet(String),
+}
+
+impl Owner {
+    pub fn id(&self) -> &str {
+        match self {
+            Owner::Engine(id) | Owner::Outlet(id) => id,
+        }
+    }
+}
+
+/// Stable id of a source, derived from its owner and spec, e.g. `godot:github:godotengine/godot`.
+pub fn source_id(owner_id: &str, spec: &SourceSpec) -> String {
+    format!("{owner_id}:{}", spec.key())
 }
 
 /// A source flattened out of its owner, with a stable id.
@@ -160,6 +173,78 @@ impl SourceSpec {
             SourceSpec::Hn { query } => format!("hn:{query}"),
             SourceSpec::Html { url, .. } => format!("html:{url}"),
         }
+    }
+
+    /// Checks a spec entered in the web UI. The error is a message for the user.
+    pub fn check(&self) -> Result<(), String> {
+        match self {
+            SourceSpec::Feed { url, .. } => check_url(url),
+            SourceSpec::Github { repo, .. } => {
+                let re =
+                    regex::Regex::new(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$").expect("valid regex");
+                if re.is_match(repo) {
+                    Ok(())
+                } else {
+                    Err(format!(
+                        "“{repo}” is not a GitHub repository; use owner/repo."
+                    ))
+                }
+            }
+            SourceSpec::Unity { limit } => {
+                if (1..=100).contains(limit) {
+                    Ok(())
+                } else {
+                    Err("The Unity limit must be between 1 and 100.".into())
+                }
+            }
+            SourceSpec::Hn { query } => {
+                if query.trim().is_empty() {
+                    Err("Enter a Hacker News search query.".into())
+                } else {
+                    Ok(())
+                }
+            }
+            SourceSpec::Html {
+                url,
+                item,
+                title,
+                link,
+                date,
+            } => {
+                check_url(url)?;
+                for (css, what) in [(item, "item"), (title, "title"), (link, "link")] {
+                    crate::fetch::html::check_selector(css, what)?;
+                }
+                if let Some(date) = date {
+                    crate::fetch::html::check_selector(date, "date")?;
+                }
+                Ok(())
+            }
+        }
+    }
+}
+
+/// Longest polling interval accepted from the web UI: one week.
+const MAX_INTERVAL_MINUTES: u64 = 7 * 24 * 60;
+
+impl SourceConfig {
+    /// Checks a source entered in the web UI. The error is a message for the user.
+    pub fn check(&self) -> Result<(), String> {
+        if let Some(minutes) = self.interval_minutes
+            && !(1..=MAX_INTERVAL_MINUTES).contains(&minutes)
+        {
+            return Err(format!(
+                "The interval must be between 1 and {MAX_INTERVAL_MINUTES} minutes."
+            ));
+        }
+        self.spec.check()
+    }
+}
+
+fn check_url(url: &str) -> Result<(), String> {
+    match url::Url::parse(url) {
+        Ok(u) if matches!(u.scheme(), "http" | "https") && u.host().is_some() => Ok(()),
+        _ => Err(format!("“{url}” is not an http(s) URL.")),
     }
 }
 
@@ -227,13 +312,27 @@ impl SourcesConfig {
             .collect()
     }
 
+    /// Enabled engines, then enabled outlets, in config order: the owners whose sources can
+    /// be managed at runtime.
+    pub fn manageable_owners(&self) -> Vec<(Owner, &str)> {
+        self.enabled_engines()
+            .map(|e| (Owner::Engine(e.id.clone()), e.name.as_str()))
+            .chain(
+                self.outlets
+                    .iter()
+                    .filter(|o| o.enabled)
+                    .map(|o| (Owner::Outlet(o.id.clone()), o.name.as_str())),
+            )
+            .collect()
+    }
+
     /// Every source, paired with whether its owner is enabled.
     fn resolve(&self) -> Vec<(ResolvedSource, bool)> {
         let mut out = Vec::new();
         for e in &self.engines {
             for s in &e.sources {
                 let source = ResolvedSource {
-                    id: format!("{}:{}", e.id, s.spec.key()),
+                    id: source_id(&e.id, &s.spec),
                     owner: Owner::Engine(e.id.clone()),
                     owner_name: e.name.clone(),
                     enabled: s.enabled,
@@ -249,7 +348,7 @@ impl SourcesConfig {
         for o in &self.outlets {
             for s in &o.sources {
                 let source = ResolvedSource {
-                    id: format!("{}:{}", o.id, s.spec.key()),
+                    id: source_id(&o.id, &s.spec),
                     owner: Owner::Outlet(o.id.clone()),
                     owner_name: o.name.clone(),
                     enabled: s.enabled,
@@ -475,7 +574,7 @@ pub fn expand_env(text: &str) -> anyhow::Result<String> {
 fn default_true() -> bool {
     true
 }
-fn default_unity_limit() -> u32 {
+pub fn default_unity_limit() -> u32 {
     25
 }
 fn default_bind() -> String {
@@ -551,6 +650,81 @@ mod tests {
         assert_eq!(sources[1].id, "godot:github:godotengine/godot");
         assert_eq!(sources[1].category, Some(ItemKind::Release));
         assert!(sources[2].require_engine_match);
+    }
+
+    #[test]
+    fn source_configs_round_trip_through_json() {
+        let cfg: SourcesConfig = toml::from_str(
+            r#"
+            [[engine]]
+            id = "x"
+            name = "X"
+            tier = 1
+            csharp = "none"
+              [[engine.source]]
+              kind = "feed"
+              url = "https://x.org/feed"
+              [[engine.source]]
+              kind = "github"
+              repo = "x/x"
+              mode = "tags"
+              tag_prefix = "v"
+              category = "release"
+              interval_minutes = 30
+              keywords = ["engine"]
+              [[engine.source]]
+              kind = "unity"
+              [[engine.source]]
+              kind = "hn"
+              query = "x engine"
+              enabled = false
+              [[engine.source]]
+              kind = "html"
+              url = "https://x.org/news"
+              item = "article"
+              title = "h2"
+              link = "a"
+            "#,
+        )
+        .unwrap();
+        for source in &cfg.engines[0].sources {
+            let json = serde_json::to_string(source).unwrap();
+            let back: SourceConfig = serde_json::from_str(&json).unwrap();
+            assert_eq!(&back, source, "{json}");
+        }
+    }
+
+    #[test]
+    fn checks_specs_from_the_web_ui() {
+        let feed = |url: &str| SourceSpec::Feed {
+            url: url.into(),
+            cache_bust: false,
+        };
+        assert!(feed("https://x.org/feed").check().is_ok());
+        assert!(feed("ftp://x.org/feed").check().is_err());
+        assert!(feed("not a url").check().is_err());
+        let github = |repo: &str| SourceSpec::Github {
+            repo: repo.into(),
+            mode: GithubMode::Releases,
+            tag_prefix: None,
+        };
+        assert!(github("godotengine/godot").check().is_ok());
+        assert!(
+            github("https://github.com/godotengine/godot")
+                .check()
+                .is_err()
+        );
+        assert!(SourceSpec::Unity { limit: 0 }.check().is_err());
+        assert!(SourceSpec::Hn { query: " ".into() }.check().is_err());
+        let html = |item: &str| SourceSpec::Html {
+            url: "https://x.org".into(),
+            item: item.into(),
+            title: "h2".into(),
+            link: "a".into(),
+            date: None,
+        };
+        assert!(html("article.post").check().is_ok());
+        assert!(html("article[").check().is_err());
     }
 
     #[test]

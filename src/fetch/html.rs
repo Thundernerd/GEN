@@ -90,6 +90,14 @@ pub fn parse(
     Ok(items)
 }
 
+/// Checks that `css` is a valid selector. The error is a message for the user.
+pub fn check_selector(css: &str, what: &str) -> Result<(), String> {
+    selector(css, what).map(|_| ()).map_err(|e| match e {
+        FetchError::Parse(msg) => msg,
+        other => other.to_string(),
+    })
+}
+
 fn selector(css: &str, what: &str) -> Result<Selector, FetchError> {
     Selector::parse(css)
         .map_err(|e| FetchError::Parse(format!("invalid {what} selector `{css}`: {e}")))

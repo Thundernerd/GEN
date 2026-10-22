@@ -24,5 +24,6 @@
     {%- endfor %}
   </nav>
 </div>
+{%- if admin %}{% include "_sources_admin.html" %}{% endif %}
 {% include "_sources_table.html" %}
 {% endblock %}

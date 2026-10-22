@@ -3,6 +3,7 @@
 //! Templates are loaded at runtime from `server.templates_dir` (and reloaded when they
 //! change), so the look can be tweaked without recompiling.
 
+mod admin;
 mod feed;
 mod queries;
 #[cfg(test)]
@@ -166,6 +167,7 @@ impl AppState {
         let (status, message) = match &err {
             AppError::NotFound(what) => (StatusCode::NOT_FOUND, what.clone()),
             AppError::Forbidden(what) => (StatusCode::FORBIDDEN, what.clone()),
+            AppError::Invalid(what) => (StatusCode::UNPROCESSABLE_ENTITY, what.clone()),
             AppError::Internal(e) => {
                 tracing::error!("request failed: {e:#}");
                 (
@@ -186,7 +188,7 @@ impl AppState {
                 tracing::error!("rendering error page failed: {e:#}");
                 (status, message).into_response()
             }
-            Err(AppError::NotFound(_) | AppError::Forbidden(_)) => {
+            Err(AppError::NotFound(_) | AppError::Forbidden(_) | AppError::Invalid(_)) => {
                 (status, message).into_response()
             }
         }
@@ -205,6 +207,8 @@ impl AppState {
 enum AppError {
     NotFound(String),
     Forbidden(String),
+    /// A refused change; the message is for the user.
+    Invalid(String),
     Internal(anyhow::Error),
 }
 
@@ -224,6 +228,9 @@ pub fn router(state: AppState) -> Router {
         .route("/engine/{id}", get(engine))
         .route("/sources", get(sources))
         .route("/sources/toggle", post(toggle_source))
+        .route("/sources/add", post(admin::add_source))
+        .route("/sources/remove", post(admin::remove_source))
+        .route("/sources/restore", post(admin::restore_source))
         .route("/login", get(login_form).post(login))
         .route("/logout", post(logout))
         .route("/feed.xml", get(feed))
@@ -487,11 +494,13 @@ async fn engine_page(st: &AppState, id: String, params: ListParams, admin: bool)
     )
 }
 
-/// `/sources` query: optional sort column and direction. Unknown values mean config order.
+/// `/sources` query: optional sort column and direction (unknown values mean config
+/// order), and the owner to preselect in the add-source form.
 #[derive(Debug, Default, Deserialize)]
 struct SourcesParams {
     sort: Option<String>,
     dir: Option<String>,
+    owner: Option<String>,
 }
 
 async fn sources(
@@ -500,16 +509,21 @@ async fn sources(
     headers: HeaderMap,
 ) -> Response {
     let admin = st.is_admin(&headers);
-    let result = sources_page(&st, admin, params).await;
+    let result = sources_page(&st, admin, params, None).await;
     st.respond(result)
 }
 
-async fn sources_page(st: &AppState, admin: bool, params: SourcesParams) -> PageResult {
+/// Renders `/sources`. `feedback` re-opens a failed admin form with its message and values.
+async fn sources_page(
+    st: &AppState,
+    admin: bool,
+    params: SourcesParams,
+    feedback: Option<serde_json::Value>,
+) -> PageResult {
     let states = st.with_store(|s| s.source_states()).await?;
     let now = Utc::now();
-    let rows: Vec<_> = st
-        .registry
-        .current()
+    let snapshot = st.registry.current();
+    let rows: Vec<_> = snapshot
         .config
         .manageable_sources()
         .iter()
@@ -543,6 +557,24 @@ async fn sources_page(st: &AppState, admin: bool, params: SourcesParams) -> Page
         .and_then(|l| l["url"].as_str())
         .unwrap_or("/sources")
         .to_string();
+    let owners = |engines: bool| -> Vec<_> {
+        snapshot
+            .config
+            .manageable_owners()
+            .into_iter()
+            .filter(|(o, _)| matches!(o, Owner::Engine(_)) == engines)
+            .map(|(o, name)| json!({"id": o.id(), "name": name}))
+            .collect()
+    };
+    let removed: Vec<_> = st
+        .registry
+        .removed_sources()
+        .iter()
+        .map(|s| {
+            let (kind, target, _) = describe(&s.spec);
+            json!({"id": s.id, "owner": s.owner_name, "kind": kind, "target": target})
+        })
+        .collect();
     let count = |status: &str| rows.iter().filter(|r| r["status"] == status).count();
     let summary = json!({
         "total": rows.len(),
@@ -563,6 +595,12 @@ async fn sources_page(st: &AppState, admin: bool, params: SourcesParams) -> Page
             "admin": admin,
             "login_available": st.admin_token().is_some(),
             "next": next,
+            "owners": {"engines": owners(true), "outlets": owners(false)},
+            "categories": kind_names(),
+            "default_interval": st.config.polling.default_interval_minutes,
+            "preselect_owner": non_empty(&params.owner),
+            "removed": removed,
+            "feedback": feedback,
         }),
     )
 }
@@ -749,21 +787,7 @@ fn source_row(
     } else {
         "pending"
     };
-    let (kind, target) = match &s.spec {
-        SourceSpec::Feed { url, .. } => ("feed", url.clone()),
-        SourceSpec::Github { repo, mode, .. } => (
-            "github",
-            format!("{repo} ({})", format!("{mode:?}").to_lowercase()),
-        ),
-        SourceSpec::Unity { .. } => ("unity", "Unity releases API".to_string()),
-        SourceSpec::Hn { query } => ("hn", query.clone()),
-        SourceSpec::Html { url, .. } => ("html", url.clone()),
-    };
-    let target_url = match &s.spec {
-        SourceSpec::Feed { url, .. } | SourceSpec::Html { url, .. } => Some(url.clone()),
-        SourceSpec::Github { repo, .. } => Some(format!("https://github.com/{repo}")),
-        _ => None,
-    };
+    let (kind, target, target_url) = describe(&s.spec);
     let (owner_kind, owner_id) = match &s.owner {
         Owner::Engine(id) => ("engine", id.clone()),
         Owner::Outlet(id) => ("outlet", id.clone()),
@@ -780,11 +804,32 @@ fn source_row(
         "target_url": target_url,
         "category": s.category.map(ItemKind::as_str),
         "interval": s.interval_minutes.unwrap_or(st.config.polling.default_interval_minutes),
+        "custom": st.registry.current().is_custom_source(&s.id),
         "status": status,
         "last_ok": state.last_ok.map(|d| DateView::new(d, now)),
         "last_error": state.last_error,
         "failures": state.consecutive_failures,
     })
+}
+
+/// A source's kind, what it fetches (for display) and a link to that, if any.
+fn describe(spec: &SourceSpec) -> (&'static str, String, Option<String>) {
+    let (kind, target) = match spec {
+        SourceSpec::Feed { url, .. } => ("feed", url.clone()),
+        SourceSpec::Github { repo, mode, .. } => (
+            "github",
+            format!("{repo} ({})", format!("{mode:?}").to_lowercase()),
+        ),
+        SourceSpec::Unity { .. } => ("unity", "Unity releases API".to_string()),
+        SourceSpec::Hn { query } => ("hn", query.clone()),
+        SourceSpec::Html { url, .. } => ("html", url.clone()),
+    };
+    let target_url = match spec {
+        SourceSpec::Feed { url, .. } | SourceSpec::Html { url, .. } => Some(url.clone()),
+        SourceSpec::Github { repo, .. } => Some(format!("https://github.com/{repo}")),
+        _ => None,
+    };
+    (kind, target, target_url)
 }
 
 async fn feed(State(st): State<AppState>, Query(params): Query<ListParams>) -> Response {

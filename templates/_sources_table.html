@@ -14,6 +14,9 @@
         {%- if g.owner_kind == "engine" %}<a class="group-name" href="/engine/{{ g.owner_id }}">{{ g.owner }}</a>{% else %}<span class="group-name">{{ g.owner }}</span>{% endif %}
         <span class="group-kind">{{ "engine" if g.owner_kind == "engine" else "news outlet" }}</span>
         <span class="group-count">{{ g.enabled }} of {{ g.total }} enabled</span>
+        {%- if admin %}
+        <a class="group-action" href="/sources?owner={{ g.owner_id }}#add-source">Add source</a>
+        {%- endif %}
       </th>
     </tr>
     {%- endif %}
@@ -23,7 +26,7 @@
       <td>
         <span class="source-kind">{{ s.kind }}</span>
         {% if s.target_url %}<a href="{{ s.target_url }}" rel="noopener">{{ s.target }}</a>{% else %}{{ s.target }}{% endif %}
-        <div class="source-meta">every {{ s.interval }} min{% if s.category %} · {{ s.category }}{% endif %}{% if s.enabled != s.config_enabled %} · overrides config{% endif %}</div>
+        <div class="source-meta">every {{ s.interval }} min{% if s.category %} · {{ s.category }}{% endif %}{% if s.enabled != s.config_enabled %} · overrides config{% endif %}{% if s.custom %} · added here{% endif %}</div>
       </td>
       <td class="center last-ok">{% if s.last_ok %}<time datetime="{{ s.last_ok.iso }}" title="{{ s.last_ok.abs }}">{{ s.last_ok.rel }}</time>{% else %}never{% endif %}</td>
       <td class="center num">{{ s.failures }}</td>
@@ -36,6 +39,14 @@
           <input type="hidden" name="next" value="{{ next }}">
           <button type="submit" class="btn-small{% if s.enabled %} btn-quiet{% endif %}">{{ "Disable" if s.enabled else "Enable" }}</button>
         </form>
+        <details class="confirm">
+          <summary class="btn-small btn-quiet">Remove</summary>
+          <form method="post" action="/sources/remove">
+            <input type="hidden" name="source_id" value="{{ s.id }}">
+            <input type="hidden" name="next" value="{{ next }}">
+            <button type="submit" class="btn-small btn-danger">Remove source and its items</button>
+          </form>
+        </details>
       </td>
       {%- endif %}
     </tr>

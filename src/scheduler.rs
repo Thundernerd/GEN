@@ -71,7 +71,7 @@ async fn supervise(poller: Poller) {
             let delay = if startup {
                 spread(&source.id, STARTUP_SPREAD)
             } else {
-                tracing::info!(source = %source.id, "source added");
+                tracing::debug!(source = %source.id, "poller started");
                 Duration::ZERO
             };
             let task = tasks.spawn(poller.clone().run(source.clone(), delay));

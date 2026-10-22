@@ -4,7 +4,7 @@
 <section class="login-page">
   <h1 class="page-title">Admin login</h1>
   {%- if available %}
-  <p>Enter the admin token from <code>gen.toml</code> (<code>server.admin_token</code>) to switch sources on or off.</p>
+  <p>Enter the admin token from <code>gen.toml</code> (<code>server.admin_token</code>) to manage sources.</p>
   {%- if error %}<p class="form-error" role="alert">{{ error }}</p>{% endif %}
   <form method="post" action="/login" class="login-form">
     <input type="hidden" name="next" value="{{ next }}">
