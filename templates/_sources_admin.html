@@ -41,12 +41,12 @@
         </label>
       </div>
       <p class="form-hint">Fill in the fields for the chosen kind; the others are ignored.</p>
-      <fieldset>
+      <fieldset data-kind="feed">
         <legend>Feed</legend>
         <label><span>Feed URL</span><input type="url" name="feed_url" value="{{ f.feed_url or "" }}" placeholder="https://example.com/feed.xml"></label>
         <label class="check"><input type="checkbox" name="cache_bust" value="1"{% if f.cache_bust %} checked{% endif %}> Bypass caches (for feeds behind a stale CDN)</label>
       </fieldset>
-      <fieldset>
+      <fieldset data-kind="github">
         <legend>GitHub</legend>
         <div class="form-row">
           <label><span>Repository</span><input name="repo" value="{{ f.repo or "" }}" placeholder="owner/repo"></label>
@@ -61,7 +61,7 @@
           <label><span>Tag prefix (optional)</span><input name="tag_prefix" value="{{ f.tag_prefix or "" }}" placeholder="releases/"></label>
         </div>
       </fieldset>
-      <fieldset>
+      <fieldset data-kind="html">
         <legend>HTML page</legend>
         <label><span>Page URL</span><input type="url" name="html_url" value="{{ f.html_url or "" }}"></label>
         <div class="form-row">
@@ -105,7 +105,7 @@
         <label><span>Name</span><input name="name" value="{{ f.name or "" }}" required></label>
         <label><span>Homepage (optional)</span><input type="url" name="homepage" value="{{ f.homepage or "" }}"></label>
       </div>
-      <fieldset>
+      <fieldset data-kind="engine">
         <legend>Engine</legend>
         <div class="form-row">
           <label>
@@ -121,7 +121,7 @@
         <label><span>Aliases (comma-separated; tag outlet items with this engine. Lowercase matches any case, “Unity” only that case)</span><input name="aliases" value="{{ f.aliases or "" }}"></label>
         <label><span>Exclude (comma-separated phrases that veto an alias match)</span><input name="exclude" value="{{ f.exclude or "" }}"></label>
       </fieldset>
-      <fieldset>
+      <fieldset data-kind="outlet">
         <legend>News outlet</legend>
         <label class="check"><input type="checkbox" name="require_engine_match" value="1"{% if f.require_engine_match %} checked{% endif %}> Only keep items that mention a known engine</label>
       </fieldset>

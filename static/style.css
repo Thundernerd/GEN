@@ -55,7 +55,7 @@
 
 *, *::before, *::after { box-sizing: border-box; }
 
-html { -webkit-text-size-adjust: 100%; }
+html { -webkit-text-size-adjust: 100%; scroll-padding-top: 5rem; }  /* clear the sticky header */
 
 body {
   margin: 0;
@@ -496,6 +496,14 @@ details.panel .form-error { margin-top: 0; }
 .stack-form input[type="checkbox"] { width: 1.05rem; height: 1.05rem; accent-color: var(--accent); }
 .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.7rem; }
 .form-hint { color: var(--muted); font-size: 0.85rem; margin: 0; }
+/* Show only the fieldset for the chosen kind of source or owner. Browsers without :has()
+   show them all, with the hint saying which to fill in. */
+.stack-form:has([name="kind"] option[value="feed"]:checked, [name="kind"] option[value="github"]:checked, [name="kind"] option[value="html"]:checked, input[name="owner_kind"]:checked) .form-hint { display: none; }
+.stack-form:has([name="kind"] option[value="feed"]:checked) fieldset[data-kind]:not([data-kind="feed"]),
+.stack-form:has([name="kind"] option[value="github"]:checked) fieldset[data-kind]:not([data-kind="github"]),
+.stack-form:has([name="kind"] option[value="html"]:checked) fieldset[data-kind]:not([data-kind="html"]),
+.stack-form:has(input[name="owner_kind"][value="engine"]:checked) fieldset[data-kind]:not([data-kind="engine"]),
+.stack-form:has(input[name="owner_kind"][value="outlet"]:checked) fieldset[data-kind]:not([data-kind="outlet"]) { display: none; }
 
 .group-action { font-size: 0.8rem; font-weight: 500; margin-left: 0.6rem; }
 .group-action::before { content: "·"; display: inline-block; margin-right: 0.6rem; color: var(--muted); }
