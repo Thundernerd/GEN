@@ -1,0 +1,354 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/" xml:lang="en-US">
+  <id>tag:github.com,2008:/godotengine/godot/commits/master</id>
+  <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commits/master"/>
+  <link type="application/atom+xml" rel="self" href="https://github.com/godotengine/godot/commits/master.atom"/>
+  <title>Recent Commits to godot:master</title>
+  <updated>2026-10-22T03:02:08Z</updated>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/5d1cd20f9117e4721fce626454e2323eb9462d0a</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/5d1cd20f9117e4721fce626454e2323eb9462d0a"/>
+    <title>
+        Merge pull request #124750 from clayjohn/GLES3-tex-slot
+    </title>
+    <updated>2026-10-22T03:02:08Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/17489292?s=30&amp;v=4"/>
+    <author>
+      <name>Repiteo</name>
+      <uri>https://github.com/Repiteo</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Merge pull request #124750 from clayjohn/GLES3-tex-slot
+
+Move globals texture from binding slot 13 to binding slot 1 to make texture binding collisions less likely&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/02f916ef74b0713f0c723b797e9bc9863e18e9f6</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/02f916ef74b0713f0c723b797e9bc9863e18e9f6"/>
+    <title>
+        Merge pull request #124764 from clayjohn/GLES3-index-buffer-target
+    </title>
+    <updated>2026-10-22T03:02:07Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/17489292?s=30&amp;v=4"/>
+    <author>
+      <name>Repiteo</name>
+      <uri>https://github.com/Repiteo</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Merge pull request #124764 from clayjohn/GLES3-index-buffer-target
+
+Use the element buffer binding point for index buffers when calling `mesh_surface_update_index_region`&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/facc20df1f738a20462dbbc9935ba20eb7146aef</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/facc20df1f738a20462dbbc9935ba20eb7146aef"/>
+    <title>
+        Merge pull request #124549 from YeldhamDev/ci_demanipulation
+    </title>
+    <updated>2026-10-22T03:02:05Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/17489292?s=30&amp;v=4"/>
+    <author>
+      <name>Repiteo</name>
+      <uri>https://github.com/Repiteo</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Merge pull request #124549 from YeldhamDev/ci_demanipulation
+
+Disable `CanvasItem` manipulation for native debug builds&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/2bf67047a396787518c8881b802b469cbb0ab21a</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/2bf67047a396787518c8881b802b469cbb0ab21a"/>
+    <title>
+        Merge pull request #124749 from YeldhamDev/assetlib_relevance_default
+    </title>
+    <updated>2026-10-22T03:02:04Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/17489292?s=30&amp;v=4"/>
+    <author>
+      <name>Repiteo</name>
+      <uri>https://github.com/Repiteo</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Merge pull request #124749 from YeldhamDev/assetlib_relevance_default
+
+Set the Asset Store&amp;#39;s default sorting back to most relevant&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/15811775e93328aebef6a77cd77c74cf307608ad</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/15811775e93328aebef6a77cd77c74cf307608ad"/>
+    <title>
+        Merge pull request #124754 from m4gr3d/update_openxr_vendors_plugin_5…
+    </title>
+    <updated>2026-10-22T03:02:02Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/17489292?s=30&amp;v=4"/>
+    <author>
+      <name>Repiteo</name>
+      <uri>https://github.com/Repiteo</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Merge pull request #124754 from m4gr3d/update_openxr_vendors_plugin_5_2_0
+
+Update the XR editor to version 5.2 of the OpenXR Vendors plugin&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/bef29d2aa137e05b665ee9f480ae78bf2ae17fe5</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/bef29d2aa137e05b665ee9f480ae78bf2ae17fe5"/>
+    <title>
+        Merge pull request #124756 from BigFriendlyGeek42/Fix-error-and-warni…
+    </title>
+    <updated>2026-10-22T03:02:01Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/17489292?s=30&amp;v=4"/>
+    <author>
+      <name>Repiteo</name>
+      <uri>https://github.com/Repiteo</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Merge pull request #124756 from BigFriendlyGeek42/Fix-error-and-warning-count-on-debugger-toggle-button
+
+Fix error and warning count on debugger toggle button.&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/527528340c6a1c9aa4b57599f8a8fe79028b1714</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/527528340c6a1c9aa4b57599f8a8fe79028b1714"/>
+    <title>
+        Merge pull request #124763 from Chubercik/r128_1.6.2
+    </title>
+    <updated>2026-10-22T03:02:00Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/17489292?s=30&amp;v=4"/>
+    <author>
+      <name>Repiteo</name>
+      <uri>https://github.com/Repiteo</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Merge pull request #124763 from Chubercik/r128_1.6.2
+
+r128: Update to 1.6.2&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/91e8a0af4e9bc78afc54d79fcd0a45b96508f446</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/91e8a0af4e9bc78afc54d79fcd0a45b96508f446"/>
+    <title>
+        Merge pull request #124752 from Repiteo/ci/make-rst-check
+    </title>
+    <updated>2026-10-22T03:01:58Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/17489292?s=30&amp;v=4"/>
+    <author>
+      <name>Repiteo</name>
+      <uri>https://github.com/Repiteo</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Merge pull request #124752 from Repiteo/ci/make-rst-check
+
+CI: Update `make_rst.py` to only write if modified&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/ff6882317eaaae6dec8ff4535ee9078975a4423a</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/ff6882317eaaae6dec8ff4535ee9078975a4423a"/>
+    <title>
+        Merge pull request #124757 from bruvzg/mexp_d_r
+    </title>
+    <updated>2026-10-22T03:01:57Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/17489292?s=30&amp;v=4"/>
+    <author>
+      <name>Repiteo</name>
+      <uri>https://github.com/Repiteo</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Merge pull request #124757 from bruvzg/mexp_d_r
+
+[macOS] Fix wrong release/debug template used for universal templates.&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/955a2be878c848bdda13b1896676d8f0bababa27</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/955a2be878c848bdda13b1896676d8f0bababa27"/>
+    <title>
+        Update the XR editor to version 5.2 of the OpenXR Vendors plugin
+    </title>
+    <updated>2026-10-22T02:58:54Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/914968?s=30&amp;v=4"/>
+    <author>
+      <name>m4gr3d</name>
+      <uri>https://github.com/m4gr3d</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Update the XR editor to version 5.2 of the OpenXR Vendors plugin&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/cf020f75af0d5bf0333c4bf92d3ee30a80a327e0</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/cf020f75af0d5bf0333c4bf92d3ee30a80a327e0"/>
+    <title>
+        Use the element buffer binding point for index buffers when calling m…
+    </title>
+    <updated>2026-10-21T22:23:53Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/16521339?s=30&amp;v=4"/>
+    <author>
+      <name>clayjohn</name>
+      <uri>https://github.com/clayjohn</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Use the element buffer binding point for index buffers when calling mesh_surface_update_index_region
+
+This is technically required by spec, but is not enforced by all drivers.&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/03741896869f489191573c1b6cb6ea9760446a1b</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/03741896869f489191573c1b6cb6ea9760446a1b"/>
+    <title>
+        r128: Update to 1.6.2
+    </title>
+    <updated>2026-10-21T22:02:59Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/37378746?s=30&amp;v=4"/>
+    <author>
+      <name>Chubercik</name>
+      <uri>https://github.com/Chubercik</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;r128: Update to 1.6.2&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/3129d5ed1030e88e56ddda58cc605f2c3a4b5ef8</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/3129d5ed1030e88e56ddda58cc605f2c3a4b5ef8"/>
+    <title>
+        [macOS] Fix wrong release/debug template used for universal templates.
+    </title>
+    <updated>2026-10-21T19:35:36Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/7645683?s=30&amp;v=4"/>
+    <author>
+      <name>bruvzg</name>
+      <uri>https://github.com/bruvzg</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;[macOS] Fix wrong release/debug template used for universal templates.&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/da899e733ce0e0495c332f55a88228366ca49370</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/da899e733ce0e0495c332f55a88228366ca49370"/>
+    <title>
+        Fix error and warning count on debugger toggle button.
+    </title>
+    <updated>2026-10-21T19:25:14Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/266670781?s=30&amp;v=4"/>
+    <author>
+      <name>BigFriendlyGeek42</name>
+      <uri>https://github.com/BigFriendlyGeek42</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Fix error and warning count on debugger toggle button.&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/bdaf77f5a25f3459f3586816c6d2cd5ab42a8530</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/bdaf77f5a25f3459f3586816c6d2cd5ab42a8530"/>
+    <title>
+        CI: Update `make_rst.py` to only write if modified
+    </title>
+    <updated>2026-10-21T18:24:59Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/17489292?s=30&amp;v=4"/>
+    <author>
+      <name>Repiteo</name>
+      <uri>https://github.com/Repiteo</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;CI: Update `make_rst.py` to only write if modified&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/0af3999b4a6a38f86d27a9d1b7b313924dc10ba1</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/0af3999b4a6a38f86d27a9d1b7b313924dc10ba1"/>
+    <title>
+        Move globals texture from binding slot 13 to binding slot 1 to make t…
+    </title>
+    <updated>2026-10-21T17:51:08Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/16521339?s=30&amp;v=4"/>
+    <author>
+      <name>clayjohn</name>
+      <uri>https://github.com/clayjohn</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Move globals texture from binding slot 13 to binding slot 1 to make texture binding collisions less likely&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/1b839d72ce806b985bc4e4cde7dae68f3551f9fe</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/1b839d72ce806b985bc4e4cde7dae68f3551f9fe"/>
+    <title>
+        Set the Asset Store&#39;s default sorting back to most relevant
+    </title>
+    <updated>2026-10-21T17:44:26Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/30739239?s=30&amp;v=4"/>
+    <author>
+      <name>YeldhamDev</name>
+      <uri>https://github.com/YeldhamDev</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Set the Asset Store&amp;#39;s default sorting back to most relevant&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/7782e7e21e3f06d797f36aaa694f5ea0bc3fe4d8</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/7782e7e21e3f06d797f36aaa694f5ea0bc3fe4d8"/>
+    <title>
+        Merge pull request #124740 from KoBeWi/oob_experience
+    </title>
+    <updated>2026-10-21T17:22:52Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/17489292?s=30&amp;v=4"/>
+    <author>
+      <name>Repiteo</name>
+      <uri>https://github.com/Repiteo</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Merge pull request #124740 from KoBeWi/oob_experience
+
+Allow out-of-bounds reading in property list helper&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/6c4f487a2799dd6f0bfce3c3c7dd326a139b910e</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/6c4f487a2799dd6f0bfce3c3c7dd326a139b910e"/>
+    <title>
+        Merge pull request #124569 from DanielKinsman/xr_remove_deprecated_calls
+    </title>
+    <updated>2026-10-21T17:22:51Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/17489292?s=30&amp;v=4"/>
+    <author>
+      <name>Repiteo</name>
+      <uri>https://github.com/Repiteo</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Merge pull request #124569 from DanielKinsman/xr_remove_deprecated_calls
+
+Remove deprecated calls to XR `get_projection_for_view()`&lt;/pre&gt;
+    </content>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Grit::Commit/9ddb3d42c227119eeb8238654b2ec5bffe40c7f7</id>
+    <link type="text/html" rel="alternate" href="https://github.com/godotengine/godot/commit/9ddb3d42c227119eeb8238654b2ec5bffe40c7f7"/>
+    <title>
+        Merge pull request #124680 from DanielKinsman/view_count_mismatch_err…
+    </title>
+    <updated>2026-10-21T17:22:49Z</updated>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/17489292?s=30&amp;v=4"/>
+    <author>
+      <name>Repiteo</name>
+      <uri>https://github.com/Repiteo</uri>
+    </author>
+    <content type="html">
+      &lt;pre style=&#39;white-space:pre-wrap;width:81ex&#39;&gt;Merge pull request #124680 from DanielKinsman/view_count_mismatch_error_alternative
+
+Improve error message when using a Camera3D on an XR viewport&lt;/pre&gt;
+    </content>
+  </entry>
+</feed>

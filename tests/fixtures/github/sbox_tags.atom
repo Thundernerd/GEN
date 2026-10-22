@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/" xml:lang="en-US">
+  <id>tag:github.com,2008:https://github.com/Facepunch/sbox-public/releases</id>
+  <link type="text/html" rel="alternate" href="https://github.com/Facepunch/sbox-public/releases"/>
+  <link type="application/atom+xml" rel="self" href="https://github.com/Facepunch/sbox-public/releases.atom"/>
+  <title>Tags from sbox-public</title>
+  <updated>2026-10-13T17:16:22Z</updated>
+  <entry>
+    <id>tag:github.com,2008:Repository/1102932625/26.10.13</id>
+    <updated>2026-10-13T17:16:22Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/Facepunch/sbox-public/releases/tag/26.10.13"/>
+    <title>26.10.13</title>
+    <content></content>
+    <author>
+      <name>handsomematt</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/1388267?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1102932625/26.10.02</id>
+    <updated>2026-10-02T14:56:14Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/Facepunch/sbox-public/releases/tag/26.10.02"/>
+    <title>26.10.02</title>
+    <content></content>
+    <author>
+      <name>handsomematt</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/1388267?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1102932625/26.09.29</id>
+    <updated>2026-09-29T18:16:31Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/Facepunch/sbox-public/releases/tag/26.09.29"/>
+    <title>26.09.29</title>
+    <content></content>
+    <author>
+      <name>handsomematt</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/1388267?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1102932625/26.09.22</id>
+    <updated>2026-09-22T16:45:07Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/Facepunch/sbox-public/releases/tag/26.09.22"/>
+    <title>26.09.22</title>
+    <content></content>
+    <author>
+      <name>handsomematt</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/1388267?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1102932625/26.09.15</id>
+    <updated>2026-09-15T19:15:09Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/Facepunch/sbox-public/releases/tag/26.09.15"/>
+    <title>26.09.15</title>
+    <content></content>
+    <author>
+      <name>handsomematt</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/1388267?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1102932625/26.09.08</id>
+    <updated>2026-09-08T20:03:49Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/Facepunch/sbox-public/releases/tag/26.09.08"/>
+    <title>26.09.08</title>
+    <content></content>
+    <author>
+      <name>handsomematt</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/1388267?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1102932625/26.09.01</id>
+    <updated>2026-09-01T16:55:28Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/Facepunch/sbox-public/releases/tag/26.09.01"/>
+    <title>26.09.01</title>
+    <content></content>
+    <author>
+      <name>handsomematt</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/1388267?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1102932625/26.08.05</id>
+    <updated>2026-08-05T19:47:37Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/Facepunch/sbox-public/releases/tag/26.08.05"/>
+    <title>26.08.05</title>
+    <content></content>
+    <author>
+      <name>handsomematt</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/1388267?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1102932625/26.07.22</id>
+    <updated>2026-07-22T16:36:56Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/Facepunch/sbox-public/releases/tag/26.07.22"/>
+    <title>26.07.22</title>
+    <content></content>
+    <author>
+      <name>DevulTj</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/22372616?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/1102932625/26.07.15</id>
+    <updated>2026-07-15T19:02:29Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/Facepunch/sbox-public/releases/tag/26.07.15"/>
+    <title>26.07.15</title>
+    <content></content>
+    <author>
+      <name>handsomematt</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/1388267?s=60&amp;v=4"/>
+  </entry>
+</feed>
