@@ -391,6 +391,7 @@ table.sources .num { text-align: right; font-variant-numeric: tabular-nums; }
 table.sources tr.is-disabled td { opacity: 0.6; }
 table.sources tr.is-disabled td:last-child { opacity: 1; }
 .toggle-form { margin: 0; }
+table.sources td.actions { vertical-align: middle; }
 
 .btn-small, .login-form button {
   display: inline-block;

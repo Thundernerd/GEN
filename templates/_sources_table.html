@@ -18,7 +18,7 @@
       <td class="num">{{ s.failures }}</td>
       <td class="error-text">{{ s.last_error or "" }}</td>
       {%- if admin %}
-      <td>
+      <td class="actions">
         <form method="post" action="/sources/toggle" class="toggle-form">
           <input type="hidden" name="source_id" value="{{ s.id }}">
           <input type="hidden" name="enabled" value="{{ "0" if s.enabled else "1" }}">
