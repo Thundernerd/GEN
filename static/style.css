@@ -492,7 +492,7 @@ details.panel[open] { padding-bottom: 1rem; }
 details.panel .form-error { margin-top: 0; }
 .admin-actions { display: flex; flex-wrap: wrap; gap: 0.5rem; }
 
-/* Add-source and add-engine/outlet forms, opened as modal dialogs. */
+/* Add-source, add-engine and add-outlet forms, opened as modal dialogs. */
 .form-dialog {
   width: min(44rem, calc(100vw - 2rem));
   max-height: calc(100dvh - 2rem);
@@ -510,6 +510,7 @@ details.panel .form-error { margin-top: 0; }
 .form-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
 .form-dialog h2 { font-size: 1.15rem; margin: 0 0 0.9rem; }
 .form-dialog .form-error { margin-top: 0; }
+.form-dialog h2 + .form-hint { margin: -0.5rem 0 0.9rem; }
 .form-dialog .dialog-actions { margin-top: 0.25rem; }
 .form-dialog .dialog-actions .btn-small { font-size: 0.95rem; padding: 0.5rem 1rem; }
 .stack-form fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 0; padding: 0.6rem 0.85rem 0.85rem; display: flex; flex-direction: column; gap: 0.7rem; }
@@ -518,14 +519,12 @@ details.panel .form-error { margin-top: 0; }
 .stack-form input[type="checkbox"] { width: 1.05rem; height: 1.05rem; accent-color: var(--accent); }
 .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.7rem; }
 .form-hint { color: var(--muted); font-size: 0.85rem; margin: 0; }
-/* Show only the fieldset for the chosen kind of source or owner. Browsers without :has()
+/* Show only the fieldset for the chosen kind of source. Browsers without :has()
    show them all, with the hint saying which to fill in. */
-.stack-form:has([name="kind"] option[value="feed"]:checked, [name="kind"] option[value="github"]:checked, [name="kind"] option[value="html"]:checked, input[name="owner_kind"]:checked) .form-hint { display: none; }
+.stack-form:has([name="kind"] option[value="feed"]:checked, [name="kind"] option[value="github"]:checked, [name="kind"] option[value="html"]:checked) .form-hint { display: none; }
 .stack-form:has([name="kind"] option[value="feed"]:checked) fieldset[data-kind]:not([data-kind="feed"]),
 .stack-form:has([name="kind"] option[value="github"]:checked) fieldset[data-kind]:not([data-kind="github"]),
-.stack-form:has([name="kind"] option[value="html"]:checked) fieldset[data-kind]:not([data-kind="html"]),
-.stack-form:has(input[name="owner_kind"][value="engine"]:checked) fieldset[data-kind]:not([data-kind="engine"]),
-.stack-form:has(input[name="owner_kind"][value="outlet"]:checked) fieldset[data-kind]:not([data-kind="outlet"]) { display: none; }
+.stack-form:has([name="kind"] option[value="html"]:checked) fieldset[data-kind]:not([data-kind="html"]) { display: none; }
 
 .group-action { font-size: 0.8rem; font-weight: 500; margin-left: 0.6rem; }
 .group-action::before { content: "·"; display: inline-block; margin-right: 0.6rem; color: var(--muted); }

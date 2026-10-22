@@ -13,6 +13,13 @@
       dialog.close();
       dialog.showModal();
     }
+    // The owner to preselect has done its job; don't reopen the dialog on reload.
+    const url = new URL(location.href);
+    if (url.searchParams.has("owner") || url.hash === "#add-source") {
+      url.searchParams.delete("owner");
+      url.hash = "";
+      history.replaceState(null, "", url);
+    }
   }
 
   document.addEventListener("click", (event) => {
@@ -109,7 +116,7 @@
       if (details instanceof HTMLDetailsElement) details.open = true;
     }
     if (response.redirected && response.url !== location.href) {
-      history.replaceState(null, "", response.url + location.hash);
+      history.replaceState(null, "", response.url);
     }
     reopen(next);
     const error = next.querySelector(".form-error, .error-page");
@@ -126,11 +133,4 @@
   });
 
   reopen(document);
-  // The owner to preselect has done its job; don't reopen the dialog on reload.
-  const url = new URL(location.href);
-  if (url.searchParams.has("owner") || url.hash === "#add-source") {
-    url.searchParams.delete("owner");
-    url.hash = "";
-    history.replaceState(null, "", url);
-  }
 })();

@@ -681,10 +681,14 @@ async fn invalid_owners_rerender_the_form() {
         let (status, _, body) = send(&st, post_form("/owners/add", form, Some(&cookie))).await;
         assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{form}");
         assert!(body.contains(message), "{form}: {message}");
-        assert!(
-            body.contains(r#"aria-labelledby="add-owner-title" open data-reopen"#),
-            "{form}"
-        );
+        let dialog = if form.contains("owner_kind=outlet") {
+            "add-outlet"
+        } else {
+            "add-engine"
+        };
+        let reopened = format!(r#"aria-labelledby="{dialog}-title" open data-reopen"#);
+        assert!(body.contains(&reopened), "{form}");
+        assert_eq!(body.matches("open data-reopen").count(), 1, "{form}");
     }
     assert_eq!(st.store.lock().unwrap().owners().unwrap().len(), 3);
 }

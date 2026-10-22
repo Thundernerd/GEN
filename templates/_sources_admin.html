@@ -9,7 +9,8 @@
 <section class="admin-panel" aria-label="Manage sources">
   <div class="admin-actions">
     <button type="button" class="btn-small" commandfor="add-source" command="show-modal">Add a source</button>
-    <button type="button" class="btn-small btn-quiet" commandfor="add-owner" command="show-modal">Add an engine or news outlet</button>
+    <button type="button" class="btn-small btn-quiet" commandfor="add-engine" command="show-modal">Add an engine</button>
+    <button type="button" class="btn-small btn-quiet" commandfor="add-outlet" command="show-modal">Add a news outlet</button>
   </div>
   <dialog id="add-source" class="form-dialog" aria-labelledby="add-source-title"{% if failed == "add-source" or preselect_owner %} open data-reopen{% endif %}>
     <h2 id="add-source-title">Add a source</h2>
@@ -99,44 +100,56 @@
       </div>
     </form>
   </dialog>
-  <dialog id="add-owner" class="form-dialog" aria-labelledby="add-owner-title"{% if failed == "add-owner" %} open data-reopen{% endif %}>
-    <h2 id="add-owner-title">Add an engine or news outlet</h2>
-    {%- if failed == "add-owner" %}
+  <dialog id="add-engine" class="form-dialog" aria-labelledby="add-engine-title"{% if failed == "add-engine" %} open data-reopen{% endif %}>
+    <h2 id="add-engine-title">Add an engine</h2>
+    {%- if failed == "add-engine" %}
     <p class="form-error" role="alert">{{ feedback.error }}</p>
     {%- endif %}
-    <form method="post" action="/owners/add" class="stack-form">
+    {%- set e = f if failed == "add-engine" else {} %}
+    <form method="post" action="/owners/add" class="stack-form" data-inline="Engine added.">
+      <input type="hidden" name="owner_kind" value="engine">
       <div class="form-row">
-        <label class="check"><input type="radio" name="owner_kind" value="engine"{% if f.owner_kind != "outlet" %} checked{% endif %}> Engine</label>
-        <label class="check"><input type="radio" name="owner_kind" value="outlet"{% if f.owner_kind == "outlet" %} checked{% endif %}> News outlet (covers many engines)</label>
+        <label><span>Id (lowercase, e.g. <code>stride</code>)</span><input name="id" value="{{ e.id or "" }}" autofocus pattern="[a-z0-9][a-z0-9\-]{0,39}" required></label>
+        <label><span>Name</span><input name="name" value="{{ e.name or "" }}" required></label>
+        <label><span>Homepage (optional)</span><input type="url" name="homepage" value="{{ e.homepage or "" }}"></label>
       </div>
       <div class="form-row">
-        <label><span>Id (lowercase, e.g. <code>stride</code>)</span><input name="id" value="{{ f.id or "" }}" autofocus pattern="[a-z0-9][a-z0-9\-]{0,39}" required></label>
-        <label><span>Name</span><input name="name" value="{{ f.name or "" }}" required></label>
-        <label><span>Homepage (optional)</span><input type="url" name="homepage" value="{{ f.homepage or "" }}"></label>
+        <label>
+          <span>Tier</span>
+          <select name="tier">
+            {%- for t in tiers %}
+            <option value="{{ t.tier }}"{% if t.tier|string == e.tier %} selected{% endif %}>{{ t.tier }}: {{ t.label }}</option>
+            {%- endfor %}
+          </select>
+        </label>
+        <label><span>C# support</span><input name="csharp" value="{{ e.csharp or "" }}" placeholder="none"></label>
       </div>
-      <fieldset data-kind="engine">
-        <legend>Engine</legend>
-        <div class="form-row">
-          <label>
-            <span>Tier</span>
-            <select name="tier">
-              {%- for t in tiers %}
-              <option value="{{ t.tier }}"{% if t.tier|string == f.tier %} selected{% endif %}>{{ t.tier }}: {{ t.label }}</option>
-              {%- endfor %}
-            </select>
-          </label>
-          <label><span>C# support</span><input name="csharp" value="{{ f.csharp or "" }}" placeholder="none"></label>
-        </div>
-        <label><span>Aliases (comma-separated; tag outlet items with this engine. Lowercase matches any case, “Unity” only that case)</span><input name="aliases" value="{{ f.aliases or "" }}"></label>
-        <label><span>Exclude (comma-separated phrases that veto an alias match)</span><input name="exclude" value="{{ f.exclude or "" }}"></label>
-      </fieldset>
-      <fieldset data-kind="outlet">
-        <legend>News outlet</legend>
-        <label class="check"><input type="checkbox" name="require_engine_match" value="1"{% if f.require_engine_match %} checked{% endif %}> Only keep items that mention a known engine</label>
-      </fieldset>
+      <label><span>Aliases (comma-separated; tag outlet items with this engine. Lowercase matches any case, “Unity” only that case)</span><input name="aliases" value="{{ e.aliases or "" }}"></label>
+      <label><span>Exclude (comma-separated phrases that veto an alias match)</span><input name="exclude" value="{{ e.exclude or "" }}"></label>
       <div class="dialog-actions">
-        <button type="button" class="btn-small btn-quiet" commandfor="add-owner" command="close">Cancel</button>
-        <button type="submit">Add</button>
+        <button type="button" class="btn-small btn-quiet" commandfor="add-engine" command="close">Cancel</button>
+        <button type="submit">Add engine</button>
+      </div>
+    </form>
+  </dialog>
+  <dialog id="add-outlet" class="form-dialog" aria-labelledby="add-outlet-title"{% if failed == "add-outlet" %} open data-reopen{% endif %}>
+    <h2 id="add-outlet-title">Add a news outlet</h2>
+    <p class="form-hint">A general news site covering many engines. Its items are tagged with the engines they mention.</p>
+    {%- if failed == "add-outlet" %}
+    <p class="form-error" role="alert">{{ feedback.error }}</p>
+    {%- endif %}
+    {%- set o = f if failed == "add-outlet" else {} %}
+    <form method="post" action="/owners/add" class="stack-form" data-inline="News outlet added.">
+      <input type="hidden" name="owner_kind" value="outlet">
+      <div class="form-row">
+        <label><span>Id (lowercase, e.g. <code>80lv</code>)</span><input name="id" value="{{ o.id or "" }}" autofocus pattern="[a-z0-9][a-z0-9\-]{0,39}" required></label>
+        <label><span>Name</span><input name="name" value="{{ o.name or "" }}" required></label>
+        <label><span>Homepage (optional)</span><input type="url" name="homepage" value="{{ o.homepage or "" }}"></label>
+      </div>
+      <label class="check"><input type="checkbox" name="require_engine_match" value="1"{% if o.require_engine_match %} checked{% endif %}> Only keep items that mention a known engine</label>
+      <div class="dialog-actions">
+        <button type="button" class="btn-small btn-quiet" commandfor="add-outlet" command="close">Cancel</button>
+        <button type="submit">Add news outlet</button>
       </div>
     </form>
   </dialog>

@@ -285,7 +285,11 @@ async fn add_owner_inner(st: &AppState, headers: &HeaderMap, form: AddOwnerForm)
         ))
         .into_response()),
         Err(AppError::Invalid(msg)) => {
-            let feedback = json!({"panel": "add-owner", "error": msg, "form": form});
+            let panel = match form.owner_kind.as_deref() {
+                Some("outlet") => "add-outlet",
+                _ => "add-engine",
+            };
+            let feedback = json!({"panel": panel, "error": msg, "form": form});
             let page = sources_page(st, true, SourcesParams::default(), Some(feedback)).await?;
             Ok((StatusCode::UNPROCESSABLE_ENTITY, page).into_response())
         }
