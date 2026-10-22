@@ -336,7 +336,8 @@ table.sources th, table.sources td {
   border-bottom: 1px solid var(--border);
 }
 table.sources th { color: var(--muted); font-weight: 600; white-space: nowrap; }
-table.sources .num { text-align: center; vertical-align: middle; font-variant-numeric: tabular-nums; }
+table.sources .center { text-align: center; vertical-align: middle; }
+table.sources .num { font-variant-numeric: tabular-nums; }
 .source-kind {
   font-family: var(--mono);
   font-size: 0.75rem;
@@ -374,7 +375,7 @@ table.sources .num { text-align: center; vertical-align: middle; font-variant-nu
   table.sources, table.sources tbody, table.sources tr, table.sources td { display: block; width: 100%; }
   table.sources tr { border-bottom: 1px solid var(--border); padding: 0.4rem 0; }
   table.sources td { border: 0; padding: 0.15rem 0.6rem; }
-  table.sources td.num { text-align: left; }
+  table.sources td.center { text-align: left; }
   table.sources td.num::before { content: "Failures: "; color: var(--muted); }
   .error-text { max-width: none; }
 }
