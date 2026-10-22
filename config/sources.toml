@@ -1,7 +1,83 @@
 # Engines, general news outlets and their sources.
 # Source kinds: feed, github (mode = releases|tags|commits), unity, hn, html.
 # Categories: release, prerelease, news, video, community.
+#   news      = blogs / news feeds
+#   release   = GitHub releases/tags and release feeds (the classifier turns
+#               version strings like "-beta"/"-rc"/"-preview" into prerelease)
+#   video     = YouTube channel feeds
+#   community = forums, Reddit, Hacker News
+#
+# Tiers: 1 = major or very active C#, 2 = niche C# (frameworks/libraries welcome),
+#        3 = notable without C# (engine disabled by default).
+# Noisy optional channels (YouTube, Reddit, Discourse forums) are disabled per source.
+# Aliases are matched case-insensitively as whole words against outlet articles.
+#
+# All URLs below were verified with curl / the GitHub API on 2026-10-22,
+# except Reddit (rate-limited) where noted.
+#
+# Redot Engine is intentionally excluded everywhere (user request).
 
+# ===========================================================================
+# Tier 1: the user's own list
+# ===========================================================================
+
+# --- Unity ------------------------------------------------------------------
+[[engine]]
+id = "unity"
+name = "Unity"
+tier = 1
+csharp = "native (C# scripting)"
+homepage = "https://unity.com"
+aliases = ["unity", "unity3d", "unity engine", "unity 6", "unity technologies"]
+exclude = ["ubuntu unity", "unity desktop", "unity shell", "unitypoint"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://unity.com/blog/rss"
+  category = "news"
+  # Editor releases via the Unity release JSON API.
+  [[engine.source]]
+  kind = "unity"
+  limit = 25
+  category = "release"
+  [[engine.source]]
+  kind = "feed"
+  url = "https://www.youtube.com/feeds/videos.xml?user=Unity3D"
+  category = "video"
+  enabled = false
+  # Reddit: not verified (rate-limited).
+  [[engine.source]]
+  kind = "feed"
+  url = "https://www.reddit.com/r/Unity3D/new/.rss"
+  category = "community"
+  enabled = false
+
+# --- Unreal Engine ------------------------------------------------------------
+# The EpicGames/UnrealEngine GitHub repo is private (requires account linking),
+# so there is no release source; releases are announced on the news feed.
+# Note: the news feed is Atom but served as text/html.
+[[engine]]
+id = "unreal"
+name = "Unreal Engine"
+tier = 1
+csharp = "plugins only (UnrealSharp)"
+homepage = "https://www.unrealengine.com"
+aliases = ["unreal", "unreal engine", "ue5", "ue6", "uefn", "metahuman", "nanite", "unrealsharp"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://www.unrealengine.com/en-US/rss"
+  category = "news"
+  [[engine.source]]
+  kind = "feed"
+  url = "https://forums.unrealengine.com/latest.rss"
+  category = "community"
+  enabled = false
+  [[engine.source]]
+  kind = "feed"
+  url = "https://www.youtube.com/feeds/videos.xml?user=UnrealDevelopmentKit"
+  category = "video"
+  enabled = false
+
+# --- Godot --------------------------------------------------------------------
 [[engine]]
 id = "godot"
 name = "Godot"
@@ -17,28 +93,982 @@ aliases = ["godot", "godot engine", "gdscript"]
   kind = "github"
   repo = "godotengine/godot"
   category = "release"
+  [[engine.source]]
+  kind = "feed"
+  url = "https://forum.godotengine.org/latest.rss"
+  category = "community"
+  enabled = false
+  [[engine.source]]
+  kind = "feed"
+  url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCKIDvfZD1ZhY4_hhbotf7wA"
+  category = "video"
+  enabled = false
 
+# --- Stride -------------------------------------------------------------------
+# GitHub releases also include launcher/ and vsix/ releases; keep only releases/.
+[[engine]]
+id = "stride"
+name = "Stride"
+tier = 1
+csharp = "native (engine written in C#)"
+homepage = "https://www.stride3d.net"
+aliases = ["stride3d", "stride engine", "stride game engine", "xenko"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://www.stride3d.net/feed.xml"
+  category = "news"
+  [[engine.source]]
+  kind = "github"
+  repo = "stride3d/stride"
+  tag_prefix = "releases/"
+  category = "release"
+  [[engine.source]]
+  kind = "feed"
+  url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCu-xqv-TLwv6L0An7MJJA5A"
+  category = "video"
+  enabled = false
+
+# --- Flax Engine ----------------------------------------------------------------
 [[engine]]
 id = "flax"
 name = "Flax Engine"
 tier = 1
-csharp = "native"
+csharp = "native (C# scripting, C++ core)"
 homepage = "https://flaxengine.com"
-aliases = ["flax engine", "flaxengine", "flax"]
+aliases = ["flax engine", "flaxengine"]
   [[engine.source]]
   kind = "feed"
   url = "https://flaxengine.com/blog/feed/"
   category = "news"
+  interval_minutes = 180
   [[engine.source]]
   kind = "github"
   repo = "FlaxEngine/FlaxEngine"
   category = "release"
+  [[engine.source]]
+  kind = "feed"
+  url = "https://forum.flaxengine.com/latest.rss"
+  category = "community"
+  enabled = false
+  [[engine.source]]
+  kind = "feed"
+  url = "https://www.youtube.com/feeds/videos.xml?channel_id=UChdER2A3n19rJWIMOZJClhw"
+  category = "video"
+  enabled = false
 
+# --- S&Box (Facepunch) ----------------------------------------------------------
+# sbox-public has no GitHub releases, only date-style tags (e.g. 26.10.13).
+[[engine]]
+id = "sbox"
+name = "S&Box"
+tier = 1
+csharp = "native (C# on Source 2)"
+homepage = "https://sbox.game"
+aliases = ["s&box", "sbox", "s and box"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://sbox.game/rss/news"
+  category = "news"
+  [[engine.source]]
+  kind = "feed"
+  url = "https://store.steampowered.com/feeds/news/app/590830/"
+  category = "news"
+  [[engine.source]]
+  kind = "github"
+  repo = "Facepunch/sbox-public"
+  mode = "tags"
+  category = "release"
+  [[engine.source]]
+  kind = "feed"
+  url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCocUpIW26xH-Lui73YdcoVg"
+  category = "video"
+  enabled = false
+
+# --- Prowl Engine ---------------------------------------------------------------
+# No blog; GitHub releases are previews (classified as prerelease).
+[[engine]]
+id = "prowl"
+name = "Prowl Engine"
+tier = 1
+csharp = "native (engine written in C#, .NET 8)"
+homepage = "https://github.com/ProwlEngine/Prowl"
+aliases = ["prowl engine", "prowlengine"]
+  [[engine.source]]
+  kind = "github"
+  repo = "ProwlEngine/Prowl"
+  category = "release"
+
+# --- LODZERO --------------------------------------------------------------------
+# Closed early access. The only machine-readable signal is the commit history of
+# the public website repo: this tracks website changes, not engine releases.
+[[engine]]
+id = "lodzero"
+name = "LODZERO"
+tier = 2
+csharp = "native (engine written in C#)"
+homepage = "https://lodzero.com"
+aliases = ["lodzero"]
+  [[engine.source]]
+  kind = "github"
+  repo = "osmanlodzero/lodzero.com"
+  mode = "commits"
+  category = "news"
+  interval_minutes = 360
+
+# --- OpenEngine (Game Crafters Guild) -----------------------------------------------
+# Alpha prereleases only so far.
+[[engine]]
+id = "openengine"
+name = "OpenEngine"
+tier = 1
+csharp = "first-class (.NET 10 CoreCLR, hot reload)"
+homepage = "https://openengine.dev"
+aliases = ["openengine", "game crafters guild"]
+  [[engine.source]]
+  kind = "github"
+  repo = "Game-Crafters-Guild/OpenEngine"
+  category = "release"
+
+# ===========================================================================
+# Tier 1: additions (C#)
+# ===========================================================================
+
+# --- MonoGame -------------------------------------------------------------------
+# blog/feed.xml verified working (Atom, ~87 entries).
+[[engine]]
+id = "monogame"
+name = "MonoGame"
+tier = 1
+csharp = "native (C# framework)"
+homepage = "https://monogame.net"
+aliases = ["monogame"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://monogame.net/blog/feed.xml"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "MonoGame/MonoGame"
+  category = "release"
+
+# --- FNA ------------------------------------------------------------------------
+# The site feed is valid RSS but currently has no items; releases are monthly (YY.MM).
+[[engine]]
+id = "fna"
+name = "FNA"
+tier = 1
+csharp = "native (XNA4 reimplementation in C#)"
+homepage = "https://fna-xna.github.io"
+aliases = ["fna", "fna-xna"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://fna-xna.github.io/feed.xml"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "FNA-XNA/FNA"
+  category = "release"
+
+# --- NeoAxis --------------------------------------------------------------------
+# /newsfeed is valid RSS 2.0 (served as application/octet-stream).
+# The GitHub repo has no releases or tags; commits are a mirror dump, so disabled.
+[[engine]]
+id = "neoaxis"
+name = "NeoAxis Engine"
+tier = 1
+csharp = "native (C# engine and scripting)"
+homepage = "https://www.neoaxis.com"
+aliases = ["neoaxis", "neoaxis engine"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://www.neoaxis.com/newsfeed"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "NeoAxis/NeoAxisEngine"
+  mode = "commits"
+  category = "news"
+  interval_minutes = 360
+  enabled = false
+
+# --- Evergine -------------------------------------------------------------------
+# No dedicated feed; the Plain Concepts company blog, filtered on "evergine".
+[[engine]]
+id = "evergine"
+name = "Evergine"
+tier = 1
+csharp = "native (C# engine)"
+homepage = "https://evergine.com"
+aliases = ["evergine", "wave engine"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://www.plainconcepts.com/feed/"
+  category = "news"
+  interval_minutes = 180
+  keywords = ["evergine"]
+
+# --- UNIGINE --------------------------------------------------------------------
+[[engine]]
+id = "unigine"
+name = "UNIGINE"
+tier = 1
+csharp = "C# API"
+homepage = "https://unigine.com"
+aliases = ["unigine"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://unigine.com/news.rss"
+  category = "news"
+  interval_minutes = 180
+
+# --- Silk.NET -------------------------------------------------------------------
+[[engine]]
+id = "silknet"
+name = "Silk.NET"
+tier = 1
+csharp = "bindings (OpenGL/Vulkan/DirectX/OpenAL/...)"
+homepage = "https://dotnet.github.io/Silk.NET"
+aliases = ["silk.net", "silknet"]
+  [[engine.source]]
+  kind = "github"
+  repo = "dotnet/Silk.NET"
+  category = "release"
+
+# --- BRUTAL (Ahwoo / RocketWerkz) -------------------------------------------------
+# C# framework (not an engine: no editor/scene graph/renderer) behind Kitten Space
+# Agency and RimWorld's Waylith engine; open-sourced 2026-10-15.
+# Repo: github.com/ahwootech/BRUTAL. No GitHub releases; it tags each library
+# separately (e.g. "Vulkan/v2026.10.2", ~35 libraries), so tags mode is the release
+# signal (bursty when many libraries ship at once).
+# Homepage https://ahwoo.com/brutal and forum https://forums.ahwoo.com/forums/brutal/
+# were offline (503, "security update") on 2026-10-22, so no feed was verified.
+# Revisit: the forum may expose an RSS feed once it is back.
+# Aliases avoid bare "brutal" (a common word).
+[[engine]]
+id = "brutal"
+name = "BRUTAL"
+tier = 1
+csharp = "native (C# framework over native libs, Vulkan)"
+homepage = "https://ahwoo.com/brutal"
+aliases = ["brutal framework", "brutal game framework", "brutal c# framework", "ahwootech"]
+  [[engine.source]]
+  kind = "github"
+  repo = "ahwootech/BRUTAL"
+  mode = "tags"
+  category = "release"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "ahwootech/BRUTAL"
+  mode = "commits"
+  category = "news"
+  interval_minutes = 360
+  enabled = false
+
+# ===========================================================================
+# Tier 2: niche C# engines, frameworks and libraries
+# Commit-mode sources poll every 360 minutes because commits are noisy.
+# ===========================================================================
+
+[[engine]]
+id = "kni"
+name = "KNI"
+tier = 2
+csharp = "native (XNA-style C# framework)"
+homepage = "https://github.com/kniEngine/kni"
+aliases = ["kni engine", "kniengine"]
+  [[engine.source]]
+  kind = "github"
+  repo = "kniEngine/kni"
+  category = "release"
+
+# Murder has no releases; commits are frequent, so disabled by default.
+[[engine]]
+id = "murder"
+name = "Murder Engine"
+tier = 2
+csharp = "native (engine written in C#)"
+homepage = "https://github.com/isadorasophia/murder"
+aliases = ["murder engine"]
+  [[engine.source]]
+  kind = "github"
+  repo = "isadorasophia/murder"
+  mode = "commits"
+  category = "news"
+  interval_minutes = 360
+  enabled = false
+
+[[engine]]
+id = "raylibcs"
+name = "Raylib-cs"
+tier = 2
+csharp = "bindings (raylib for C#)"
+homepage = "https://github.com/raylib-cs/raylib-cs"
+aliases = ["raylib-cs"]
+  [[engine.source]]
+  kind = "github"
+  repo = "raylib-cs/raylib-cs"
+  category = "release"
+
+[[engine]]
+id = "foster"
+name = "Foster"
+tier = 2
+csharp = "native (C# framework)"
+homepage = "https://github.com/FosterFramework/Foster"
+aliases = ["foster framework", "fosterframework"]
+  [[engine.source]]
+  kind = "github"
+  repo = "FosterFramework/Foster"
+  category = "release"
+
+# MoonWorks has no releases; commits are low-volume, kept enabled.
+[[engine]]
+id = "moonworks"
+name = "MoonWorks"
+tier = 2
+csharp = "native (C# framework)"
+homepage = "https://github.com/MoonsideGames/MoonWorks"
+aliases = ["moonworks"]
+  [[engine.source]]
+  kind = "github"
+  repo = "MoonsideGames/MoonWorks"
+  mode = "commits"
+  category = "news"
+  interval_minutes = 360
+
+[[engine]]
+id = "monogame-extended"
+name = "MonoGame.Extended"
+tier = 2
+csharp = "native (MonoGame library)"
+homepage = "https://github.com/MonoGame-Extended/Monogame-Extended"
+aliases = ["monogame.extended", "monogame extended"]
+  [[engine.source]]
+  kind = "github"
+  repo = "MonoGame-Extended/Monogame-Extended"
+  category = "release"
+
+# Nez's last release is from 2019; commits are rare, kept enabled.
+[[engine]]
+id = "nez"
+name = "Nez"
+tier = 2
+csharp = "native (MonoGame/FNA framework)"
+homepage = "https://github.com/prime31/Nez"
+aliases = ["nez framework"]
+  [[engine.source]]
+  kind = "github"
+  repo = "prime31/Nez"
+  mode = "commits"
+  category = "news"
+  interval_minutes = 360
+
+# FlatRedBall publishes a rolling "glue-daily" prerelease plus dated releases.
+[[engine]]
+id = "flatredball"
+name = "FlatRedBall"
+tier = 2
+csharp = "native (C# engine on MonoGame/FNA)"
+homepage = "https://www.flatredball.com"
+aliases = ["flatredball", "flat red ball"]
+  [[engine.source]]
+  kind = "github"
+  repo = "vchelaru/FlatRedBall"
+  category = "release"
+
+[[engine]]
+id = "gum"
+name = "Gum"
+tier = 2
+csharp = "native (C# UI layout tool/runtime)"
+homepage = "https://github.com/vchelaru/Gum"
+aliases = ["gum ui", "gum layout"]
+  [[engine.source]]
+  kind = "github"
+  repo = "vchelaru/Gum"
+  category = "release"
+
+[[engine]]
+id = "myra"
+name = "Myra"
+tier = 2
+csharp = "native (C# UI library)"
+homepage = "https://github.com/MyraUI/Myra"
+aliases = ["myra ui"]
+  [[engine.source]]
+  kind = "github"
+  repo = "MyraUI/Myra"
+  category = "release"
+
+[[engine]]
+id = "sadconsole"
+name = "SadConsole"
+tier = 2
+csharp = "native (C# console/roguelike library)"
+homepage = "https://sadconsole.com"
+aliases = ["sadconsole"]
+  [[engine.source]]
+  kind = "github"
+  repo = "Thraka/SadConsole"
+  category = "release"
+
+[[engine]]
+id = "osu-framework"
+name = "osu!framework"
+tier = 2
+csharp = "native (C# framework)"
+homepage = "https://github.com/ppy/osu-framework"
+aliases = ["osu!framework", "osu-framework", "osu framework"]
+  [[engine.source]]
+  kind = "github"
+  repo = "ppy/osu-framework"
+  category = "release"
+
+[[engine]]
+id = "nu"
+name = "Nu Game Engine"
+tier = 2
+csharp = "native .NET (F#)"
+homepage = "https://github.com/bryanedds/Nu"
+aliases = ["nu game engine", "nu engine"]
+  [[engine.source]]
+  kind = "github"
+  repo = "bryanedds/Nu"
+  category = "release"
+
+# rbfx has only stale "latest"/"test" releases; commits are busy, so disabled.
+[[engine]]
+id = "rbfx"
+name = "rbfx (Rebel Fork Framework)"
+tier = 2
+csharp = "C# bindings (Urho3D fork)"
+homepage = "https://rebelfork.io"
+aliases = ["rbfx", "rebel fork framework"]
+  [[engine.source]]
+  kind = "github"
+  repo = "rbfx/rbfx"
+  mode = "commits"
+  category = "news"
+  interval_minutes = 360
+  enabled = false
+
+[[engine]]
+id = "arch"
+name = "Arch ECS"
+tier = 2
+csharp = "native (C# ECS library)"
+homepage = "https://github.com/genaray/Arch"
+aliases = ["arch ecs"]
+  [[engine.source]]
+  kind = "github"
+  repo = "genaray/Arch"
+  category = "release"
+
+[[engine]]
+id = "friflo"
+name = "Friflo.Engine.ECS"
+tier = 2
+csharp = "native (C# ECS library)"
+homepage = "https://github.com/friflo/Friflo.Engine.ECS"
+aliases = ["friflo", "friflo.engine.ecs"]
+  [[engine.source]]
+  kind = "github"
+  repo = "friflo/Friflo.Engine.ECS"
+  category = "release"
+
+[[engine]]
+id = "bepu"
+name = "BEPUphysics v2"
+tier = 2
+csharp = "native (C# physics library)"
+homepage = "https://github.com/bepu/bepuphysics2"
+aliases = ["bepu", "bepuphysics"]
+  [[engine.source]]
+  kind = "github"
+  repo = "bepu/bepuphysics2"
+  category = "release"
+
+[[engine]]
+id = "jitter"
+name = "Jitter Physics 2"
+tier = 2
+csharp = "native (C# physics library)"
+homepage = "https://jitterphysics.com"
+aliases = ["jitter physics", "jitterphysics"]
+  [[engine.source]]
+  kind = "github"
+  repo = "notgiven688/jitterphysics2"
+  category = "release"
+
+[[engine]]
+id = "box2dnet"
+name = "Box2D.NET"
+tier = 2
+csharp = "native (C# port of Box2D)"
+homepage = "https://github.com/ikpil/Box2D.NET"
+aliases = ["box2d.net"]
+  [[engine.source]]
+  kind = "github"
+  repo = "ikpil/Box2D.NET"
+  category = "release"
+
+[[engine]]
+id = "dotrecast"
+name = "DotRecast"
+tier = 2
+csharp = "native (C# port of Recast & Detour)"
+homepage = "https://github.com/ikpil/DotRecast"
+aliases = ["dotrecast"]
+  [[engine.source]]
+  kind = "github"
+  repo = "ikpil/DotRecast"
+  category = "release"
+
+[[engine]]
+id = "moonsharp"
+name = "MoonSharp"
+tier = 2
+csharp = "native (Lua interpreter in C#)"
+homepage = "https://www.moonsharp.org"
+aliases = ["moonsharp"]
+  [[engine.source]]
+  kind = "github"
+  repo = "moonsharp-devs/moonsharp"
+  category = "release"
+
+# Blazium: Godot fork with C# support (kept; separate from the excluded Redot).
+# Publishes frequent "-nightly" prereleases.
+[[engine]]
+id = "blazium"
+name = "Blazium"
+tier = 2
+csharp = "first-class (.NET build, Godot fork)"
+homepage = "https://blazium.app"
+aliases = ["blazium", "blazium engine"]
+  [[engine.source]]
+  kind = "github"
+  repo = "blazium-games/blazium"
+  category = "release"
+
+# ===========================================================================
+# Tier 3: notable engines without C# (disabled at the engine level)
+# ===========================================================================
+
+[[engine]]
+id = "bevy"
+name = "Bevy"
+tier = 3
+csharp = "none (Rust)"
+homepage = "https://bevy.org"
+enabled = false
+aliases = ["bevy", "bevy engine"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://bevy.org/atom.xml"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "bevyengine/bevy"
+  category = "release"
+
+[[engine]]
+id = "fyrox"
+name = "Fyrox"
+tier = 3
+csharp = "none (Rust)"
+homepage = "https://fyrox.rs"
+enabled = false
+aliases = ["fyrox"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://fyrox.rs/rss.xml"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "FyroxEngine/Fyrox"
+  category = "release"
+
+[[engine]]
+id = "defold"
+name = "Defold"
+tier = 3
+csharp = "none (Lua)"
+homepage = "https://defold.com"
+enabled = false
+aliases = ["defold"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://defold.com/feed.xml"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "defold/defold"
+  category = "release"
+
+[[engine]]
+id = "o3de"
+name = "O3DE"
+tier = 3
+csharp = "none (C++/Lua; community C# gem only)"
+homepage = "https://o3de.org"
+enabled = false
+aliases = ["o3de", "open 3d engine"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://o3de.org/feed/"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "o3de/o3de"
+  category = "release"
+
+# CRYENGINE is largely dormant.
+[[engine]]
+id = "cryengine"
+name = "CRYENGINE"
+tier = 3
+csharp = "legacy C# support"
+homepage = "https://www.cryengine.com"
+enabled = false
+aliases = ["cryengine"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://www.cryengine.com/rss"
+  category = "news"
+  interval_minutes = 180
+
+[[engine]]
+id = "gamemaker"
+name = "GameMaker"
+tier = 3
+csharp = "none (GML)"
+homepage = "https://gamemaker.io"
+enabled = false
+aliases = ["gamemaker", "game maker studio"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://gamemaker.io/en/blog/rss"
+  category = "news"
+  interval_minutes = 180
+
+[[engine]]
+id = "cocos"
+name = "Cocos"
+tier = 3
+csharp = "none (TypeScript)"
+homepage = "https://www.cocos.com"
+enabled = false
+aliases = ["cocos creator", "cocos2d", "cocos engine"]
+  [[engine.source]]
+  kind = "github"
+  repo = "cocos/cocos-engine"
+  category = "release"
+
+[[engine]]
+id = "raylib"
+name = "raylib"
+tier = 3
+csharp = "none (C; see Raylib-cs for C# bindings)"
+homepage = "https://www.raylib.com"
+enabled = false
+aliases = ["raylib"]
+  [[engine.source]]
+  kind = "github"
+  repo = "raysan5/raylib"
+  category = "release"
+
+[[engine]]
+id = "babylonjs"
+name = "Babylon.js"
+tier = 3
+csharp = "none (TypeScript)"
+homepage = "https://www.babylonjs.com"
+enabled = false
+aliases = ["babylon.js", "babylonjs"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://babylonjs.medium.com/feed"
+  category = "news"
+  interval_minutes = 180
+  # Near-daily releases.
+  [[engine.source]]
+  kind = "github"
+  repo = "BabylonJS/Babylon.js"
+  category = "release"
+
+[[engine]]
+id = "playcanvas"
+name = "PlayCanvas"
+tier = 3
+csharp = "none (JavaScript)"
+homepage = "https://playcanvas.com"
+enabled = false
+aliases = ["playcanvas"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://blog.playcanvas.com/rss.xml"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "playcanvas/engine"
+  category = "release"
+
+[[engine]]
+id = "phaser"
+name = "Phaser"
+tier = 3
+csharp = "none (JavaScript)"
+homepage = "https://phaser.io"
+enabled = false
+aliases = ["phaser.js", "phaserjs", "phaser 4", "phaser framework"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://phaser.io/news.rss"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "phaserjs/phaser"
+  category = "release"
+
+[[engine]]
+id = "libgdx"
+name = "libGDX"
+tier = 3
+csharp = "none (Java)"
+homepage = "https://libgdx.com"
+enabled = false
+aliases = ["libgdx"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://libgdx.com/feed.xml"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "libgdx/libgdx"
+  category = "release"
+
+[[engine]]
+id = "gdevelop"
+name = "GDevelop"
+tier = 3
+csharp = "none (visual events / JavaScript)"
+homepage = "https://gdevelop.io"
+enabled = false
+aliases = ["gdevelop"]
+  [[engine.source]]
+  kind = "github"
+  repo = "4ian/GDevelop"
+  category = "release"
+
+[[engine]]
+id = "solar2d"
+name = "Solar2D"
+tier = 3
+csharp = "none (Lua)"
+homepage = "https://solar2d.com"
+enabled = false
+aliases = ["solar2d", "corona sdk"]
+  [[engine.source]]
+  kind = "github"
+  repo = "coronalabs/corona"
+  category = "release"
+
+[[engine]]
+id = "wicked"
+name = "Wicked Engine"
+tier = 3
+csharp = "none (C++/Lua)"
+homepage = "https://wickedengine.net"
+enabled = false
+aliases = ["wicked engine", "wickedengine"]
+  [[engine.source]]
+  kind = "github"
+  repo = "turanszkij/WickedEngine"
+  category = "release"
+
+[[engine]]
+id = "ezengine"
+name = "ezEngine"
+tier = 3
+csharp = "none (C++/AngelScript; C# editor only)"
+homepage = "https://ezengine.net"
+enabled = false
+aliases = ["ezengine", "ez engine"]
+  [[engine.source]]
+  kind = "github"
+  repo = "ezEngine/ezEngine"
+  category = "release"
+
+[[engine]]
+id = "armory"
+name = "Armory3D"
+tier = 3
+csharp = "none (Haxe)"
+homepage = "https://armory3d.org"
+enabled = false
+aliases = ["armory3d", "armory engine"]
+  [[engine.source]]
+  kind = "github"
+  repo = "armory3d/armory"
+  category = "release"
+
+[[engine]]
+id = "excalibur"
+name = "Excalibur.js"
+tier = 3
+csharp = "none (TypeScript)"
+homepage = "https://excaliburjs.com"
+enabled = false
+aliases = ["excalibur.js", "excaliburjs"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://excaliburjs.com/blog/rss.xml"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "excaliburjs/Excalibur"
+  category = "release"
+
+# ===========================================================================
+# Outlets: general game-dev news. Items are tagged with engines via aliases.
+# ===========================================================================
+
+# --- GameFromScratch --------------------------------------------------------------
+# Very high signal. The YouTube feed stays enabled; the dedup layer handles
+# overlap with the blog.
 [[outlet]]
 id = "gamefromscratch"
 name = "GameFromScratch"
 homepage = "https://gamefromscratch.com"
+require_engine_match = false
   [[outlet.source]]
   kind = "feed"
   url = "https://gamefromscratch.com/feed/"
   category = "news"
+  [[outlet.source]]
+  kind = "feed"
+  url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCr-5TdGkKszdbboXXsFZJTQ"
+  category = "video"
+
+# --- GameDev.net ------------------------------------------------------------------
+[[outlet]]
+id = "gamedevnet"
+name = "GameDev.net"
+homepage = "https://www.gamedev.net"
+require_engine_match = false
+  [[outlet.source]]
+  kind = "feed"
+  url = "https://www.gamedev.net/news/rss/"
+  category = "news"
+
+# --- Hacker News (Algolia) ----------------------------------------------------------
+# Algolia does not support OR (it treats "OR" as a word), so engines get
+# separate queries. Bare "unity" is far too noisy on HN and is not queried;
+# require_engine_match drops anything that matches no engine alias.
+[[outlet]]
+id = "hackernews"
+name = "Hacker News"
+homepage = "https://news.ycombinator.com"
+require_engine_match = true
+  [[outlet.source]]
+  kind = "hn"
+  query = "\"game engine\""
+  category = "community"
+  [[outlet.source]]
+  kind = "hn"
+  query = "godot"
+  category = "community"
+  [[outlet.source]]
+  kind = "hn"
+  query = "monogame"
+  category = "community"
+  [[outlet.source]]
+  kind = "hn"
+  query = "\"unreal engine\""
+  category = "community"
+
+# --- 80 Level -------------------------------------------------------------------
+[[outlet]]
+id = "80lv"
+name = "80 Level"
+homepage = "https://80.lv"
+require_engine_match = true
+  [[outlet.source]]
+  kind = "feed"
+  url = "https://80.lv/feed"
+  category = "news"
+
+# --- Game Developer -------------------------------------------------------------
+[[outlet]]
+id = "gamedeveloper"
+name = "Game Developer"
+homepage = "https://www.gamedeveloper.com"
+require_engine_match = true
+  [[outlet.source]]
+  kind = "feed"
+  url = "https://www.gamedeveloper.com/rss.xml"
+  category = "news"
+
+# --- CG Channel ------------------------------------------------------------------
+[[outlet]]
+id = "cgchannel"
+name = "CG Channel"
+homepage = "https://www.cgchannel.com"
+require_engine_match = true
+  [[outlet.source]]
+  kind = "feed"
+  url = "https://www.cgchannel.com/category/news/feed/"
+  category = "news"
+  cache_bust = true
+
+# --- Reddit ---------------------------------------------------------------------
+# Disabled: Reddit rate-limits hard. Not verified.
+[[outlet]]
+id = "reddit"
+name = "Reddit (game dev subreddits)"
+homepage = "https://www.reddit.com/r/gamedev"
+require_engine_match = true
+enabled = false
+  [[outlet.source]]
+  kind = "feed"
+  url = "https://www.reddit.com/r/gamedev+godot+Unity3D+unrealengine+monogame/new/.rss"
+  category = "community"
+  interval_minutes = 60
+
+# --- Game Dev Digest ---------------------------------------------------------------
+# Disabled: newsletter paused since 2026-05 (feed still resolves).
+[[outlet]]
+id = "gamedevdigest"
+name = "Game Dev Digest"
+homepage = "https://gamedevdigest.com"
+require_engine_match = false
+enabled = false
+  [[outlet.source]]
+  kind = "feed"
+  url = "https://feeds.feedburner.com/GameDevDigest"
+  category = "news"
+
+# ===========================================================================
+# Skipped on purpose
+# ===========================================================================
+# - Duality: inactive.
+# - Urho3D / UrhoSharp: Urho3D archived, UrhoSharp abandoned (see rbfx instead).
+# - Xenko: renamed to Stride (covered via the "xenko" alias on Stride).
+# - Ultraviolet: inactive.
+# - Banshee: abandoned.
+# - Hazel: educational C++ engine, no release cadence.
+# - DefaultEcs: archived/unmaintained (see Arch / Friflo).
+# - Veldrid: effectively unmaintained.
+# - Redot Engine: excluded at the user's request.
