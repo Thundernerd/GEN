@@ -494,6 +494,7 @@ async fn admin_adds_and_removes_a_source() {
     let (_, body) = get_as(&st, "/sources", &cookie).await;
     assert!(body.contains("bevyengine&#x2f;bevy (releases)"));
     assert!(body.contains("added here"));
+    assert!(body.contains(r#"popovertarget="remove-source-"#));
 
     let remove = format!("source_id={}&next=%2Fengine%2Fbevy", urlenc(id));
     let (status, headers, _) =
@@ -625,6 +626,8 @@ async fn admin_adds_an_engine_and_its_first_source() {
     assert!(body.contains("Stride"));
     let (_, body) = get_as(&st, "/sources?owner=stride", &cookie).await;
     assert!(body.contains("0 of 0 enabled"));
+    assert!(body.contains(r#"popovertarget="remove-engine-stride""#));
+    assert!(body.contains("It was added here, so it can't be restored."));
     assert!(body.contains(r#"<option value="stride" selected>"#));
 
     let form = "owner_id=stride&kind=github&repo=stride3d%2Fstride";

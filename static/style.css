@@ -499,14 +499,33 @@ details.panel .form-error { margin-top: 0; }
 
 .group-action { font-size: 0.8rem; font-weight: 500; margin-left: 0.6rem; }
 .group-action::before { content: "·"; display: inline-block; margin-right: 0.6rem; color: var(--muted); }
-details.group-remove { display: inline; }
-details.group-remove > summary { display: inline; cursor: pointer; color: var(--link); }
-details.group-remove form { display: inline-block; margin: 0 0 0 0.6rem; vertical-align: middle; }
+.link-button { font: inherit; font-size: 0.8rem; font-weight: 500; color: var(--link); background: none; border: 0; padding: 0; cursor: pointer; }
+.link-button:hover { text-decoration: underline; }
 
-table.sources td.actions > * + * { margin-top: 0.35rem; }
-details.confirm > summary { list-style: none; }
-details.confirm > summary::-webkit-details-marker { display: none; }
-details.confirm form { margin-top: 0.35rem; }
+/* Confirmation popover (opened with `popovertarget`, centered in the top layer). */
+.confirm-dialog {
+  width: min(28rem, calc(100vw - 2rem));
+  margin: auto;
+  padding: 1.25rem 1.25rem 1rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: 0 12px 32px rgb(0 0 0 / 0.25);
+  font-size: 0.95rem;
+  font-weight: 400;
+  text-align: left;
+  white-space: normal;
+}
+.confirm-dialog::backdrop { background: rgb(0 0 0 / 0.45); }
+.confirm-dialog h2 { font-size: 1.1rem; margin: 0 0 0.6rem; }
+.confirm-dialog p { margin: 0 0 0.6rem; }
+.confirm-dialog .dialog-note { color: var(--muted); font-size: 0.875rem; }
+.confirm-dialog .dialog-target { overflow-wrap: anywhere; }
+.dialog-actions { display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 1rem; }
+.dialog-actions form { margin: 0; }
+
+table.sources td.actions > :is(form, button) + :is(form, button) { margin-top: 0.35rem; }
 
 .removed-list { list-style: none; margin: 0; padding: 0; }
 .removed-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.45rem 0; border-top: 1px solid var(--border); font-size: 0.875rem; overflow-wrap: anywhere; }

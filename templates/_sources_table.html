@@ -7,6 +7,7 @@
     <tr><th class="center">Status</th><th>Source</th><th class="center">Last OK</th><th class="center">Failures</th><th>Last error</th>{% if admin %}<th class="center">Actions</th>{% endif %}</tr>
   </thead>
   {%- for g in groups %}
+  {%- set group_index = loop.index %}
   <tbody class="source-group">
     {%- if grouped %}
     <tr class="group-head">
@@ -17,13 +18,29 @@
         {%- if g.custom %}<span class="group-count">added here</span>{% endif %}
         {%- if admin %}
         <a class="group-action" href="/sources?owner={{ g.owner_id }}#add-source">Add source</a>
-        <details class="confirm group-remove">
-          <summary class="group-action">Remove {{ "engine" if g.owner_kind == "engine" else "outlet" }}</summary>
-          <form method="post" action="/owners/remove">
-            <input type="hidden" name="owner_id" value="{{ g.owner_id }}">
-            <button type="submit" class="btn-small btn-danger">Remove {{ g.owner }}{% if g.total %}, its {{ g.total }} source{{ "s" if g.total != 1 }} and their items{% endif %}</button>
-          </form>
-        </details>
+        {%- set what = "engine" if g.owner_kind == "engine" else "outlet" %}
+        {%- set dialog = "remove-" ~ g.owner_kind ~ "-" ~ g.owner_id %}
+        <button type="button" class="group-action link-button" popovertarget="{{ dialog }}">Remove {{ what }}</button>
+        {#- A popover needs no script: the button opens it, Esc or a click outside closes it. #}
+        <div popover id="{{ dialog }}" class="confirm-dialog" role="dialog" aria-labelledby="{{ dialog }}-title">
+          <h2 id="{{ dialog }}-title">Remove {{ g.owner }}?</h2>
+          <p>
+            {%- if g.total %}This removes the {{ what }} with its {{ g.total }} source{{ "s" if g.total != 1 }} and deletes their stored items.
+            {%- else %}This removes the {{ what }}.{% endif %}
+            {%- if g.owner_kind == "engine" %} Its tag is also removed from items of other sources.{% endif %}
+          </p>
+          <p class="dialog-note">
+            {%- if g.custom %}It was added here, so it can't be restored.
+            {%- else %}It comes from sources.toml and can be restored later; its items are then fetched again.{% endif %}
+          </p>
+          <div class="dialog-actions">
+            <button type="button" class="btn-small btn-quiet" popovertarget="{{ dialog }}" popovertargetaction="hide">Cancel</button>
+            <form method="post" action="/owners/remove">
+              <input type="hidden" name="owner_id" value="{{ g.owner_id }}">
+              <button type="submit" class="btn-small btn-danger">Remove {{ what }}</button>
+            </form>
+          </div>
+        </div>
         {%- endif %}
       </th>
     </tr>
@@ -47,14 +64,26 @@
           <input type="hidden" name="next" value="{{ next }}">
           <button type="submit" class="btn-small{% if s.enabled %} btn-quiet{% endif %}">{{ "Disable" if s.enabled else "Enable" }}</button>
         </form>
-        <details class="confirm">
-          <summary class="btn-small btn-quiet">Remove</summary>
-          <form method="post" action="/sources/remove">
-            <input type="hidden" name="source_id" value="{{ s.id }}">
-            <input type="hidden" name="next" value="{{ next }}">
-            <button type="submit" class="btn-small btn-danger">Remove source and its items</button>
-          </form>
-        </details>
+        {#- Source ids can contain spaces and quotes, so the dialog id uses positions. #}
+        {%- set dialog = "remove-source-" ~ group_index ~ "-" ~ loop.index %}
+        <button type="button" class="btn-small btn-quiet" popovertarget="{{ dialog }}">Remove</button>
+        <div popover id="{{ dialog }}" class="confirm-dialog" role="dialog" aria-labelledby="{{ dialog }}-title">
+          <h2 id="{{ dialog }}-title">Remove this {{ g.owner }} source?</h2>
+          <p class="dialog-target"><span class="source-kind">{{ s.kind }}</span> {{ s.target }}</p>
+          <p>This stops polling it and deletes its stored items. Copies of the same stories from other sources are shown instead.</p>
+          <p class="dialog-note">
+            {%- if s.custom %}It was added here, so it can't be restored.
+            {%- else %}It comes from sources.toml and can be restored later; its items are then fetched again.{% endif %}
+          </p>
+          <div class="dialog-actions">
+            <button type="button" class="btn-small btn-quiet" popovertarget="{{ dialog }}" popovertargetaction="hide">Cancel</button>
+            <form method="post" action="/sources/remove">
+              <input type="hidden" name="source_id" value="{{ s.id }}">
+              <input type="hidden" name="next" value="{{ next }}">
+              <button type="submit" class="btn-small btn-danger">Remove source</button>
+            </form>
+          </div>
+        </div>
       </td>
       {%- endif %}
     </tr>
