@@ -1,3 +1,4 @@
+mod catalog;
 mod classify;
 mod config;
 mod fetch;
@@ -18,7 +19,7 @@ use clap::{Parser, Subcommand};
 use futures::StreamExt;
 use tracing_subscriber::EnvFilter;
 
-use crate::config::{AppConfig, SourcesConfig};
+use crate::config::AppConfig;
 use crate::fetch::Http;
 use crate::pipeline::Pipeline;
 use crate::registry::SourceRegistry;
@@ -36,14 +37,6 @@ struct Cli {
         env = "GEN_CONFIG"
     )]
     config: PathBuf,
-    /// Engines, outlets and their sources.
-    #[arg(
-        long,
-        global = true,
-        default_value = "config/sources.toml",
-        env = "GEN_SOURCES"
-    )]
-    sources: PathBuf,
     #[command(subcommand)]
     command: Option<Command>,
 }
@@ -58,7 +51,7 @@ enum Command {
         #[arg(long)]
         source: Option<String>,
     },
-    /// Validate the config files and list the sources.
+    /// Validate the config file and list the sources stored in the database.
     CheckConfig,
     /// Send a sample item to one notification channel, ignoring its rules.
     NotifyTest {
@@ -78,17 +71,19 @@ async fn main() -> anyhow::Result<()> {
 
     let cli = Cli::parse();
     let app = AppConfig::load(&cli.config)?;
-    let sources = SourcesConfig::load(&cli.sources)?;
 
     match cli.command.unwrap_or(Command::Serve) {
-        Command::CheckConfig => check_config(&app, &sources),
-        Command::Fetch { source } => fetch_once(&app, sources, source.as_deref()).await,
-        Command::Serve => serve(app, sources).await,
-        Command::NotifyTest { channel } => notify_test(&app, &sources, &channel).await,
+        Command::CheckConfig => check_config(&app),
+        Command::Fetch { source } => fetch_once(&app, source.as_deref()).await,
+        Command::Serve => serve(app).await,
+        Command::NotifyTest { channel } => notify_test(&app, &channel).await,
     }
 }
 
-fn check_config(app: &AppConfig, sources: &SourcesConfig) -> anyhow::Result<()> {
+fn check_config(app: &AppConfig) -> anyhow::Result<()> {
+    let pipeline = build_pipeline(app)?;
+    let snapshot = pipeline.registry.current();
+    let sources = &snapshot.config;
     let all = sources.all_sources();
     let enabled = sources.enabled_sources();
     println!(
@@ -106,12 +101,8 @@ fn check_config(app: &AppConfig, sources: &SourcesConfig) -> anyhow::Result<()> 
     Ok(())
 }
 
-async fn fetch_once(
-    app: &AppConfig,
-    sources: SourcesConfig,
-    filter: Option<&str>,
-) -> anyhow::Result<()> {
-    let pipeline = build_pipeline(app, sources)?;
+async fn fetch_once(app: &AppConfig, filter: Option<&str>) -> anyhow::Result<()> {
+    let pipeline = build_pipeline(app)?;
     let selected: Vec<_> = pipeline
         .registry
         .current()
@@ -168,11 +159,7 @@ async fn fetch_once(
     Ok(())
 }
 
-async fn notify_test(
-    app: &AppConfig,
-    sources: &SourcesConfig,
-    channel: &str,
-) -> anyhow::Result<()> {
+async fn notify_test(app: &AppConfig, channel: &str) -> anyhow::Result<()> {
     let Some(cfg) = app.notify.channels.iter().find(|c| c.name == channel) else {
         let names: Vec<_> = app
             .notify
@@ -190,9 +177,11 @@ async fn notify_test(
         );
     };
     let http = Http::new(&app.polling.user_agent, None)?;
+    let store = Store::open(&app.database.path)?;
+    let snapshot = SourceRegistry::load(&store)?.current();
     let ctx = notify::NotifyContext {
         http: &http,
-        sources,
+        sources: &snapshot.config,
         base_url: &app.server.base_url,
     };
     notify::send(&ctx, cfg, &[notify::sample_item()])
@@ -202,8 +191,8 @@ async fn notify_test(
     Ok(())
 }
 
-async fn serve(app: AppConfig, sources: SourcesConfig) -> anyhow::Result<()> {
-    let pipeline = build_pipeline(&app, sources)?;
+async fn serve(app: AppConfig) -> anyhow::Result<()> {
+    let pipeline = build_pipeline(&app)?;
     let state = web::AppState::new(
         pipeline.store.clone(),
         pipeline.toggles.clone(),
@@ -245,10 +234,12 @@ async fn shutdown_signal() {
     }
 }
 
-fn build_pipeline(app: &AppConfig, sources: SourcesConfig) -> anyhow::Result<Pipeline> {
-    let store = Store::open(&app.database.path)?;
+/// Opens the database (seeding the default engines into a new one) and loads the sources.
+fn build_pipeline(app: &AppConfig) -> anyhow::Result<Pipeline> {
+    let mut store = Store::open(&app.database.path)?;
+    let registry = SourceRegistry::load(&store)?;
+    catalog::seed_once(&registry, &mut store)?;
     let toggles = SourceToggles::new(store.source_overrides()?);
-    let registry = SourceRegistry::load(sources, &store)?;
     Ok(Pipeline {
         http: Http::new(&app.polling.user_agent, app.polling.github_token.clone())?,
         store: Arc::new(Mutex::new(store)),

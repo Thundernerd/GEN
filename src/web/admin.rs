@@ -1,7 +1,7 @@
-//! Admin actions that change the set of sources: adding, removing and restoring sources
-//! and engines/outlets.
+//! Admin actions that change the set of sources: adding (by hand or from the catalog's
+//! suggestions) and removing sources and engines/outlets.
 //! Changes go through the [`SourceRegistry`](crate::registry::SourceRegistry), so they take
-//! effect right away and are stored in the database (sources.toml is never written).
+//! effect right away and are stored in the database.
 
 use axum::extract::{Form, State};
 use axum::http::{HeaderMap, StatusCode};
@@ -10,11 +10,12 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use super::{AppError, AppState, PageResult, SourcesParams, non_empty, safe_next, sources_page};
+use crate::catalog;
 use crate::config::{
     EngineConfig, GithubMode, OutletConfig, SourceConfig, SourceSpec, default_unity_limit,
 };
 use crate::model::ItemKind;
-use crate::registry::{CustomOwner, EditError, SourceEdit};
+use crate::registry::{EditError, NewOwner, SourceEdit};
 
 impl AppState {
     /// Applies an edit under the store lock and drops the toggles of purged sources.
@@ -196,15 +197,28 @@ pub(super) async fn remove_source(
     st.respond(result)
 }
 
-pub(super) async fn restore_source(
+/// Adds a suggested source from the catalog to its (present) engine or outlet.
+pub(super) async fn add_suggested_source(
     State(st): State<AppState>,
     headers: HeaderMap,
     Form(form): Form<SourceForm>,
 ) -> Response {
     let result = async {
         require_admin(&st, &headers)?;
-        st.apply_edit(SourceEdit::RestoreSource(form.source_id))
-            .await?;
+        let source = catalog::source(&form.source_id).ok_or_else(|| {
+            AppError::Invalid(format!("“{}” is not a suggested source.", form.source_id))
+        })?;
+        st.apply_edit(SourceEdit::AddSource {
+            owner_id: source.owner.id().to_string(),
+            config: SourceConfig {
+                category: source.category,
+                enabled: source.enabled,
+                interval_minutes: source.interval_minutes,
+                keywords: source.keywords,
+                spec: source.spec,
+            },
+        })
+        .await?;
         Ok(Redirect::to(&safe_next(form.next.as_deref())).into_response())
     }
     .await;
@@ -226,12 +240,12 @@ pub(super) struct AddOwnerForm {
 }
 
 impl AddOwnerForm {
-    fn to_owner(&self) -> Result<CustomOwner, String> {
+    fn to_owner(&self) -> Result<NewOwner, String> {
         let id = non_empty(&self.id).ok_or("Enter an id.")?;
         let name = non_empty(&self.name).ok_or("Enter a name.")?;
         let homepage = non_empty(&self.homepage);
         match non_empty(&self.owner_kind).as_deref() {
-            Some("engine") => Ok(CustomOwner::Engine(EngineConfig {
+            Some("engine") => Ok(NewOwner::Engine(EngineConfig {
                 id,
                 name,
                 tier: non_empty(&self.tier)
@@ -244,7 +258,7 @@ impl AddOwnerForm {
                 exclude: split_list(self.exclude.as_deref()),
                 sources: Vec::new(),
             })),
-            Some("outlet") => Ok(CustomOwner::Outlet(OutletConfig {
+            Some("outlet") => Ok(NewOwner::Outlet(OutletConfig {
                 id,
                 name,
                 homepage,
@@ -313,15 +327,21 @@ pub(super) async fn remove_owner(
     st.respond(result)
 }
 
-pub(super) async fn restore_owner(
+/// Adds a suggested engine or outlet from the catalog, with its sources.
+pub(super) async fn add_suggested_owner(
     State(st): State<AppState>,
     headers: HeaderMap,
     Form(form): Form<OwnerForm>,
 ) -> Response {
     let result = async {
         require_admin(&st, &headers)?;
-        st.apply_edit(SourceEdit::RestoreOwner(form.owner_id))
-            .await?;
+        let owner = catalog::owner(&form.owner_id).ok_or_else(|| {
+            AppError::Invalid(format!(
+                "“{}” is not a suggested engine or outlet.",
+                form.owner_id
+            ))
+        })?;
+        st.apply_edit(SourceEdit::AddOwner(owner)).await?;
         Ok(Redirect::to("/sources").into_response())
     }
     .await;

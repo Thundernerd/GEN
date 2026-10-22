@@ -1,6 +1,6 @@
 //! Runtime on/off switches for sources, shared by the web UI (which changes them) and the
 //! scheduler (which respects them). Persisted as overrides in the store; a source without
-//! an override uses its `enabled` flag from `sources.toml`.
+//! an override uses its own `enabled` flag.
 
 use std::collections::HashMap;
 use std::sync::RwLock;

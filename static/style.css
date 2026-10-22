@@ -527,6 +527,7 @@ details.panel .form-error { margin-top: 0; }
 
 table.sources td.actions > :is(form, button) + :is(form, button) { margin-top: 0.35rem; }
 
-.removed-list { list-style: none; margin: 0; padding: 0; }
-.removed-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.45rem 0; border-top: 1px solid var(--border); font-size: 0.875rem; overflow-wrap: anywhere; }
-.removed-list form { margin: 0; }
+.suggestion-list { list-style: none; margin: 0; padding: 0; }
+.suggestion-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.45rem 0; border-top: 1px solid var(--border); font-size: 0.875rem; overflow-wrap: anywhere; }
+.suggestion-list form { margin: 0; }
+.suggestion-group { margin: 0.75rem 0 0.25rem; font-size: 0.8125rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }

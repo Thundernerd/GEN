@@ -1,19 +1,19 @@
-# Engines, general news outlets and their sources.
+# The catalog of engines, general news outlets and their sources, built into the binary.
+# A new database starts with the engines in `catalog::SEEDED`; everything else here is
+# offered as a suggestion on the Sources page.
 # Source kinds: feed, github (mode = releases|tags|commits), unity, hn, html.
 # Categories: release, prerelease, news, video, community.
 #   news      = blogs / news feeds
 #   release   = GitHub releases/tags and release feeds (the classifier turns
 #               version strings like "-beta"/"-rc"/"-preview" into prerelease)
-#   video     = YouTube channel feeds
-#   community = forums, Reddit, Hacker News
+# YouTube, forum, Reddit and Hacker News sources are left out on purpose.
 #
 # Tiers: 1 = major or very active C#, 2 = niche C# (frameworks/libraries welcome),
-#        3 = notable without C# (engine disabled by default).
-# Noisy optional channels (YouTube, Reddit, Discourse forums) are disabled per source.
+#        3 = notable without C#.
+# Sources with `enabled = false` are added switched off.
 # Aliases are matched case-insensitively as whole words against outlet articles.
 #
-# All URLs below were verified with curl / the GitHub API on 2026-10-22,
-# except Reddit (rate-limited) where noted.
+# All URLs below were verified with curl / the GitHub API on 2026-10-22.
 #
 # Redot Engine is intentionally excluded everywhere (user request).
 
@@ -39,17 +39,6 @@ exclude = ["ubuntu unity", "unity desktop", "unity shell", "unitypoint"]
   kind = "unity"
   limit = 25
   category = "release"
-  [[engine.source]]
-  kind = "feed"
-  url = "https://www.youtube.com/feeds/videos.xml?user=Unity3D"
-  category = "video"
-  enabled = false
-  # Reddit: not verified (rate-limited).
-  [[engine.source]]
-  kind = "feed"
-  url = "https://www.reddit.com/r/Unity3D/new/.rss"
-  category = "community"
-  enabled = false
 
 # --- Unreal Engine ------------------------------------------------------------
 # The EpicGames/UnrealEngine GitHub repo is private (requires account linking),
@@ -66,16 +55,6 @@ aliases = ["unreal", "unreal engine", "ue5", "ue6", "uefn", "metahuman", "nanite
   kind = "feed"
   url = "https://www.unrealengine.com/en-US/rss"
   category = "news"
-  [[engine.source]]
-  kind = "feed"
-  url = "https://forums.unrealengine.com/latest.rss"
-  category = "community"
-  enabled = false
-  [[engine.source]]
-  kind = "feed"
-  url = "https://www.youtube.com/feeds/videos.xml?user=UnrealDevelopmentKit"
-  category = "video"
-  enabled = false
 
 # --- Godot --------------------------------------------------------------------
 [[engine]]
@@ -93,16 +72,6 @@ aliases = ["godot", "godot engine", "gdscript"]
   kind = "github"
   repo = "godotengine/godot"
   category = "release"
-  [[engine.source]]
-  kind = "feed"
-  url = "https://forum.godotengine.org/latest.rss"
-  category = "community"
-  enabled = false
-  [[engine.source]]
-  kind = "feed"
-  url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCKIDvfZD1ZhY4_hhbotf7wA"
-  category = "video"
-  enabled = false
 
 # --- Stride -------------------------------------------------------------------
 # GitHub releases also include launcher/ and vsix/ releases; keep only releases/.
@@ -122,11 +91,6 @@ aliases = ["stride3d", "stride engine", "stride game engine", "xenko"]
   repo = "stride3d/stride"
   tag_prefix = "releases/"
   category = "release"
-  [[engine.source]]
-  kind = "feed"
-  url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCu-xqv-TLwv6L0An7MJJA5A"
-  category = "video"
-  enabled = false
 
 # --- Flax Engine ----------------------------------------------------------------
 [[engine]]
@@ -145,16 +109,6 @@ aliases = ["flax engine", "flaxengine"]
   kind = "github"
   repo = "FlaxEngine/FlaxEngine"
   category = "release"
-  [[engine.source]]
-  kind = "feed"
-  url = "https://forum.flaxengine.com/latest.rss"
-  category = "community"
-  enabled = false
-  [[engine.source]]
-  kind = "feed"
-  url = "https://www.youtube.com/feeds/videos.xml?channel_id=UChdER2A3n19rJWIMOZJClhw"
-  category = "video"
-  enabled = false
 
 # --- S&Box (Facepunch) ----------------------------------------------------------
 # sbox-public has no GitHub releases, only date-style tags (e.g. 26.10.13).
@@ -178,11 +132,6 @@ aliases = ["s&box", "sbox", "s and box"]
   repo = "Facepunch/sbox-public"
   mode = "tags"
   category = "release"
-  [[engine.source]]
-  kind = "feed"
-  url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCocUpIW26xH-Lui73YdcoVg"
-  category = "video"
-  enabled = false
 
 # --- Prowl Engine ---------------------------------------------------------------
 # No blog; GitHub releases are previews (classified as prerelease).
@@ -655,7 +604,7 @@ aliases = ["blazium", "blazium engine"]
   category = "release"
 
 # ===========================================================================
-# Tier 3: notable engines without C# (disabled at the engine level)
+# Tier 3: notable engines without C#
 # ===========================================================================
 
 [[engine]]
@@ -664,7 +613,6 @@ name = "Bevy"
 tier = 3
 csharp = "none (Rust)"
 homepage = "https://bevy.org"
-enabled = false
 aliases = ["bevy", "bevy engine"]
   [[engine.source]]
   kind = "feed"
@@ -682,7 +630,6 @@ name = "Fyrox"
 tier = 3
 csharp = "none (Rust)"
 homepage = "https://fyrox.rs"
-enabled = false
 aliases = ["fyrox"]
   [[engine.source]]
   kind = "feed"
@@ -700,7 +647,6 @@ name = "Defold"
 tier = 3
 csharp = "none (Lua)"
 homepage = "https://defold.com"
-enabled = false
 aliases = ["defold"]
   [[engine.source]]
   kind = "feed"
@@ -718,7 +664,6 @@ name = "O3DE"
 tier = 3
 csharp = "none (C++/Lua; community C# gem only)"
 homepage = "https://o3de.org"
-enabled = false
 aliases = ["o3de", "open 3d engine"]
   [[engine.source]]
   kind = "feed"
@@ -737,7 +682,6 @@ name = "CRYENGINE"
 tier = 3
 csharp = "legacy C# support"
 homepage = "https://www.cryengine.com"
-enabled = false
 aliases = ["cryengine"]
   [[engine.source]]
   kind = "feed"
@@ -751,7 +695,6 @@ name = "GameMaker"
 tier = 3
 csharp = "none (GML)"
 homepage = "https://gamemaker.io"
-enabled = false
 aliases = ["gamemaker", "game maker studio"]
   [[engine.source]]
   kind = "feed"
@@ -765,7 +708,6 @@ name = "Cocos"
 tier = 3
 csharp = "none (TypeScript)"
 homepage = "https://www.cocos.com"
-enabled = false
 aliases = ["cocos creator", "cocos2d", "cocos engine"]
   [[engine.source]]
   kind = "github"
@@ -778,7 +720,6 @@ name = "raylib"
 tier = 3
 csharp = "none (C; see Raylib-cs for C# bindings)"
 homepage = "https://www.raylib.com"
-enabled = false
 aliases = ["raylib"]
   [[engine.source]]
   kind = "github"
@@ -791,7 +732,6 @@ name = "Babylon.js"
 tier = 3
 csharp = "none (TypeScript)"
 homepage = "https://www.babylonjs.com"
-enabled = false
 aliases = ["babylon.js", "babylonjs"]
   [[engine.source]]
   kind = "feed"
@@ -810,7 +750,6 @@ name = "PlayCanvas"
 tier = 3
 csharp = "none (JavaScript)"
 homepage = "https://playcanvas.com"
-enabled = false
 aliases = ["playcanvas"]
   [[engine.source]]
   kind = "feed"
@@ -828,7 +767,6 @@ name = "Phaser"
 tier = 3
 csharp = "none (JavaScript)"
 homepage = "https://phaser.io"
-enabled = false
 aliases = ["phaser.js", "phaserjs", "phaser 4", "phaser framework"]
   [[engine.source]]
   kind = "feed"
@@ -846,7 +784,6 @@ name = "libGDX"
 tier = 3
 csharp = "none (Java)"
 homepage = "https://libgdx.com"
-enabled = false
 aliases = ["libgdx"]
   [[engine.source]]
   kind = "feed"
@@ -864,7 +801,6 @@ name = "GDevelop"
 tier = 3
 csharp = "none (visual events / JavaScript)"
 homepage = "https://gdevelop.io"
-enabled = false
 aliases = ["gdevelop"]
   [[engine.source]]
   kind = "github"
@@ -877,7 +813,6 @@ name = "Solar2D"
 tier = 3
 csharp = "none (Lua)"
 homepage = "https://solar2d.com"
-enabled = false
 aliases = ["solar2d", "corona sdk"]
   [[engine.source]]
   kind = "github"
@@ -890,7 +825,6 @@ name = "Wicked Engine"
 tier = 3
 csharp = "none (C++/Lua)"
 homepage = "https://wickedengine.net"
-enabled = false
 aliases = ["wicked engine", "wickedengine"]
   [[engine.source]]
   kind = "github"
@@ -903,7 +837,6 @@ name = "ezEngine"
 tier = 3
 csharp = "none (C++/AngelScript; C# editor only)"
 homepage = "https://ezengine.net"
-enabled = false
 aliases = ["ezengine", "ez engine"]
   [[engine.source]]
   kind = "github"
@@ -916,7 +849,6 @@ name = "Armory3D"
 tier = 3
 csharp = "none (Haxe)"
 homepage = "https://armory3d.org"
-enabled = false
 aliases = ["armory3d", "armory engine"]
   [[engine.source]]
   kind = "github"
@@ -929,7 +861,6 @@ name = "Excalibur.js"
 tier = 3
 csharp = "none (TypeScript)"
 homepage = "https://excaliburjs.com"
-enabled = false
 aliases = ["excalibur.js", "excaliburjs"]
   [[engine.source]]
   kind = "feed"
@@ -946,8 +877,7 @@ aliases = ["excalibur.js", "excaliburjs"]
 # ===========================================================================
 
 # --- GameFromScratch --------------------------------------------------------------
-# Very high signal. The YouTube feed stays enabled; the dedup layer handles
-# overlap with the blog.
+# Very high signal.
 [[outlet]]
 id = "gamefromscratch"
 name = "GameFromScratch"
@@ -957,10 +887,6 @@ require_engine_match = false
   kind = "feed"
   url = "https://gamefromscratch.com/feed/"
   category = "news"
-  [[outlet.source]]
-  kind = "feed"
-  url = "https://www.youtube.com/feeds/videos.xml?channel_id=UCr-5TdGkKszdbboXXsFZJTQ"
-  category = "video"
 
 # --- GameDev.net ------------------------------------------------------------------
 [[outlet]]
@@ -972,32 +898,6 @@ require_engine_match = true  # mostly general industry news; keep only engine-re
   kind = "feed"
   url = "https://www.gamedev.net/news/rss/"
   category = "news"
-
-# --- Hacker News (Algolia) ----------------------------------------------------------
-# Algolia does not support OR (it treats "OR" as a word), so engines get
-# separate queries. Bare "unity" is far too noisy on HN and is not queried;
-# require_engine_match drops anything that matches no engine alias.
-[[outlet]]
-id = "hackernews"
-name = "Hacker News"
-homepage = "https://news.ycombinator.com"
-require_engine_match = true
-  [[outlet.source]]
-  kind = "hn"
-  query = "\"game engine\""
-  category = "community"
-  [[outlet.source]]
-  kind = "hn"
-  query = "godot"
-  category = "community"
-  [[outlet.source]]
-  kind = "hn"
-  query = "monogame"
-  category = "community"
-  [[outlet.source]]
-  kind = "hn"
-  query = "\"unreal engine\""
-  category = "community"
 
 # --- 80 Level -------------------------------------------------------------------
 [[outlet]]
@@ -1033,33 +933,6 @@ require_engine_match = true
   category = "news"
   cache_bust = true
 
-# --- Reddit ---------------------------------------------------------------------
-# Disabled: Reddit rate-limits hard. Not verified.
-[[outlet]]
-id = "reddit"
-name = "Reddit (game dev subreddits)"
-homepage = "https://www.reddit.com/r/gamedev"
-require_engine_match = true
-enabled = false
-  [[outlet.source]]
-  kind = "feed"
-  url = "https://www.reddit.com/r/gamedev+godot+Unity3D+unrealengine+monogame/new/.rss"
-  category = "community"
-  interval_minutes = 60
-
-# --- Game Dev Digest ---------------------------------------------------------------
-# Disabled: newsletter paused since 2026-05 (feed still resolves).
-[[outlet]]
-id = "gamedevdigest"
-name = "Game Dev Digest"
-homepage = "https://gamedevdigest.com"
-require_engine_match = false
-enabled = false
-  [[outlet.source]]
-  kind = "feed"
-  url = "https://feeds.feedburner.com/GameDevDigest"
-  category = "news"
-
 # ===========================================================================
 # Skipped on purpose
 # ===========================================================================
@@ -1071,4 +944,5 @@ enabled = false
 # - Hazel: educational C++ engine, no release cadence.
 # - DefaultEcs: archived/unmaintained (see Arch / Friflo).
 # - Veldrid: effectively unmaintained.
+# - Game Dev Digest: newsletter paused since 2026-05.
 # - Redot Engine: excluded at the user's request.

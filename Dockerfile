@@ -46,11 +46,9 @@ WORKDIR /app
 COPY --from=builder /usr/local/bin/gen /usr/local/bin/gen
 COPY templates ./templates
 COPY static ./static
-COPY config/sources.toml ./config/sources.toml
 COPY deploy/gen.docker.toml ./config/gen.toml
 
 ENV GEN_CONFIG=/app/config/gen.toml \
-    GEN_SOURCES=/app/config/sources.toml \
     RUST_LOG=info
 
 VOLUME ["/data"]

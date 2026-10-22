@@ -9,7 +9,7 @@ use http_body_util::BodyExt;
 use tower::ServiceExt;
 
 use super::{AppState, router};
-use crate::config::{AppConfig, SourcesConfig};
+use crate::config::AppConfig;
 use crate::model::{ItemKind, NewItem};
 use crate::registry::SourceRegistry;
 use crate::store::Store;
@@ -49,6 +49,8 @@ name = "GameFromScratch"
 const GODOT_SRC: &str = "godot:github:godotengine/godot";
 const BEVY_SRC: &str = "bevy:feed:https://bevyengine.org/news/rss.xml";
 const GFS_SRC: &str = "gfs:feed:https://gamefromscratch.com/feed/";
+/// A catalog source of Bevy that the fixture doesn't have.
+const BEVY_CATALOG_SRC: &str = "bevy:feed:https://bevy.org/atom.xml";
 
 fn item(source: &str, guid: &str, engines: &[&str], kind: ItemKind, title: &str) -> NewItem {
     NewItem {
@@ -104,14 +106,13 @@ fn state() -> AppState {
         .unwrap();
     store.record_fetch_error(BEVY_SRC, "HTTP 503").unwrap();
 
-    let sources: SourcesConfig = toml::from_str(SOURCES).unwrap();
     let mut config = AppConfig::default();
     config.server.templates_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/templates").into();
     config.server.static_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/static").into();
     config.server.base_url = "https://gen.example.org/".into();
     config.server.admin_token = Some(ADMIN_TOKEN.into());
     let toggles = Arc::new(SourceToggles::default());
-    let registry = Arc::new(SourceRegistry::load(sources, &store).unwrap());
+    let registry = Arc::new(SourceRegistry::with_owners(&mut store, SOURCES));
     AppState::new(Arc::new(Mutex::new(store)), toggles, registry, config).unwrap()
 }
 
@@ -447,15 +448,15 @@ async fn managing_sources_requires_admin() {
             &*format!("source_id={}", urlenc(GODOT_SRC)),
         ),
         (
-            "/sources/restore",
-            &*format!("source_id={}", urlenc(GODOT_SRC)),
+            "/suggestions/source",
+            &*format!("source_id={}", urlenc(BEVY_CATALOG_SRC)),
         ),
         (
             "/owners/add",
             "owner_kind=engine&id=stride&name=Stride&tier=1",
         ),
         ("/owners/remove", "owner_id=godot"),
-        ("/owners/restore", "owner_id=godot"),
+        ("/suggestions/owner", "owner_id=stride"),
     ] {
         let (status, _, _) = send(&st, post_form(uri, body, None)).await;
         assert_eq!(status, StatusCode::FORBIDDEN, "{uri}");
@@ -493,7 +494,6 @@ async fn admin_adds_and_removes_a_source() {
     assert_eq!(added.category, Some(ItemKind::Release));
     let (_, body) = get_as(&st, "/sources", &cookie).await;
     assert!(body.contains("bevyengine&#x2f;bevy (releases)"));
-    assert!(body.contains("added here"));
     assert!(body.contains(r#"popovertarget="remove-source-"#));
 
     let remove = format!("source_id={}&next=%2Fengine%2Fbevy", urlenc(id));
@@ -501,20 +501,10 @@ async fn admin_adds_and_removes_a_source() {
         send(&st, post_form("/sources/remove", &remove, Some(&cookie))).await;
     assert_eq!(status, StatusCode::SEE_OTHER);
     assert_eq!(headers[header::LOCATION], "/engine/bevy");
-    assert!(
-        st.store
-            .lock()
-            .unwrap()
-            .custom_sources()
-            .unwrap()
-            .is_empty()
-    );
+    assert_eq!(st.store.lock().unwrap().sources().unwrap().len(), 3);
     let (_, body) = get_as(&st, "/sources", &cookie).await;
-    assert!(!body.contains("bevyengine&#x2f;bevy"));
-    assert!(
-        !body.contains("Removed from sources.toml"),
-        "nothing to restore"
-    );
+    // Still offered, as the catalog has it.
+    assert!(body.contains(r#"action="/suggestions/source""#));
 }
 
 #[tokio::test]
@@ -569,7 +559,7 @@ async fn invalid_sources_rerender_the_form() {
 }
 
 #[tokio::test]
-async fn removing_a_config_source_purges_it_until_restored() {
+async fn removing_a_catalog_source_purges_it_until_added_again() {
     let st = state();
     let cookie = login(&st).await;
     let remove = format!("source_id={}", urlenc(GODOT_SRC));
@@ -581,8 +571,8 @@ async fn removing_a_config_source_purges_it_until_restored() {
     assert!(!body.contains("Godot 4.8 released"));
     assert!(body.contains("Godot 4.8<"));
     let (_, body) = get_as(&st, "/sources", &cookie).await;
-    assert!(body.contains("Removed from sources.toml (1)"));
-    // Only the restore form still refers to it.
+    assert!(body.contains("More sources for your engines and outlets"));
+    // Only the suggestion form still refers to it.
     let godot_value = r#"value="godot:github:godotengine&#x2f;godot""#;
     assert_eq!(body.matches(godot_value).count(), 1);
 
@@ -590,11 +580,28 @@ async fn removing_a_config_source_purges_it_until_restored() {
     let (status, _, _) = send(&st, post_form("/sources/remove", &remove, Some(&cookie))).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 
-    let (status, _, _) = send(&st, post_form("/sources/restore", &remove, Some(&cookie))).await;
+    let (status, _, _) = send(
+        &st,
+        post_form("/suggestions/source", &remove, Some(&cookie)),
+    )
+    .await;
     assert_eq!(status, StatusCode::SEE_OTHER);
     let (_, body) = get_as(&st, "/sources", &cookie).await;
-    assert!(!body.contains("Removed from sources.toml"));
-    assert!(body.contains("godotengine&#x2f;godot"));
+    assert!(body.contains("godotengine&#x2f;godot (releases)"));
+    assert_eq!(
+        body.matches(godot_value).count(),
+        2,
+        "toggle and remove forms"
+    );
+
+    // A suggestion that isn't in the catalog is refused.
+    let unknown = format!("source_id={}", urlenc("godot:hn:godot"));
+    let (status, _, _) = send(
+        &st,
+        post_form("/suggestions/source", &unknown, Some(&cookie)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 #[tokio::test]
@@ -627,7 +634,7 @@ async fn admin_adds_an_engine_and_its_first_source() {
     let (_, body) = get_as(&st, "/sources?owner=stride", &cookie).await;
     assert!(body.contains("0 of 0 enabled"));
     assert!(body.contains(r#"popovertarget="remove-engine-stride""#));
-    assert!(body.contains("It was added here, so it can't be restored."));
+    assert!(body.contains("This can't be undone."));
     assert!(body.contains(r#"<option value="stride" selected>"#));
 
     let form = "owner_id=stride&kind=github&repo=stride3d%2Fstride";
@@ -646,14 +653,7 @@ async fn admin_adds_an_engine_and_its_first_source() {
     assert_eq!(headers[header::LOCATION], "/sources");
     let (status, _) = get_as(&st, "/engine/stride", &cookie).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
-    assert!(
-        st.store
-            .lock()
-            .unwrap()
-            .custom_sources()
-            .unwrap()
-            .is_empty()
-    );
+    assert_eq!(st.store.lock().unwrap().sources().unwrap().len(), 3);
 }
 
 #[tokio::test]
@@ -663,7 +663,7 @@ async fn invalid_owners_rerender_the_form() {
     for (form, message) in [
         (
             "owner_kind=engine&id=godot&name=Godot+2&tier=1",
-            "defined in sources.toml",
+            "already used",
         ),
         (
             "owner_kind=engine&id=Bad+Id&name=X&tier=1",
@@ -681,13 +681,22 @@ async fn invalid_owners_rerender_the_form() {
             "{form}"
         );
     }
-    assert!(st.store.lock().unwrap().custom_owners().unwrap().is_empty());
+    assert_eq!(st.store.lock().unwrap().owners().unwrap().len(), 3);
 }
 
 #[tokio::test]
-async fn removing_a_config_engine_until_restored() {
+async fn removed_engines_come_back_from_the_suggestions() {
     let st = state();
     let cookie = login(&st).await;
+    let (_, body) = get_as(&st, "/sources", &cookie).await;
+    let suggest_godot = "action=\"/suggestions/owner\">\n          \
+                         <input type=\"hidden\" name=\"owner_id\" value=\"godot\">";
+    assert!(body.contains("Suggestions ("));
+    assert!(
+        body.contains("Stride"),
+        "a catalog engine the fixture lacks"
+    );
+    assert!(!body.contains(suggest_godot));
     let (status, _, _) = send(
         &st,
         post_form("/owners/remove", "owner_id=godot", Some(&cookie)),
@@ -703,17 +712,24 @@ async fn removing_a_config_engine_until_restored() {
     assert!(body.contains("Godot 4.8<"));
     assert!(!body.contains(r#"href="/engine/godot""#));
     let (_, body) = get_as(&st, "/sources", &cookie).await;
-    assert!(body.contains("Removed from sources.toml (1)"));
     assert!(!body.contains("godotengine&#x2f;godot"));
+    assert!(body.contains(suggest_godot));
 
+    // Adding it from the suggestions brings back its catalog sources.
     let (status, _, _) = send(
         &st,
-        post_form("/owners/restore", "owner_id=godot", Some(&cookie)),
+        post_form("/suggestions/owner", "owner_id=godot", Some(&cookie)),
     )
     .await;
     assert_eq!(status, StatusCode::SEE_OTHER);
-    let (status, _) = get_as(&st, "/engine/godot", &cookie).await;
-    assert_eq!(status, StatusCode::OK);
-    let (_, body) = get_as(&st, "/sources", &cookie).await;
-    assert!(!body.contains("Removed from sources.toml"));
+    let snapshot = st.registry.current();
+    let godot = snapshot.config.engine("godot").unwrap();
+    assert_eq!(godot.sources.len(), 2);
+    assert!(godot.aliases.contains(&"gdscript".to_string()));
+    let (status, _, _) = send(
+        &st,
+        post_form("/suggestions/owner", "owner_id=godot", Some(&cookie)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }

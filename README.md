@@ -18,14 +18,14 @@ GEN is a single Rust binary. It contains a web server and a background poller, a
 
 ### How it works
 
-`gen serve` loads two config files: `gen.toml` for app settings and `sources.toml` for engines, outlets and sources. It then starts an axum HTTP server and a scheduler. The scheduler polls each enabled source on its interval, with a limit on how many fetches run at once. Fetchers turn responses into raw items. The classifier assigns a kind and engine tags, and computes a normalized story key for deduplication. New items go into SQLite, and each item that matches a channel's rules is sent to that channel. The web UI and the feeds read from the same database.
+`gen serve` loads `gen.toml` for app settings and reads the engines, outlets and sources from the database; a new database starts with Unity, Unreal Engine and Godot from the built-in catalog. It then starts an axum HTTP server and a scheduler. The scheduler polls each enabled source on its interval, with a limit on how many fetches run at once. Fetchers turn responses into raw items. The classifier assigns a kind and engine tags, and computes a normalized story key for deduplication. New items go into SQLite, and each item that matches a channel's rules is sent to that channel. The web UI and the feeds read from the same database.
 
 ## Quick start (local)
 
 Requires Rust 1.96 or newer (edition 2024). You don't need OpenSSL or a system SQLite: TLS uses rustls, and SQLite is compiled in.
 
 ```sh
-cargo run -- check-config     # validate config/gen.toml + config/sources.toml, list sources
+cargo run -- check-config     # validate config/gen.toml, list the sources in the database
 cargo run -- fetch            # poll every source once and print what's new (no notifications)
 cargo run -- fetch --source godot   # only sources whose id contains "godot"
 cargo run -- serve            # web server + background polling
@@ -38,13 +38,12 @@ CLI options, which work with every subcommand:
 | Option | Env var | Default |
 |---|---|---|
 | `--config <path>` | `GEN_CONFIG` | `config/gen.toml` |
-| `--sources <path>` | `GEN_SOURCES` | `config/sources.toml` |
 
 Logging uses `RUST_LOG`, for example `RUST_LOG=debug` or `RUST_LOG=gen=debug`. The default is `info`.
 
 ## Docker
 
-The image is multi-stage. It builds on `rust:1.96-slim-bookworm` and runs on `debian:bookworm-slim` as a non-root user. It contains the binary, `templates/`, `static/`, `config/sources.toml`, and `deploy/gen.docker.toml` as `/app/config/gen.toml`. Data lives in the `/data` volume, and the server listens on port 8080. A healthcheck polls `/health`.
+The image is multi-stage. It builds on `rust:1.96-slim-bookworm` and runs on `debian:bookworm-slim` as a non-root user. It contains the binary (with the source catalog built in), `templates/`, `static/`, and `deploy/gen.docker.toml` as `/app/config/gen.toml`. Data lives in the `/data` volume, and the server listens on port 8080. A healthcheck polls `/health`.
 
 ### Compose (recommended)
 
@@ -61,7 +60,6 @@ docker compose logs -f gen
 - publishes `8080:8080`
 - stores the database in the named volume `gen-data`, mounted at `/data`
 - mounts `deploy/gen.docker.toml` as `/app/config/gen.toml` (read-only)
-- mounts `config/sources.toml` over the copy in the image. To pick up source changes, run `docker compose restart gen`; no rebuild is needed. Remove this mount to use the copy baked into the image.
 - reads `.env` if it exists, which is optional
 
 Run the other subcommands in the container:
@@ -139,7 +137,11 @@ kind = "discord" | "ntfy" | "email"
 
 Relative paths resolve against the working directory. A GitHub token is optional, but without one the GitHub API allows only 60 requests per hour.
 
-### sources.toml: engines and outlets
+### Engines, outlets and the catalog
+
+Engines, outlets and their sources live in the database and are managed on the Sources page (see "Managing sources from the web"). The first start on a database adds the engines in `catalog::SEEDED` (Unity, Unreal Engine and Godot) with their sources, once. On a database from before sources moved into it, that first start also deletes the items and fetch state of sources that are no longer configured.
+
+Everything else in the built-in catalog, `src/catalog.toml`, is offered as a suggestion on the Sources page. It includes the other C# engines and frameworks (tiers 1 and 2), notable engines without C# (tier 3) and general news outlets. It has no YouTube, forum, Reddit or Hacker News sources. To change the catalog, edit `src/catalog.toml` and rebuild; existing databases keep what they have.
 
 There are two kinds of owners, and each has one or more `source` entries:
 
@@ -280,7 +282,7 @@ gen notify-test --channel phone
 | `/` | Latest items from all enabled sources. |
 | `/engines` | Engine list with tier, C# support and recent activity. |
 | `/engine/{id}` | Items for one engine. |
-| `/sources` | Every source with its last fetch time and errors. Admins can switch sources on and off, and add, remove and restore sources, engines and outlets here. |
+| `/sources` | Every source with its last fetch time and errors. Admins can switch sources on and off, add sources, engines and outlets (by hand or from the suggestions) and remove them here. |
 | `/login`, `/logout` | Admin login with `server.admin_token`. |
 | `/feed.xml` | Combined Atom feed. |
 | `/api/items` | JSON API for items. |
@@ -288,24 +290,22 @@ gen notify-test --channel phone
 
 ## Managing sources from the web
 
-With `admin_token` set under `[server]`, the Sources page shows a **Manage sources** link. Log in with the token to manage sources without editing `sources.toml` or restarting. All changes are stored in the database and take effect right away; `sources.toml` is never written, so it can stay mounted read-only.
+With `admin_token` set under `[server]`, the Sources page shows a **Manage sources** link. Log in with the token to manage sources without restarting. All changes are stored in the database and take effect right away.
 
 ### Switching sources on and off
 
 Each source (on `/sources` and on every engine page) gets an **Enable** / **Disable** button.
 
-- The choice is stored in the database as an override of `enabled` in `sources.toml`, so it survives restarts and leaves the config file untouched. Sources marked `enabled = false` in the config can be switched on the same way.
+- The choice is stored in the database as an override of the source's own `enabled` flag, so it survives restarts. Catalog sources marked `enabled = false` are added switched off and can be switched on the same way.
 - It takes effect immediately: a disabled source stops polling, and a re-enabled one polls right away. Items it already fetched stay visible.
-- Only sources of enabled engines and outlets are listed; switch a whole engine on with `enabled = true` in `sources.toml`.
 
-### Adding, removing and restoring sources, engines and outlets
+### Adding and removing sources, engines and outlets
 
 - **Add a source** (at the top of `/sources`, or the **Add source** link next to an engine or outlet) takes the same settings as a `[[engine.source]]` entry: a feed, GitHub repository, Hacker News search, scraped HTML page or the Unity releases API, plus an optional category, interval and keywords. Input is checked first (URLs, `owner/repo`, CSS selectors), and a source that already exists is refused. A new source is polled straight away; its first fetch is stored without sending notifications.
 - **Remove** (next to Enable / Disable) asks for confirmation, then stops polling the source and **deletes its stored items**, fetch state and on/off override. Items elsewhere that were duplicates of its items are shown in their place.
-- A removed source that comes from `sources.toml` is kept as a tombstone in the database and listed under **Removed from sources.toml**, where **Restore** brings it back (it then fetches its items again). A source added in the web UI is simply deleted.
-- **Add an engine or news outlet** takes an id (a lowercase slug, used in `/engine/{id}`), name, homepage and, for engines, the tier, C# support, aliases and exclude phrases, written as in `sources.toml` (see "sources.toml: engines and outlets"). It is added without sources and you're taken straight to adding its first one. New aliases tag items from the next fetch on.
-- **Remove engine / Remove outlet** (in its group header) removes it with all its sources and their items; an engine's tags on other sources' items are removed too. One from `sources.toml` can be restored like a source, and gets its sources back (minus ones removed one by one, and ones added in the web UI, which are deleted with it).
-- `gen check-config` validates only the config files; it doesn't include changes made in the web UI.
+- **Suggestions** lists what the catalog has that you don't: engines grouped by tier, news outlets, and catalog sources missing from engines and outlets you have. **Add** adds an engine or outlet with all its catalog sources, or a single source. Something you removed shows up here again if it's in the catalog; adding it back fetches its items again.
+- **Add an engine or news outlet** takes an id (a lowercase slug, used in `/engine/{id}`), name, homepage and, for engines, the tier, C# support, aliases and exclude phrases, written as in the catalog (see "Engines, outlets and the catalog"). It is added without sources and you're taken straight to adding its first one. New aliases tag items from the next fetch on.
+- **Remove engine / Remove outlet** (in its group header) removes it with all its sources and their items; an engine's tags on other sources' items are removed too.
 
 ### Admin login
 
@@ -324,12 +324,13 @@ Layout of `src/`:
 | Module | Responsibility |
 |---|---|
 | `main.rs` | CLI (`serve`, `fetch`, `check-config`, `notify-test`) and wiring. |
-| `config.rs` | `gen.toml` / `sources.toml` schema, validation and `${ENV}` expansion. |
+| `config.rs` | `gen.toml` and engine/outlet/source schema, validation and `${ENV}` expansion. |
 | `model.rs` | Shared types: `ItemKind`, `RawItem`, `NewItem`, `Item`, `SourceState`. |
 | `fetch/` | HTTP client and one fetcher per source kind: `feed`, `github`, `unity`, `hn`, `html`. |
 | `classify.rs` | Item kind detection, engine tagging by alias and story keys for deduplication. |
-| `store.rs` | SQLite storage: items, source state, web UI source edits and queries for the web UI. |
-| `registry.rs` | The live set of sources: `sources.toml` plus web UI edits, published to the web UI, pipeline and scheduler. |
+| `store.rs` | SQLite storage: items, source state, engines/outlets/sources and queries for the web UI. |
+| `catalog.rs` | The built-in catalog (`catalog.toml`): seeding a new database and the suggestions. |
+| `registry.rs` | The live set of sources stored in the database, published to the web UI, pipeline and scheduler. |
 | `pipeline.rs` | Polls a source: fetch, classify, dedupe and store. |
 | `notify/` | Rule matching and delivery: `discord`, `ntfy`, `email`. |
 | `web/` | axum router: HTML pages (minijinja templates), Atom feed, JSON API. |

@@ -1,4 +1,5 @@
-//! Configuration: `sources.toml` (engines, outlets, their sources) and `gen.toml` (app settings).
+//! Configuration: engines, outlets and their sources (stored in the database, seeded from
+//! the built-in catalog) and `gen.toml` (app settings).
 
 use std::path::{Path, PathBuf};
 
@@ -8,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::model::{EngineId, ItemKind};
 
 // ---------------------------------------------------------------------------
-// sources.toml
+// Engines, outlets and sources
 // ---------------------------------------------------------------------------
 
 #[derive(Debug, Clone, Deserialize)]
@@ -256,15 +257,6 @@ pub fn check_url(url: &str) -> Result<(), String> {
 }
 
 impl SourcesConfig {
-    pub fn load(path: &Path) -> anyhow::Result<Self> {
-        let text =
-            std::fs::read_to_string(path).with_context(|| format!("reading {}", path.display()))?;
-        let cfg: SourcesConfig =
-            toml::from_str(&text).with_context(|| format!("parsing {}", path.display()))?;
-        cfg.validate()?;
-        Ok(cfg)
-    }
-
     pub fn validate(&self) -> anyhow::Result<()> {
         let mut ids = std::collections::HashSet::new();
         for id in self

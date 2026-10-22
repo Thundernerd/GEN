@@ -1,5 +1,5 @@
 //! SQLite persistence: items, engine tags, per-source fetch state, sent notifications and
-//! the source edits made in the web UI.
+//! the engines, outlets and sources themselves.
 //!
 //! `Store` is synchronous; async code shares it as `Arc<Mutex<Store>>` and calls it from
 //! `tokio::task::spawn_blocking` (queries are small and fast).
@@ -103,23 +103,19 @@ CREATE TABLE removed (
     PRIMARY KEY (kind, id)
 );
 "#,
+    r#"
+-- Engines, outlets and sources live only in the database now; sources.toml is gone.
+ALTER TABLE custom_owners RENAME TO owners;
+ALTER TABLE custom_sources RENAME TO sources;
+DROP TABLE removed;
+
+-- Small key/value facts about the database, e.g. whether the defaults were seeded.
+CREATE TABLE meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+"#,
 ];
-
-/// What a tombstone in the `removed` table refers to.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Removed {
-    Owner,
-    Source,
-}
-
-impl Removed {
-    fn as_str(self) -> &'static str {
-        match self {
-            Removed::Owner => "owner",
-            Removed::Source => "source",
-        }
-    }
-}
 
 /// Filters for listing items. `Default` lists the newest non-duplicate items.
 #[derive(Debug, Clone, Default)]
@@ -246,59 +242,55 @@ impl Store {
         Ok(())
     }
 
-    // -- source edits from the web UI ---------------------------------------
+    // -- engines, outlets and sources --------------------------------------
 
-    /// Engines and outlets added in the web UI, oldest first: (id, kind, config JSON).
-    pub fn custom_owners(&self) -> anyhow::Result<Vec<(String, String, String)>> {
+    /// Engines and outlets, oldest first: (id, kind, config JSON).
+    pub fn owners(&self) -> anyhow::Result<Vec<(String, String, String)>> {
         let mut stmt = self
             .conn
-            .prepare("SELECT id, kind, config FROM custom_owners ORDER BY created_at, rowid")?;
+            .prepare("SELECT id, kind, config FROM owners ORDER BY created_at, rowid")?;
         let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
-    /// Sources added in the web UI, oldest first: (source id, owner id, config JSON).
-    pub fn custom_sources(&self) -> anyhow::Result<Vec<(String, String, String)>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT id, owner_id, config FROM custom_sources ORDER BY created_at, rowid",
-        )?;
+    /// Sources, oldest first: (source id, owner id, config JSON).
+    pub fn sources(&self) -> anyhow::Result<Vec<(String, String, String)>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT id, owner_id, config FROM sources ORDER BY created_at, rowid")?;
         let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
-    /// Ids of removed engines/outlets or sources from sources.toml.
-    pub fn removed(&self, kind: Removed) -> anyhow::Result<Vec<String>> {
-        let mut stmt = self
-            .conn
-            .prepare("SELECT id FROM removed WHERE kind = ?1 ORDER BY id")?;
-        let rows = stmt.query_map([kind.as_str()], |r| r.get(0))?;
-        Ok(rows.collect::<Result<_, _>>()?)
-    }
-
-    pub fn add_custom_owner(&self, id: &str, kind: &str, config: &str) -> anyhow::Result<()> {
-        self.conn.execute(
-            "INSERT INTO custom_owners (id, kind, config, created_at) VALUES (?1, ?2, ?3, ?4)",
+    /// Adds an engine or outlet together with `sources`: (source id, config JSON).
+    pub fn add_owner(
+        &mut self,
+        id: &str,
+        kind: &str,
+        config: &str,
+        sources: &[(String, String)],
+    ) -> anyhow::Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute(
+            "INSERT INTO owners (id, kind, config, created_at) VALUES (?1, ?2, ?3, ?4)",
             params![id, kind, config, Utc::now()],
         )?;
-        Ok(())
-    }
-
-    pub fn add_custom_source(&self, id: &str, owner_id: &str, config: &str) -> anyhow::Result<()> {
-        self.conn.execute(
-            "INSERT INTO custom_sources (id, owner_id, config, created_at) VALUES (?1, ?2, ?3, ?4)",
-            params![id, owner_id, config, Utc::now()],
-        )?;
-        Ok(())
-    }
-
-    /// Removes a source with its items, fetch state and override. A source from
-    /// sources.toml gets a tombstone (`tombstone`); one added in the web UI is deleted.
-    pub fn remove_source(&mut self, id: &str, tombstone: bool) -> anyhow::Result<()> {
-        let tx = self.conn.transaction()?;
-        tx.execute("DELETE FROM custom_sources WHERE id = ?1", [id])?;
-        if tombstone {
-            insert_tombstone(&tx, Removed::Source, id)?;
+        for (source_id, source_config) in sources {
+            insert_source(&tx, source_id, id, source_config)?;
         }
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn add_source(&self, id: &str, owner_id: &str, config: &str) -> anyhow::Result<()> {
+        insert_source(&self.conn, id, owner_id, config)?;
+        Ok(())
+    }
+
+    /// Removes a source with its items, fetch state and override.
+    pub fn remove_source(&mut self, id: &str) -> anyhow::Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM sources WHERE id = ?1", [id])?;
         purge_source_data(&tx, id)?;
         tx.commit()?;
         Ok(())
@@ -310,15 +302,11 @@ impl Store {
         &mut self,
         id: &str,
         is_engine: bool,
-        tombstone: bool,
         source_ids: &[String],
     ) -> anyhow::Result<()> {
         let tx = self.conn.transaction()?;
-        tx.execute("DELETE FROM custom_owners WHERE id = ?1", [id])?;
-        tx.execute("DELETE FROM custom_sources WHERE owner_id = ?1", [id])?;
-        if tombstone {
-            insert_tombstone(&tx, Removed::Owner, id)?;
-        }
+        tx.execute("DELETE FROM owners WHERE id = ?1", [id])?;
+        tx.execute("DELETE FROM sources WHERE owner_id = ?1", [id])?;
         for source_id in source_ids {
             purge_source_data(&tx, source_id)?;
         }
@@ -329,11 +317,38 @@ impl Store {
         Ok(())
     }
 
-    /// Deletes a tombstone, bringing the engine/outlet or source from sources.toml back.
-    pub fn restore(&self, kind: Removed, id: &str) -> anyhow::Result<()> {
+    /// Ids of every source that has items, fetch state or an override stored.
+    pub fn stored_source_ids(&self) -> anyhow::Result<Vec<String>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT source_id FROM items UNION SELECT source_id FROM source_state
+             UNION SELECT source_id FROM source_overrides ORDER BY 1",
+        )?;
+        let rows = stmt.query_map([], |r| r.get(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Deletes the items, fetch state and overrides of `source_ids`.
+    pub fn purge_sources(&mut self, source_ids: &[String]) -> anyhow::Result<()> {
+        let tx = self.conn.transaction()?;
+        for source_id in source_ids {
+            purge_source_data(&tx, source_id)?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn meta(&self, key: &str) -> anyhow::Result<Option<String>> {
+        Ok(self
+            .conn
+            .query_row("SELECT value FROM meta WHERE key = ?1", [key], |r| r.get(0))
+            .optional()?)
+    }
+
+    pub fn set_meta(&self, key: &str, value: &str) -> anyhow::Result<()> {
         self.conn.execute(
-            "DELETE FROM removed WHERE kind = ?1 AND id = ?2",
-            params![kind.as_str(), id],
+            "INSERT INTO meta (key, value) VALUES (?1, ?2)
+             ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+            params![key, value],
         )?;
         Ok(())
     }
@@ -512,10 +527,15 @@ const ITEM_SELECT: &str = "SELECT i.id, i.source_id, i.guid, i.kind, i.title, i.
         (SELECT group_concat(engine_id, ',') FROM item_engines e WHERE e.item_id = i.id)
     FROM items i";
 
-fn insert_tombstone(conn: &Connection, kind: Removed, id: &str) -> rusqlite::Result<()> {
+fn insert_source(
+    conn: &Connection,
+    id: &str,
+    owner_id: &str,
+    config: &str,
+) -> rusqlite::Result<()> {
     conn.execute(
-        "INSERT OR IGNORE INTO removed (kind, id, removed_at) VALUES (?1, ?2, ?3)",
-        params![kind.as_str(), id, Utc::now()],
+        "INSERT INTO sources (id, owner_id, config, created_at) VALUES (?1, ?2, ?3, ?4)",
+        params![id, owner_id, config, Utc::now()],
     )?;
     Ok(())
 }
@@ -711,31 +731,41 @@ mod tests {
     }
 
     #[test]
-    fn stores_and_removes_custom_sources() {
+    fn stores_and_removes_sources() {
         let mut store = Store::open_in_memory().unwrap();
+        let hn = ("stride:hn:stride".to_string(), "{}".to_string());
         store
-            .add_custom_source("godot:hn:godot", "godot", "{}")
+            .add_owner("stride", "engine", "{}", std::slice::from_ref(&hn))
             .unwrap();
-        store.add_custom_owner("stride", "engine", "{}").unwrap();
+        store.add_source("stride:unity", "stride", "{}").unwrap();
+        assert_eq!(store.owners().unwrap().len(), 1);
         assert_eq!(
-            store.custom_sources().unwrap(),
-            [(
-                "godot:hn:godot".to_string(),
-                "godot".to_string(),
-                "{}".to_string()
-            )]
+            store.sources().unwrap()[0],
+            (hn.0.clone(), "stride".to_string(), hn.1)
         );
-        assert_eq!(store.custom_owners().unwrap().len(), 1);
 
-        store.remove_source("godot:hn:godot", false).unwrap();
-        assert!(store.custom_sources().unwrap().is_empty());
-        assert!(store.removed(Removed::Source).unwrap().is_empty());
+        store.remove_source("stride:unity").unwrap();
+        assert_eq!(store.sources().unwrap().len(), 1);
+        // A failing source insert leaves no half-added owner behind.
+        let dup = [(hn.0.clone(), "{}".into()), (hn.0, "{}".into())];
+        assert!(store.add_owner("x", "engine", "{}", &dup).is_err());
+        assert_eq!(store.owners().unwrap().len(), 1);
+    }
 
-        store.remove_source("a", true).unwrap();
-        store.remove_source("a", true).unwrap();
-        assert_eq!(store.removed(Removed::Source).unwrap(), ["a"]);
-        store.restore(Removed::Source, "a").unwrap();
-        assert!(store.removed(Removed::Source).unwrap().is_empty());
+    #[test]
+    fn purges_sources_and_keeps_meta() {
+        let mut store = Store::open_in_memory().unwrap();
+        store.insert_items(&[new_item("a", "1", "one")]).unwrap();
+        store.record_fetch_ok("b", None, None).unwrap();
+        store.set_source_override("c", false).unwrap();
+        assert_eq!(store.stored_source_ids().unwrap(), ["a", "b", "c"]);
+        store.purge_sources(&["a".into(), "c".into()]).unwrap();
+        assert_eq!(store.stored_source_ids().unwrap(), ["b"]);
+
+        assert_eq!(store.meta("seeded").unwrap(), None);
+        store.set_meta("seeded", "1").unwrap();
+        store.set_meta("seeded", "2").unwrap();
+        assert_eq!(store.meta("seeded").unwrap().as_deref(), Some("2"));
     }
 
     #[test]
@@ -751,7 +781,7 @@ mod tests {
         store.record_fetch_ok("a", None, None).unwrap();
         store.set_source_override("a", false).unwrap();
 
-        store.remove_source("a", true).unwrap();
+        store.remove_source("a").unwrap();
         let listed = store.query_items(&ItemQuery::default()).unwrap();
         assert_eq!(listed.len(), 1);
         assert_eq!(listed[0].source_id, "b");
@@ -768,19 +798,15 @@ mod tests {
         let mut store = Store::open_in_memory().unwrap();
         store.insert_items(&[new_item("a", "1", "one")]).unwrap();
         store.insert_items(&[new_item("b", "2", "two")]).unwrap();
-        store.add_custom_owner("godot", "engine", "{}").unwrap();
+        store.add_owner("godot", "engine", "{}", &[]).unwrap();
 
         store
-            .remove_owner("godot", true, false, &["a".to_string()])
+            .remove_owner("godot", true, &["a".to_string()])
             .unwrap();
-        assert!(store.custom_owners().unwrap().is_empty());
-        assert!(store.removed(Removed::Owner).unwrap().is_empty());
+        assert!(store.owners().unwrap().is_empty());
         let listed = store.query_items(&ItemQuery::default()).unwrap();
         assert_eq!(listed.len(), 1);
         assert!(listed[0].engines.is_empty());
-
-        store.remove_owner("bevy", true, true, &[]).unwrap();
-        assert_eq!(store.removed(Removed::Owner).unwrap(), ["bevy"]);
     }
 
     #[test]

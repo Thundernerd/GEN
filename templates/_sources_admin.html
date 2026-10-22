@@ -1,7 +1,7 @@
-{#- Admin forms on /sources: add a source or engine/outlet, restore removed ones. Expects
-    `owners`, `categories`, `tiers`, `default_interval`, `preselect_owner`, `removed`,
-    `removed_owners` and `feedback` (a failed submission: `panel`, `error` and the posted
-    `form`). -#}
+{#- Admin forms on /sources: add a source or engine/outlet, by hand or from the catalog's
+    suggestions. Expects `owners`, `categories`, `tiers`, `default_interval`,
+    `preselect_owner`, `suggestions` and `feedback` (a failed submission: `panel`, `error`
+    and the posted `form`). -#}
 {%- set failed = feedback.panel if feedback else none %}
 {%- set f = feedback.form if feedback else {} %}
 <section class="admin-panel" aria-label="Manage sources">
@@ -136,29 +136,37 @@
       <button type="submit">Add</button>
     </form>
   </details>
-  {%- if removed or removed_owners %}
-  <details id="removed-sources" class="panel">
-    <summary>Removed from sources.toml ({{ removed|length + removed_owners|length }})</summary>
-    <ul class="removed-list">
-      {%- for o in removed_owners %}
+  {%- if suggestions.total %}
+  <details id="suggestions" class="panel">
+    <summary>Suggestions ({{ suggestions.total }})</summary>
+    {%- for g in suggestions.groups %}
+    <h3 class="suggestion-group">{{ g.label }}</h3>
+    <ul class="suggestion-list">
+      {%- for o in g.owners %}
       <li>
-        <span><strong>{{ o.name }}</strong> <span class="source-meta">{{ o.kind }} with all its sources</span></span>
-        <form method="post" action="/owners/restore">
+        <span><strong>{{ o.name }}</strong> <span class="source-meta">{{ o.detail }} · {{ o.sources }} source{{ "s" if o.sources != 1 }}</span></span>
+        <form method="post" action="/suggestions/owner">
           <input type="hidden" name="owner_id" value="{{ o.id }}">
-          <button type="submit" class="btn-small btn-quiet">Restore</button>
-        </form>
-      </li>
-      {%- endfor %}
-      {%- for r in removed %}
-      <li>
-        <span><strong>{{ r.owner }}</strong> <span class="source-kind">{{ r.kind }}</span> {{ r.target }}</span>
-        <form method="post" action="/sources/restore">
-          <input type="hidden" name="source_id" value="{{ r.id }}">
-          <button type="submit" class="btn-small btn-quiet">Restore</button>
+          <button type="submit" class="btn-small btn-quiet">Add</button>
         </form>
       </li>
       {%- endfor %}
     </ul>
+    {%- endfor %}
+    {%- if suggestions.sources %}
+    <h3 class="suggestion-group">More sources for your engines and outlets</h3>
+    <ul class="suggestion-list">
+      {%- for s in suggestions.sources %}
+      <li>
+        <span><strong>{{ s.owner }}</strong> <span class="source-kind">{{ s.kind }}</span> {{ s.target }}</span>
+        <form method="post" action="/suggestions/source">
+          <input type="hidden" name="source_id" value="{{ s.id }}">
+          <button type="submit" class="btn-small btn-quiet">Add</button>
+        </form>
+      </li>
+      {%- endfor %}
+    </ul>
+    {%- endif %}
   </details>
   {%- endif %}
 </section>

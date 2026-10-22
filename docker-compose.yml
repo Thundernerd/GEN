@@ -13,9 +13,6 @@ services:
     volumes:
       - gen-data:/data
       - ./deploy/gen.docker.toml:/app/config/gen.toml:ro
-      # Optional: edit sources without rebuilding (restart the container
-      # afterwards). Remove this line to use the copy baked into the image.
-      - ./config/sources.toml:/app/config/sources.toml:ro
 
 volumes:
   gen-data:

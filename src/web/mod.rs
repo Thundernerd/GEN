@@ -27,9 +27,10 @@ use serde_json::json;
 use tower_http::compression::CompressionLayer;
 use tower_http::services::ServeDir;
 
+use crate::catalog;
 use crate::config::{AppConfig, Owner, SourceSpec};
 use crate::model::{Item, ItemKind, SourceState};
-use crate::registry::{Snapshot, SourceRegistry};
+use crate::registry::{NewOwner, Snapshot, SourceRegistry};
 use crate::store::Store;
 use crate::toggles::SourceToggles;
 
@@ -230,10 +231,10 @@ pub fn router(state: AppState) -> Router {
         .route("/sources/toggle", post(toggle_source))
         .route("/sources/add", post(admin::add_source))
         .route("/sources/remove", post(admin::remove_source))
-        .route("/sources/restore", post(admin::restore_source))
+        .route("/suggestions/source", post(admin::add_suggested_source))
         .route("/owners/add", post(admin::add_owner))
         .route("/owners/remove", post(admin::remove_owner))
-        .route("/owners/restore", post(admin::restore_owner))
+        .route("/suggestions/owner", post(admin::add_suggested_owner))
         .route("/login", get(login_form).post(login))
         .route("/logout", post(logout))
         .route("/feed.xml", get(feed))
@@ -485,7 +486,7 @@ async fn engine_page(st: &AppState, id: String, params: ListParams, admin: bool)
                 "enabled": engine.enabled,
             },
             "source_count": sources.len(),
-            "groups": group_by_owner(&snapshot, &[(Owner::Engine(engine.id.clone()), &engine.name)], &sources),
+            "groups": group_by_owner(&[(Owner::Engine(engine.id.clone()), &engine.name)], &sources),
             "grouped": false,
             "admin": admin,
             "next": base.clone(),
@@ -540,7 +541,7 @@ async fn sources_page(
         _ => "config",
     };
     let owners_in_order = snapshot.config.manageable_owners();
-    let mut groups = group_by_owner(&snapshot, &owners_in_order, &rows);
+    let mut groups = group_by_owner(&owners_in_order, &rows);
     if order != "config" {
         groups.sort_by_key(|g| g["owner"].as_str().unwrap_or_default().to_lowercase());
         if order == "desc" {
@@ -570,28 +571,7 @@ async fn sources_page(
             .map(|(o, name)| json!({"id": o.id(), "name": name}))
             .collect()
     };
-    let removed: Vec<_> = st
-        .registry
-        .removed_sources()
-        .iter()
-        .map(|s| {
-            let (kind, target, _) = describe(&s.spec);
-            json!({"id": s.id, "owner": s.owner_name, "kind": kind, "target": target})
-        })
-        .collect();
-    let removed_owners: Vec<_> = st
-        .registry
-        .removed_owners()
-        .into_iter()
-        .map(|(o, name)| {
-            let kind = if matches!(o, Owner::Engine(_)) {
-                "engine"
-            } else {
-                "news outlet"
-            };
-            json!({"id": o.id(), "name": name, "kind": kind})
-        })
-        .collect();
+    let suggestions = suggestions_view(&snapshot);
     let tiers: Vec<_> = TIER_LABELS
         .iter()
         .map(|(tier, label)| json!({"tier": tier, "label": label}))
@@ -620,21 +600,70 @@ async fn sources_page(
             "categories": kind_names(),
             "default_interval": st.config.polling.default_interval_minutes,
             "preselect_owner": non_empty(&params.owner),
-            "removed": removed,
-            "removed_owners": removed_owners,
+            "suggestions": suggestions,
             "tiers": tiers,
             "feedback": feedback,
         }),
     )
 }
 
+/// The catalog's suggestions: engines grouped by tier, then outlets, then missing sources
+/// of present engines and outlets.
+fn suggestions_view(snapshot: &Snapshot) -> serde_json::Value {
+    let suggestions = catalog::suggestions(snapshot);
+    let owner_view = |name: &str, id: &str, detail: String, sources: usize| json!({"id": id, "name": name, "detail": detail, "sources": sources});
+    let mut groups: Vec<_> = TIER_LABELS
+        .iter()
+        .map(|&(tier, label)| {
+            let owners: Vec<_> = suggestions
+                .owners
+                .iter()
+                .filter_map(|o| match o {
+                    NewOwner::Engine(e) if e.tier == tier => Some(owner_view(
+                        &e.name,
+                        &e.id,
+                        format!("C#: {}", e.csharp),
+                        e.sources.len(),
+                    )),
+                    _ => None,
+                })
+                .collect();
+            json!({"label": label, "owners": owners})
+        })
+        .collect();
+    let outlets: Vec<_> = suggestions
+        .owners
+        .iter()
+        .filter_map(|o| match o {
+            NewOwner::Outlet(o) => Some(owner_view(
+                &o.name,
+                &o.id,
+                "news outlet".into(),
+                o.sources.len(),
+            )),
+            NewOwner::Engine(_) => None,
+        })
+        .collect();
+    groups.push(json!({"label": "News outlets", "owners": outlets}));
+    groups.retain(|g| g["owners"].as_array().is_some_and(|o| !o.is_empty()));
+    let sources: Vec<_> = suggestions
+        .sources
+        .iter()
+        .map(|s| {
+            let (kind, target, _) = describe(&s.spec);
+            json!({"id": s.id, "owner": s.owner_name, "kind": kind, "target": target})
+        })
+        .collect();
+    json!({
+        "total": suggestions.owners.len() + sources.len(),
+        "groups": groups,
+        "sources": sources,
+    })
+}
+
 /// One group of source rows per owner, in the given owner order. Owners without sources
 /// get an empty group, so sources can be added to them.
-fn group_by_owner(
-    snapshot: &Snapshot,
-    owners: &[(Owner, &str)],
-    rows: &[serde_json::Value],
-) -> Vec<serde_json::Value> {
+fn group_by_owner(owners: &[(Owner, &str)], rows: &[serde_json::Value]) -> Vec<serde_json::Value> {
     owners
         .iter()
         .map(|(owner, name)| {
@@ -652,7 +681,7 @@ fn group_by_owner(
                 "owner": name,
                 "owner_kind": owner_kind,
                 "owner_id": owner.id(),
-                "custom": snapshot.is_custom_owner(owner.id()),
+                "in_catalog": catalog::has_owner(owner.id()),
                 "enabled": enabled,
                 "total": members.len(),
                 "sources": members,
@@ -833,7 +862,7 @@ fn source_row(
         "target_url": target_url,
         "category": s.category.map(ItemKind::as_str),
         "interval": s.interval_minutes.unwrap_or(st.config.polling.default_interval_minutes),
-        "custom": st.registry.current().is_custom_source(&s.id),
+        "in_catalog": catalog::has_source(&s.id),
         "status": status,
         "last_ok": state.last_ok.map(|d| DateView::new(d, now)),
         "last_error": state.last_error,
