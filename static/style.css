@@ -336,6 +336,10 @@ table.sources th, table.sources td {
   border-bottom: 1px solid var(--border);
 }
 table.sources th { color: var(--muted); font-weight: 600; white-space: nowrap; }
+table.sources th .sort-link { color: inherit; text-decoration: none; }
+table.sources th .sort-link:hover { color: var(--link); }
+table.sources th[aria-sort="ascending"] .sort-link, table.sources th[aria-sort="descending"] .sort-link { color: var(--text); }
+.sort-arrow { margin-left: 0.3rem; font-size: 0.75em; opacity: 0.7; }
 table.sources .center { text-align: center; vertical-align: middle; }
 table.sources .num { font-variant-numeric: tabular-nums; }
 .source-kind {

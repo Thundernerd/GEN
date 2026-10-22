@@ -474,21 +474,52 @@ async fn engine_page(st: &AppState, id: String, params: ListParams, admin: bool)
     )
 }
 
-async fn sources(State(st): State<AppState>, headers: HeaderMap) -> Response {
+/// `/sources` query: optional sort column and direction. Unknown values mean config order.
+#[derive(Debug, Default, Deserialize)]
+struct SourcesParams {
+    sort: Option<String>,
+    dir: Option<String>,
+}
+
+async fn sources(
+    State(st): State<AppState>,
+    Query(params): Query<SourcesParams>,
+    headers: HeaderMap,
+) -> Response {
     let admin = st.is_admin(&headers);
-    let result = sources_page(&st, admin).await;
+    let result = sources_page(&st, admin, params).await;
     st.respond(result)
 }
 
-async fn sources_page(st: &AppState, admin: bool) -> PageResult {
+async fn sources_page(st: &AppState, admin: bool, params: SourcesParams) -> PageResult {
     let states = st.with_store(|s| s.source_states()).await?;
     let now = Utc::now();
-    let rows: Vec<_> = st
+    let mut rows: Vec<_> = st
         .sources
         .manageable_sources()
         .iter()
         .map(|s| source_row(st, s, states.get(&s.id), now))
         .collect();
+
+    let by_owner = params.sort.as_deref() == Some("owner");
+    let desc = by_owner && params.dir.as_deref() == Some("desc");
+    if by_owner {
+        // Stable, so each owner's sources keep their config order.
+        let owner = |r: &serde_json::Value| r["owner"].as_str().unwrap_or_default().to_lowercase();
+        rows.sort_by_key(owner);
+        if desc {
+            rows.reverse();
+        }
+    }
+    let sort = json!({
+        "owner": if !by_owner { "none" } else if desc { "descending" } else { "ascending" },
+        "owner_url": if by_owner && !desc { "/sources?sort=owner&dir=desc" } else { "/sources?sort=owner" },
+    });
+    let next = match (by_owner, desc) {
+        (true, true) => "/sources?sort=owner&dir=desc",
+        (true, false) => "/sources?sort=owner",
+        _ => "/sources",
+    };
     let count = |status: &str| rows.iter().filter(|r| r["status"] == status).count();
     let summary = json!({
         "total": rows.len(),
@@ -506,7 +537,8 @@ async fn sources_page(st: &AppState, admin: bool) -> PageResult {
             "summary": summary,
             "admin": admin,
             "login_available": st.admin_token().is_some(),
-            "next": "/sources",
+            "next": next,
+            "sort": sort,
         }),
     )
 }

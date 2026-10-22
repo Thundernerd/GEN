@@ -1,8 +1,8 @@
-{#- Source health table. Expects `sources` (rows built by `source_row`), `admin` and `next`. -#}
+{#- Source health table. Expects `sources` (rows built by `source_row`), `admin` and `next`; `sort` makes Owner sortable. -#}
 <div class="table-wrap">
 <table class="sources">
   <thead>
-    <tr><th class="center">Status</th><th class="center">Owner</th><th>Source</th><th class="center">Last OK</th><th class="center">Failures</th><th>Last error</th>{% if admin %}<th><span class="visually-hidden">Actions</span></th>{% endif %}</tr>
+    <tr><th class="center">Status</th>{% if sort %}<th class="center" aria-sort="{{ sort.owner }}"><a class="sort-link" href="{{ sort.owner_url }}">Owner<span class="sort-arrow" aria-hidden="true">{{ "▲" if sort.owner == "ascending" else "▼" if sort.owner == "descending" else "↕" }}</span></a></th>{% else %}<th class="center">Owner</th>{% endif %}<th>Source</th><th class="center">Last OK</th><th class="center">Failures</th><th>Last error</th>{% if admin %}<th><span class="visually-hidden">Actions</span></th>{% endif %}</tr>
   </thead>
   <tbody>
     {%- for s in sources %}

@@ -152,6 +152,28 @@ async fn login(st: &AppState) -> String {
 }
 
 #[tokio::test]
+async fn sources_sort_by_owner() {
+    let pos = |body: &str, owner: &str| body.find(&format!(">{owner}<")).unwrap();
+    let (_, _, body) = get("/sources?sort=owner").await;
+    assert!(pos(&body, "Bevy") < pos(&body, "GameFromScratch"));
+    assert!(pos(&body, "GameFromScratch") < pos(&body, "Godot"));
+    assert!(body.contains(r#"aria-sort="ascending""#));
+    assert!(
+        body.contains("dir=desc"),
+        "header links to the reverse order"
+    );
+
+    let (_, _, body) = get("/sources?sort=owner&dir=desc").await;
+    assert!(pos(&body, "Godot") < pos(&body, "GameFromScratch"));
+    assert!(pos(&body, "GameFromScratch") < pos(&body, "Bevy"));
+
+    // Default: config order (Godot, Bevy, then the outlet).
+    let (_, _, body) = get("/sources?sort=bogus").await;
+    assert!(pos(&body, "Godot") < pos(&body, "Bevy"));
+    assert!(body.contains(r#"aria-sort="none""#));
+}
+
+#[tokio::test]
 async fn toggling_sources_requires_admin() {
     let st = state();
     let toggle = format!("source_id={}&enabled=0&next=%2Fsources", urlenc(GODOT_SRC));
