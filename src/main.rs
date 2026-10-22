@@ -60,6 +60,12 @@ enum Command {
     },
     /// Validate the config files and list the sources.
     CheckConfig,
+    /// Send a sample item to one notification channel, ignoring its rules.
+    NotifyTest {
+        /// Channel name from `[[notify.channel]]`.
+        #[arg(long)]
+        channel: String,
+    },
 }
 
 #[tokio::main]
@@ -78,6 +84,7 @@ async fn main() -> anyhow::Result<()> {
         Command::CheckConfig => check_config(&app, &sources),
         Command::Fetch { source } => fetch_once(&app, &sources, source.as_deref()).await,
         Command::Serve => serve(app, sources).await,
+        Command::NotifyTest { channel } => notify_test(&app, &sources, &channel).await,
     }
 }
 
@@ -154,6 +161,40 @@ async fn fetch_once(
         }
     }
     println!("\n{ok} ok, {failed} failed, {new_total} new items");
+    Ok(())
+}
+
+async fn notify_test(
+    app: &AppConfig,
+    sources: &SourcesConfig,
+    channel: &str,
+) -> anyhow::Result<()> {
+    let Some(cfg) = app.notify.channels.iter().find(|c| c.name == channel) else {
+        let names: Vec<_> = app
+            .notify
+            .channels
+            .iter()
+            .map(|c| c.name.as_str())
+            .collect();
+        anyhow::bail!(
+            "no notify channel named `{channel}` (configured: {})",
+            if names.is_empty() {
+                "none".to_string()
+            } else {
+                names.join(", ")
+            }
+        );
+    };
+    let http = Http::new(&app.polling.user_agent, None)?;
+    let ctx = notify::NotifyContext {
+        http: &http,
+        sources,
+        base_url: &app.server.base_url,
+    };
+    notify::send(&ctx, cfg, &[notify::sample_item()])
+        .await
+        .with_context(|| format!("sending test notification to `{channel}`"))?;
+    println!("sent test notification to `{channel}`");
     Ok(())
 }
 
