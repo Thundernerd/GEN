@@ -1,0 +1,196 @@
+<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"
+	xmlns:content="http://purl.org/rss/1.0/modules/content/"
+	xmlns:wfw="http://wellformedweb.org/CommentAPI/"
+	xmlns:dc="http://purl.org/dc/elements/1.1/"
+	xmlns:atom="http://www.w3.org/2005/Atom"
+	xmlns:sy="http://purl.org/rss/1.0/modules/syndication/"
+	xmlns:slash="http://purl.org/rss/1.0/modules/slash/"
+	>
+
+<channel>
+	<title>Blog - Flax Engine</title>
+	<atom:link href="https://flaxengine.com/blog/feed/" rel="self" type="application/rss+xml" />
+	<link>https://flaxengine.com/blog/</link>
+	<description>Flax - A true game changer</description>
+	<lastBuildDate>Wed, 21 Oct 2026 06:28:32 +0000</lastBuildDate>
+	<language>en-US</language>
+	<sy:updatePeriod>
+	hourly	</sy:updatePeriod>
+	<sy:updateFrequency>
+	1	</sy:updateFrequency>
+	<generator>https://wordpress.org/?v=7.1.3</generator>
+
+<image>
+	<url>https://flaxengine.com/wp-content/uploads/2020/12/cropped-Web_Logo_512-32x32.png</url>
+	<title>Blog - Flax Engine</title>
+	<link>https://flaxengine.com/blog/</link>
+	<width>32</width>
+	<height>32</height>
+</image> 
+	<item>
+		<title>Flax 1.13 released</title>
+		<link>https://flaxengine.com/blog/flax-1-13-released/</link>
+					<comments>https://flaxengine.com/blog/flax-1-13-released/#comments</comments>
+		
+		<dc:creator><![CDATA[Wojciech Figat]]></dc:creator>
+		<pubDate>Wed, 21 Oct 2026 06:28:31 +0000</pubDate>
+				<category><![CDATA[Releases]]></category>
+		<category><![CDATA[.net 10]]></category>
+		<category><![CDATA[c#]]></category>
+		<category><![CDATA[ddgi]]></category>
+		<category><![CDATA[dotnet]]></category>
+		<category><![CDATA[flax]]></category>
+		<category><![CDATA[fsr]]></category>
+		<category><![CDATA[gpu]]></category>
+		<category><![CDATA[graphics]]></category>
+		<category><![CDATA[news]]></category>
+		<category><![CDATA[pcss]]></category>
+		<category><![CDATA[rendering]]></category>
+		<category><![CDATA[taa]]></category>
+		<category><![CDATA[update]]></category>
+		<category><![CDATA[visject]]></category>
+		<guid isPermaLink="false">https://flaxengine.com/?p=2587</guid>
+
+					<description><![CDATA[<img width="770" height="250" src="https://flaxengine.com/wp-content/uploads/2026/10/Post_Flax113.jpg" class="webfeedsFeaturedVisual wp-post-image" alt="" style="display: block; margin: auto; margin-bottom: 5px;max-width: 100%;" link_thumbnail="" decoding="async" fetchpriority="high" srcset="https://flaxengine.com/wp-content/uploads/2026/10/Post_Flax113.jpg 770w, https://flaxengine.com/wp-content/uploads/2026/10/Post_Flax113-300x97.jpg 300w, https://flaxengine.com/wp-content/uploads/2026/10/Post_Flax113-768x249.jpg 768w" sizes="(max-width: 770px) 100vw, 770px" />Hej We&#8217;re happy to release Flax 1.13! Huge update with various new features and fixes. We&#8217;ve got surprise news down on the bottom&#x2b07;&#xfe0f; For this release, together with our contributors, we&#8217;ve made over 999 commits and merged 130 Pull Requests<a class="moretag" href="https://flaxengine.com/blog/flax-1-13-released/"> Read more&#8230;</a>]]></description>
+		
+					<wfw:commentRss>https://flaxengine.com/blog/flax-1-13-released/feed/</wfw:commentRss>
+			<slash:comments>2</slash:comments>
+		
+		
+			</item>
+		<item>
+		<title>Flax Facts #37 &#8211; September 2026</title>
+		<link>https://flaxengine.com/blog/flax-facts-37/</link>
+					<comments>https://flaxengine.com/blog/flax-facts-37/#comments</comments>
+		
+		<dc:creator><![CDATA[Wojciech Figat]]></dc:creator>
+		<pubDate>Wed, 30 Sep 2026 11:43:41 +0000</pubDate>
+				<category><![CDATA[Flax Facts]]></category>
+		<category><![CDATA[Behavior Trees]]></category>
+		<category><![CDATA[bt]]></category>
+		<category><![CDATA[c#]]></category>
+		<category><![CDATA[flax facts]]></category>
+		<category><![CDATA[hzb]]></category>
+		<category><![CDATA[networking]]></category>
+		<category><![CDATA[occlusion culling]]></category>
+		<category><![CDATA[scripting]]></category>
+		<category><![CDATA[ui]]></category>
+		<guid isPermaLink="false">https://flaxengine.com/?p=2561</guid>
+
+					<description><![CDATA[<img width="770" height="250" src="https://flaxengine.com/wp-content/uploads/2026/09/Post_FlaxFacts037.jpg" class="webfeedsFeaturedVisual wp-post-image" alt="" style="display: block; margin: auto; margin-bottom: 5px;max-width: 100%;" link_thumbnail="" decoding="async" srcset="https://flaxengine.com/wp-content/uploads/2026/09/Post_FlaxFacts037.jpg 770w, https://flaxengine.com/wp-content/uploads/2026/09/Post_FlaxFacts037-300x97.jpg 300w, https://flaxengine.com/wp-content/uploads/2026/09/Post_FlaxFacts037-768x249.jpg 768w" sizes="(max-width: 770px) 100vw, 770px" />Hello and welcome all of you, to the latest edition of Flax Facts! Today, as always, we will go over the updates from the past month. It&#8217;s time for the last fixes and improvements for the upcoming Flax 1.13. Rich<a class="moretag" href="https://flaxengine.com/blog/flax-facts-37/"> Read more&#8230;</a>]]></description>
+		
+					<wfw:commentRss>https://flaxengine.com/blog/flax-facts-37/feed/</wfw:commentRss>
+			<slash:comments>1</slash:comments>
+		
+		
+			</item>
+		<item>
+		<title>Flax Facts #36 &#8211; August 2026</title>
+		<link>https://flaxengine.com/blog/flax-facts-36/</link>
+					<comments>https://flaxengine.com/blog/flax-facts-36/#comments</comments>
+		
+		<dc:creator><![CDATA[Wojciech Figat]]></dc:creator>
+		<pubDate>Mon, 31 Aug 2026 13:12:35 +0000</pubDate>
+				<category><![CDATA[Flax Facts]]></category>
+		<category><![CDATA[editor]]></category>
+		<category><![CDATA[flax]]></category>
+		<category><![CDATA[flax facts]]></category>
+		<category><![CDATA[game]]></category>
+		<category><![CDATA[online]]></category>
+		<category><![CDATA[rendering]]></category>
+		<category><![CDATA[split-screen]]></category>
+		<category><![CDATA[steam]]></category>
+		<guid isPermaLink="false">https://flaxengine.com/?p=2526</guid>
+
+					<description><![CDATA[<img width="770" height="250" src="https://flaxengine.com/wp-content/uploads/2026/08/Post_FlaxFacts036.jpg" class="webfeedsFeaturedVisual wp-post-image" alt="" style="display: block; margin: auto; margin-bottom: 5px;max-width: 100%;" link_thumbnail="" decoding="async" srcset="https://flaxengine.com/wp-content/uploads/2026/08/Post_FlaxFacts036.jpg 770w, https://flaxengine.com/wp-content/uploads/2026/08/Post_FlaxFacts036-300x97.jpg 300w, https://flaxengine.com/wp-content/uploads/2026/08/Post_FlaxFacts036-768x249.jpg 768w" sizes="(max-width: 770px) 100vw, 770px" />It&#8217;s so good to see you again here! Welcome to Flax Facts, our monthly blog series where we go over recent updates and community news. New Split-Screen Sample We&#8217;ve created a new sample project that showcases split-screen rendering with multiple<a class="moretag" href="https://flaxengine.com/blog/flax-facts-36/"> Read more&#8230;</a>]]></description>
+		
+					<wfw:commentRss>https://flaxengine.com/blog/flax-facts-36/feed/</wfw:commentRss>
+			<slash:comments>3</slash:comments>
+		
+		
+			</item>
+		<item>
+		<title>Flax Facts #35 &#8211; July 2026</title>
+		<link>https://flaxengine.com/blog/flax-facts-35/</link>
+					<comments>https://flaxengine.com/blog/flax-facts-35/#comments</comments>
+		
+		<dc:creator><![CDATA[Wojciech Figat]]></dc:creator>
+		<pubDate>Wed, 29 Jul 2026 19:17:50 +0000</pubDate>
+				<category><![CDATA[Flax Facts]]></category>
+		<category><![CDATA[ddgi]]></category>
+		<category><![CDATA[discord]]></category>
+		<category><![CDATA[editor]]></category>
+		<category><![CDATA[flax]]></category>
+		<category><![CDATA[flax facts]]></category>
+		<category><![CDATA[performance]]></category>
+		<category><![CDATA[properties]]></category>
+		<category><![CDATA[sample]]></category>
+		<category><![CDATA[scripting]]></category>
+		<guid isPermaLink="false">https://flaxengine.com/?p=2500</guid>
+
+					<description><![CDATA[<img width="770" height="250" src="https://flaxengine.com/wp-content/uploads/2026/07/Post_FlaxFacts035.jpg" class="webfeedsFeaturedVisual wp-post-image" alt="" style="display: block; margin: auto; margin-bottom: 5px;max-width: 100%;" link_thumbnail="" decoding="async" loading="lazy" srcset="https://flaxengine.com/wp-content/uploads/2026/07/Post_FlaxFacts035.jpg 770w, https://flaxengine.com/wp-content/uploads/2026/07/Post_FlaxFacts035-300x97.jpg 300w, https://flaxengine.com/wp-content/uploads/2026/07/Post_FlaxFacts035-768x249.jpg 768w" sizes="auto, (max-width: 770px) 100vw, 770px" />Welcome, welcome, welcome to Flax Facts. Today it&#8217;s time for a quick round trip around the latest updates to the project development and community news. DDGI Specular Reflections Real-time global illumination gets rough specular reflections. No need to place Environment<a class="moretag" href="https://flaxengine.com/blog/flax-facts-35/"> Read more&#8230;</a>]]></description>
+		
+					<wfw:commentRss>https://flaxengine.com/blog/flax-facts-35/feed/</wfw:commentRss>
+			<slash:comments>2</slash:comments>
+		
+		
+			</item>
+		<item>
+		<title>Flax Facts #34 &#8211; June 2026</title>
+		<link>https://flaxengine.com/blog/flax-facts-34/</link>
+					<comments>https://flaxengine.com/blog/flax-facts-34/#comments</comments>
+		
+		<dc:creator><![CDATA[Wojciech Figat]]></dc:creator>
+		<pubDate>Thu, 18 Jun 2026 13:13:24 +0000</pubDate>
+				<category><![CDATA[Flax Facts]]></category>
+		<category><![CDATA[.net]]></category>
+		<category><![CDATA[animations]]></category>
+		<category><![CDATA[c#]]></category>
+		<category><![CDATA[flax]]></category>
+		<category><![CDATA[flax facts]]></category>
+		<category><![CDATA[forum]]></category>
+		<category><![CDATA[macos]]></category>
+		<category><![CDATA[news]]></category>
+		<category><![CDATA[profiler]]></category>
+		<category><![CDATA[rendering]]></category>
+		<category><![CDATA[server]]></category>
+		<category><![CDATA[update]]></category>
+		<guid isPermaLink="false">https://flaxengine.com/?p=2475</guid>
+
+					<description><![CDATA[<img width="770" height="250" src="https://flaxengine.com/wp-content/uploads/2026/06/Post_FlaxFacts034.jpg" class="webfeedsFeaturedVisual wp-post-image" alt="" style="display: block; margin: auto; margin-bottom: 5px;max-width: 100%;" link_thumbnail="" decoding="async" loading="lazy" srcset="https://flaxengine.com/wp-content/uploads/2026/06/Post_FlaxFacts034.jpg 770w, https://flaxengine.com/wp-content/uploads/2026/06/Post_FlaxFacts034-300x97.jpg 300w, https://flaxengine.com/wp-content/uploads/2026/06/Post_FlaxFacts034-768x249.jpg 768w" sizes="auto, (max-width: 770px) 100vw, 770px" />Welcome back to Flax Facts. That’s our own blog series we used to write actively in the past. We’re bringing it back! Today, we will go over the updates from the past month to give you a glimpse into the<a class="moretag" href="https://flaxengine.com/blog/flax-facts-34/"> Read more&#8230;</a>]]></description>
+		
+					<wfw:commentRss>https://flaxengine.com/blog/flax-facts-34/feed/</wfw:commentRss>
+			<slash:comments>7</slash:comments>
+		
+		
+			</item>
+		<item>
+		<title>Flax 1.12 released</title>
+		<link>https://flaxengine.com/blog/flax-1-12-released/</link>
+					<comments>https://flaxengine.com/blog/flax-1-12-released/#comments</comments>
+		
+		<dc:creator><![CDATA[Wojciech Figat]]></dc:creator>
+		<pubDate>Mon, 18 May 2026 19:58:46 +0000</pubDate>
+				<category><![CDATA[Project Info]]></category>
+		<category><![CDATA[Releases]]></category>
+		<category><![CDATA[animations]]></category>
+		<category><![CDATA[ddgi]]></category>
+		<category><![CDATA[editor]]></category>
+		<category><![CDATA[flax]]></category>
+		<category><![CDATA[news]]></category>
+		<category><![CDATA[rendering]]></category>
+		<category><![CDATA[tools]]></category>
+		<category><![CDATA[update]]></category>
+		<category><![CDATA[visject]]></category>
+		<category><![CDATA[web]]></category>
+		<guid isPermaLink="false">https://flaxengine.com/?p=2433</guid>
+
+					<description><![CDATA[<img width="770" height="250" src="https://flaxengine.com/wp-content/uploads/2026/04/Post_Flax112.jpg" class="webfeedsFeaturedVisual wp-post-image" alt="" style="display: block; margin: auto; margin-bottom: 5px;max-width: 100%;" link_thumbnail="" decoding="async" loading="lazy" srcset="https://flaxengine.com/wp-content/uploads/2026/04/Post_Flax112.jpg 770w, https://flaxengine.com/wp-content/uploads/2026/04/Post_Flax112-300x97.jpg 300w, https://flaxengine.com/wp-content/uploads/2026/04/Post_Flax112-768x249.jpg 768w" sizes="auto, (max-width: 770px) 100vw, 770px" />Bonjour! We&#8217;re pleased to announce Flax 1.12! Important update with various new features and stability improvements. For this release, together with our contributors, we&#8217;ve made over 1,481 commits and merged 111 Pull Requests into Flax repositories. Thanks for your support!<a class="moretag" href="https://flaxengine.com/blog/flax-1-12-released/"> Read more&#8230;</a>]]></description>
+		
+					<wfw:commentRss>https://flaxengine.com/blog/flax-1-12-released/feed/</wfw:commentRss>
+			<slash:comments>2</slash:comments>
+		
+		
+			</item>
+	</channel>
+</rss>

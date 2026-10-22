@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom" xmlns:media="http://search.yahoo.com/mrss/" xml:lang="en-US">
+  <id>tag:github.com,2008:https://github.com/stride3d/stride/releases</id>
+  <link type="text/html" rel="alternate" href="https://github.com/stride3d/stride/releases"/>
+  <link type="application/atom+xml" rel="self" href="https://github.com/stride3d/stride/releases.atom"/>
+  <title>Release notes from stride</title>
+  <updated>2026-10-17T05:40:03Z</updated>
+  <entry>
+    <id>tag:github.com,2008:Repository/136570231/releases/4.4.1</id>
+    <updated>2026-10-17T07:41:19Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/stride3d/stride/releases/tag/releases%2F4.4.1"/>
+    <title>Stride 4.4.1</title>
+    <content type="html">&lt;h2&gt;What&#39;s Changed&lt;/h2&gt;
+&lt;p&gt;&lt;em&gt;Auto-generated; a maintainer may hand-edit.&lt;/em&gt;&lt;/p&gt;
+
+
+&lt;h3&gt;🎮 Graphics &amp;amp; Rendering&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;Direct3D 12 games no longer need Windows Developer Mode to use the Agility SDK. It now works on Windows 10, games ship it in a &lt;code&gt;D3D12&lt;/code&gt; folder next to the executable, and Game Studio loads it too (&lt;a class=&quot;user-mention notranslate&quot; data-hovercard-type=&quot;user&quot; data-hovercard-url=&quot;/users/xen2/hovercard&quot; data-octo-click=&quot;hovercard-link-click&quot; data-octo-dimensions=&quot;link_type:self&quot; href=&quot;https://github.com/xen2&quot;&gt;@xen2&lt;/a&gt;, &lt;a href=&quot;https://github.com/stride3d/stride/pull/3627&quot; data-hovercard-type=&quot;pull_request&quot; data-hovercard-url=&quot;/stride3d/stride/pull/3627/hovercard&quot;&gt;#3627&lt;/a&gt;)&lt;/li&gt;
+&lt;li&gt;MSAA now works on Vulkan and Direct3D 12, and is no longer turned off on iOS (&lt;a class=&quot;user-mention notranslate&quot; data-hovercard-type=&quot;user&quot; data-hovercard-url=&quot;/users/xen2/hovercard&quot; data-octo-click=&quot;hovercard-link-click&quot; data-octo-dimensions=&quot;link_type:self&quot; href=&quot;https://github.com/xen2&quot;&gt;@xen2&lt;/a&gt;, &lt;a href=&quot;https://github.com/stride3d/stride/pull/3552&quot; data-hovercard-type=&quot;pull_request&quot; data-hovercard-url=&quot;/stride3d/stride/pull/3552/hovercard&quot;&gt;#355</content>
+    <author>
+      <name>xen2</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/527565?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/136570231/launcher/6.0.7</id>
+    <updated>2026-10-14T16:03:06Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/stride3d/stride/releases/tag/launcher%2F6.0.7"/>
+    <title>Stride Launcher 6.0.7</title>
+    <content type="html">&lt;h2&gt;What&#39;s Changed&lt;/h2&gt;
+&lt;p&gt;&lt;em&gt;Auto-generated; a maintainer may hand-edit.&lt;/em&gt;&lt;/p&gt;
+
+&lt;h3&gt;🌙 Nightly builds&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;Turning on &lt;strong&gt;Show nightly builds of Stride&lt;/strong&gt; now asks you to confirm first. The prompt explains that nightly builds aren&#39;t signed or tested as much as releases, and that project upgrades might not be fully tested, so back up your projects before opening them with a nightly (&lt;a class=&quot;user-mention notranslate&quot; data-hovercard-type=&quot;user&quot; data-hovercard-url=&quot;/users/xen2/hovercard&quot; data-octo-click=&quot;hovercard-link-click&quot; data-octo-dimensions=&quot;link_type:self&quot; href=&quot;https://github.com/xen2&quot;&gt;@xen2&lt;/a&gt;, &lt;a href=&quot;https://github.com/stride3d/stride/commit/4de8c240b206d90c0b6c7d19b30555c7f7dc6eb0&quot;&gt;4de8c24&lt;/a&gt;)&lt;/li&gt;
+&lt;li&gt;A nightly row now has a &lt;strong&gt;What&#39;s new&lt;/strong&gt; button that opens its changes on GitHub, since nightlies don&#39;t have release notes. It shows what changed since the nightly you have installed, or since the last release if you haven&#39;t installed one. Its tooltip names both versions being compared (&lt;a class=&quot;user-mention notranslate&quot; data-hovercard-type=&quot;user&quot; data-hovercard-url=&quot;/users/xen2/hovercard&quot; data-octo-click=&quot;hovercard-link-click&quot; data-octo-dimensions=&quot;link_type:self&quot; href=</content>
+    <author>
+      <name>xen2</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/527565?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/136570231/launcher/6.0.6</id>
+    <updated>2026-10-14T10:01:28Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/stride3d/stride/releases/tag/launcher%2F6.0.6"/>
+    <title>Stride Launcher 6.0.6</title>
+    <content type="html">&lt;h2&gt;What&#39;s Changed&lt;/h2&gt;
+&lt;p&gt;&lt;em&gt;Auto-generated; a maintainer may hand-edit.&lt;/em&gt;&lt;/p&gt;
+
+&lt;h3&gt;🚀 Launcher&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;New &lt;strong&gt;&quot;Show nightly builds of Stride&quot;&lt;/strong&gt; option in the launcher settings (the gear in the title bar). Turn it on to try the latest development builds of Stride without leaving the launcher. Turning it off hides them again, but nightlies you already installed stay in the list.&lt;br&gt;
+Nightly builds have their own rows in the version list, marked with a &lt;strong&gt;NIGHTLY&lt;/strong&gt; badge. Your default version, &quot;Install latest&quot; and first-time installs keep using official releases.&lt;br&gt;
+Projects made with a nightly open with the nightly row, and the launcher only suggests upgrading to a nightly for projects that already use one.&lt;br&gt;
+Nightly builds are not signed and get less testing than releases (&lt;a class=&quot;user-mention notranslate&quot; data-hovercard-type=&quot;user&quot; data-hovercard-url=&quot;/users/xen2/hovercard&quot; data-octo-click=&quot;hovercard-link-click&quot; data-octo-dimensions=&quot;link_type:self&quot; href=&quot;https://github.com/xen2&quot;&gt;@xen2&lt;/a&gt;, &lt;a href=&quot;https://github.com/stride3d/stride/commit/ca5a22bb13f8d4b553d241d5fa84b5f990a47826&quot;&gt;ca5a22b&lt;/a&gt;)&lt;/li&gt;
+&lt;li&gt;Versions built locally from your own Stride source checkout now show a &lt;strong&gt;LOCAL&lt;/strong&gt; b</content>
+    <author>
+      <name>xen2</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/527565?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/136570231/launcher/6.0.5</id>
+    <updated>2026-10-14T03:27:20Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/stride3d/stride/releases/tag/launcher%2F6.0.5"/>
+    <title>Stride Launcher 6.0.5</title>
+    <content type="html">&lt;h2&gt;What&#39;s Changed&lt;/h2&gt;
+&lt;p&gt;&lt;em&gt;Auto-generated; a maintainer may hand-edit.&lt;/em&gt;&lt;/p&gt;
+
+&lt;h3&gt;🚀 Launcher&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Remove from list&lt;/strong&gt; now removes a project from every Game Studio version it&#39;s listed under. Before, projects opened with dev builds or with an unknown version stayed in the list. (&lt;a class=&quot;user-mention notranslate&quot; data-hovercard-type=&quot;user&quot; data-hovercard-url=&quot;/users/xen2/hovercard&quot; data-octo-click=&quot;hovercard-link-click&quot; data-octo-dimensions=&quot;link_type:self&quot; href=&quot;https://github.com/xen2&quot;&gt;@xen2&lt;/a&gt;, &lt;a href=&quot;https://github.com/stride3d/stride/commit/dc2bacc671f18fa6ac52c2f7defab09048c177c0&quot;&gt;dc2bacc&lt;/a&gt;)&lt;/li&gt;
+&lt;li&gt;Older launchers added an outdated package feed (packages.stride3d.net / packages.xenko.com, from the Xenko 3.0 era) to your NuGet settings. The launcher now removes it automatically. (&lt;a class=&quot;user-mention notranslate&quot; data-hovercard-type=&quot;user&quot; data-hovercard-url=&quot;/users/xen2/hovercard&quot; data-octo-click=&quot;hovercard-link-click&quot; data-octo-dimensions=&quot;link_type:self&quot; href=&quot;https://github.com/xen2&quot;&gt;@xen2&lt;/a&gt;, &lt;a href=&quot;https://github.com/stride3d/stride/commit/8b0bf4cc6d0afd35a2ecccccdda4764c324c7648&quot;&gt;8b0bf4c&lt;/a&gt;)&lt;/li&gt;
+&lt;li&gt;Project and news cards now use the s</content>
+    <author>
+      <name>xen2</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/527565?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/136570231/cli/1.0.4</id>
+    <updated>2026-10-14T16:37:33Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/stride3d/stride/releases/tag/cli%2F1.0.4"/>
+    <title>Stride CLI 1.0.4</title>
+    <content type="html">&lt;h2&gt;What&#39;s Changed&lt;/h2&gt;
+&lt;p&gt;&lt;em&gt;Auto-generated; a maintainer may hand-edit.&lt;/em&gt;&lt;/p&gt;
+
+&lt;h3&gt;🌙 Nightly builds&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;New &lt;code&gt;--nightly&lt;/code&gt; option for &lt;code&gt;stride sdk available&lt;/code&gt;, &lt;code&gt;stride sdk install&lt;/code&gt;, &lt;code&gt;stride sdk update&lt;/code&gt; and &lt;code&gt;stride upgrade&lt;/code&gt;. Nightly builds are now only picked when you pass &lt;code&gt;--nightly&lt;/code&gt;, even if you also pass &lt;code&gt;--prerelease&lt;/code&gt;.&lt;br&gt;
+&lt;code&gt;stride sdk install --nightly&lt;/code&gt; and &lt;code&gt;stride sdk update --nightly&lt;/code&gt; add the nightly feed to your NuGet.config, the same way the launcher&#39;s &quot;Show nightly builds&quot; setting does, so Game Studio and your projects can restore from it later. &lt;code&gt;stride sdk available --nightly&lt;/code&gt; only lists the nightlies and leaves your NuGet.config alone. &lt;code&gt;stride sdk update&lt;/code&gt; also no longer moves a version line back to an older version when you&#39;re already on a newer nightly or prerelease (&lt;a class=&quot;user-mention notranslate&quot; data-hovercard-type=&quot;user&quot; data-hovercard-url=&quot;/users/xen2/hovercard&quot; data-octo-click=&quot;hovercard-link-click&quot; data-octo-dimensions=&quot;link_type:self&quot; href=&quot;https://github.com/xen2&quot;&gt;@xen2&lt;/a&gt;, &lt;a href=&quot;https://github.com/stride3d/stride/commit/96d</content>
+    <author>
+      <name>xen2</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/527565?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/136570231/samples/4.4.3</id>
+    <updated>2026-10-06T01:17:38Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/stride3d/stride/releases/tag/samples%2F4.4.3"/>
+    <title>Stride samples 4.4.3</title>
+    <content type="html">&lt;p&gt;For Stride engine 4.4.0.&lt;/p&gt;
+&lt;h2&gt;What&#39;s changed in the Stride samples&lt;/h2&gt;
+&lt;p&gt;&lt;em&gt;No sample changes since the previous samples release.&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Full samples changelog&lt;/strong&gt;: &lt;a class=&quot;commit-link&quot; href=&quot;https://github.com/stride3d/stride/compare/samples/4.4.2...samples/4.4.3&quot;&gt;&lt;tt&gt;samples/4.4.2...samples/4.4.3&lt;/tt&gt;&lt;/a&gt;&lt;/p&gt;</content>
+    <author>
+      <name>xen2</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/527565?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/136570231/releases/4.4.0</id>
+    <updated>2026-10-09T13:14:17Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/stride3d/stride/releases/tag/releases%2F4.4.0"/>
+    <title>Stride 4.4.0</title>
+    <content type="html">&lt;p&gt;Stride 4.4 is one of the largest updates the engine has received in years, with roughly &lt;strong&gt;3200 commits&lt;/strong&gt; since the previous version!&lt;/p&gt;
+&lt;p&gt;The main focus of this release was on &lt;strong&gt;modernization and reach&lt;/strong&gt;, which includes much more stable &lt;strong&gt;Vulkan&lt;/strong&gt; and &lt;strong&gt;Direct3D 12&lt;/strong&gt; backends, support for &lt;strong&gt;non-Windows platforms&lt;/strong&gt; no longer being experimental and an overhaul of the shader compiler.&lt;/p&gt;
+&lt;p&gt;This update also includes many exciting new features, such as a &lt;strong&gt;CLI tool&lt;/strong&gt;, ability to &lt;strong&gt;replace read-only assets&lt;/strong&gt; and much more.&lt;/p&gt;
+&lt;h2&gt;Highlights&lt;/h2&gt;
+&lt;p&gt;Here are a few of the stand-out changes:&lt;/p&gt;
+&lt;h3&gt;📱 Platform support&lt;/h3&gt;
+&lt;p&gt;So far, Stride has mostly been a Windows-first engine. Other platforms were supported, but creating and running games on them would often lead to many problems. This update changes that.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;All platforms have been brought back into shape&lt;/strong&gt; and the test suite for them has been expanded to make sure they won&#39;t fall behind again. Additionally, with changes to the asset compiler, &lt;strong&gt;building projects on Linux and macOS&lt;/strong&gt; now works the same &lt;strong&gt;as it does on Windows&lt;/strong&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;a target=&quot;_blank&quot; </content>
+    <author>
+      <name>xen2</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/527565?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/136570231/launcher/6.0.4</id>
+    <updated>2026-10-06T08:18:58Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/stride3d/stride/releases/tag/launcher%2F6.0.4"/>
+    <title>Stride Launcher 6.0.4</title>
+    <content type="html">&lt;h2&gt;What&#39;s Changed&lt;/h2&gt;
+&lt;p&gt;&lt;em&gt;Auto-generated; a maintainer may hand-edit.&lt;/em&gt;&lt;/p&gt;
+
+&lt;h3&gt;🐧 Cross-platform / CLI / Build&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;Fixed uninstalling the launcher via &lt;code&gt;winget&lt;/code&gt; or other silent-uninstall tools: the installer now registers a quiet uninstall command, so uninstalling no longer requires elevation prompts that those tools can&#39;t answer (&lt;a class=&quot;user-mention notranslate&quot; data-hovercard-type=&quot;user&quot; data-hovercard-url=&quot;/users/xen2/hovercard&quot; data-octo-click=&quot;hovercard-link-click&quot; data-octo-dimensions=&quot;link_type:self&quot; href=&quot;https://github.com/xen2&quot;&gt;@xen2&lt;/a&gt;, &lt;a href=&quot;https://github.com/stride3d/stride/commit/dd9ebaf962eb1fc3e3387b11cfb8c3ad730a699f&quot;&gt;dd9ebaf&lt;/a&gt;)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;Full Changelog&lt;/strong&gt;: &lt;a class=&quot;commit-link&quot; href=&quot;https://github.com/stride3d/stride/compare/launcher/6.0.3...launcher/6.0.4&quot;&gt;&lt;tt&gt;launcher/6.0.3...launcher/6.0.4&lt;/tt&gt;&lt;/a&gt;&lt;/p&gt;</content>
+    <author>
+      <name>xen2</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/527565?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/136570231/launcher/6.0.3</id>
+    <updated>2026-10-06T06:56:30Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/stride3d/stride/releases/tag/launcher%2F6.0.3"/>
+    <title>Stride Launcher 6.0.3</title>
+    <content type="html">&lt;h2&gt;What&#39;s Changed&lt;/h2&gt;
+&lt;p&gt;&lt;em&gt;Auto-generated; a maintainer may hand-edit.&lt;/em&gt;&lt;/p&gt;
+
+&lt;h3&gt;📦 Setup / Uninstall&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;Uninstalling now asks whether to also remove the installed Stride versions, instead of always deleting them; choose &quot;Keep&quot; if you plan to reinstall. Silent uninstalls (&lt;code&gt;msiexec /qn&lt;/code&gt;, or when run with no desktop session, e.g. through management tools like Intune) skip the prompt and leave the versions in place (&lt;a class=&quot;user-mention notranslate&quot; data-hovercard-type=&quot;user&quot; data-hovercard-url=&quot;/users/xen2/hovercard&quot; data-octo-click=&quot;hovercard-link-click&quot; data-octo-dimensions=&quot;link_type:self&quot; href=&quot;https://github.com/xen2&quot;&gt;@xen2&lt;/a&gt;, &lt;a href=&quot;https://github.com/stride3d/stride/commit/3b5016e9586f208d63d6d1f35ca18ccff1cf6d58&quot;&gt;3b5016e&lt;/a&gt;)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;🔧 Under the hood&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;Updated a project reference after the WPF editor projects were renamed elsewhere in the solution (&lt;a class=&quot;user-mention notranslate&quot; data-hovercard-type=&quot;user&quot; data-hovercard-url=&quot;/users/Kryptos-FR/hovercard&quot; data-octo-click=&quot;hovercard-link-click&quot; data-octo-dimensions=&quot;link_type:self&quot; href=&quot;https://github.com/Kryptos-FR&quot;&gt;@Kryptos-FR&lt;/a&gt;, &lt;a href=&quot;https://github.com/stride3d/str</content>
+    <author>
+      <name>xen2</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/527565?s=60&amp;v=4"/>
+  </entry>
+  <entry>
+    <id>tag:github.com,2008:Repository/136570231/launcher/6.0.2</id>
+    <updated>2026-10-05T15:09:38Z</updated>
+    <link rel="alternate" type="text/html" href="https://github.com/stride3d/stride/releases/tag/launcher%2F6.0.2"/>
+    <title>Stride Launcher 6.0.2</title>
+    <content type="html">&lt;h2&gt;What&#39;s Changed&lt;/h2&gt;
+&lt;p&gt;&lt;em&gt;Auto-generated; a maintainer may hand-edit.&lt;/em&gt;&lt;/p&gt;
+
+&lt;h3&gt;🚀 Launcher&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;Fixed self-updates that require a full reinstall: the new installer is now saved to disk as it downloads instead of being held entirely in memory first, so the download no longer times out or fails on slower connections (&lt;a class=&quot;user-mention notranslate&quot; data-hovercard-type=&quot;user&quot; data-hovercard-url=&quot;/users/xen2/hovercard&quot; data-octo-click=&quot;hovercard-link-click&quot; data-octo-dimensions=&quot;link_type:self&quot; href=&quot;https://github.com/xen2&quot;&gt;@xen2&lt;/a&gt;, &lt;a href=&quot;https://github.com/stride3d/stride/commit/027d59ab387002ac53503a9334a616cca10d2e9a&quot;&gt;027d59a&lt;/a&gt;)&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h3&gt;🔧 Under the hood&lt;/h3&gt;
+&lt;ul&gt;
+&lt;li&gt;The launcher&#39;s requests for release notes, news, documentation links and the setup download now share one HTTP client and identify themselves with a &lt;code&gt;Stride-Launcher/&amp;lt;version&amp;gt;&lt;/code&gt; tag, making it easier to tell which launcher versions are still in use (&lt;a class=&quot;user-mention notranslate&quot; data-hovercard-type=&quot;user&quot; data-hovercard-url=&quot;/users/xen2/hovercard&quot; data-octo-click=&quot;hovercard-link-click&quot; data-octo-dimensions=&quot;link_type:self&quot; href=&quot;https://github.com/xen2&quot;&gt;@xen2&lt;/a&gt;, &lt;a h</content>
+    <author>
+      <name>xen2</name>
+    </author>
+    <media:thumbnail height="30" width="30" url="https://avatars.githubusercontent.com/u/527565?s=60&amp;v=4"/>
+  </entry>
+</feed>

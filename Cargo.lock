@@ -768,6 +768,7 @@ dependencies = [
  "futures",
  "lettre",
  "minijinja",
+ "percent-encoding",
  "regex",
  "reqwest",
  "rusqlite",
