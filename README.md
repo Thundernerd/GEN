@@ -290,7 +290,7 @@ gen notify-test --channel phone
 
 ## Managing sources from the web
 
-With `admin_token` set under `[server]`, the Sources page shows a **Manage sources** link. Log in with the token to manage sources without restarting. All changes are stored in the database and take effect right away.
+With `admin_token` set under `[server]`, the Sources page shows a **Manage sources** link. Log in with the token to manage sources without restarting. All changes are stored in the database and take effect right away. The buttons and forms update the page in place (via `static/inline-forms.js`); without JavaScript they work as ordinary form posts.
 
 ### Switching sources on and off
 

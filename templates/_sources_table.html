@@ -34,7 +34,7 @@
           </p>
           <div class="dialog-actions">
             <button type="button" class="btn-small btn-quiet" popovertarget="{{ dialog }}" popovertargetaction="hide">Cancel</button>
-            <form method="post" action="/owners/remove">
+            <form method="post" action="/owners/remove" data-inline="{{ g.owner }} removed.">
               <input type="hidden" name="owner_id" value="{{ g.owner_id }}">
               <button type="submit" class="btn-small btn-danger">Remove {{ what }}</button>
             </form>
@@ -57,7 +57,7 @@
       <td class="error-text">{{ s.last_error or "" }}</td>
       {%- if admin %}
       <td class="center actions">
-        <form method="post" action="/sources/toggle" class="toggle-form">
+        <form method="post" action="/sources/toggle" class="toggle-form" data-inline="Source {{ "disabled" if s.enabled else "enabled" }}.">
           <input type="hidden" name="source_id" value="{{ s.id }}">
           <input type="hidden" name="enabled" value="{{ "0" if s.enabled else "1" }}">
           <input type="hidden" name="next" value="{{ next }}">
@@ -76,7 +76,7 @@
           </p>
           <div class="dialog-actions">
             <button type="button" class="btn-small btn-quiet" popovertarget="{{ dialog }}" popovertargetaction="hide">Cancel</button>
-            <form method="post" action="/sources/remove">
+            <form method="post" action="/sources/remove" data-inline="Source removed.">
               <input type="hidden" name="source_id" value="{{ s.id }}">
               <input type="hidden" name="next" value="{{ next }}">
               <button type="submit" class="btn-small btn-danger">Remove source</button>

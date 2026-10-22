@@ -689,8 +689,7 @@ async fn removed_engines_come_back_from_the_suggestions() {
     let st = state();
     let cookie = login(&st).await;
     let (_, body) = get_as(&st, "/sources", &cookie).await;
-    let suggest_godot = "action=\"/suggestions/owner\">\n          \
-                         <input type=\"hidden\" name=\"owner_id\" value=\"godot\">";
+    let suggest_godot = r#"action="/suggestions/owner" data-inline="Godot added.">"#;
     assert!(body.contains("Suggestions ("));
     assert!(
         body.contains("Stride"),

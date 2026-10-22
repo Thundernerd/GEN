@@ -527,6 +527,8 @@ details.panel .form-error { margin-top: 0; }
 
 table.sources td.actions > :is(form, button) + :is(form, button) { margin-top: 0.35rem; }
 
+.visually-hidden { position: absolute; width: 1px; height: 1px; margin: -1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+form[aria-busy="true"] button { cursor: progress; opacity: 0.6; }
 .suggestion-list { list-style: none; margin: 0; padding: 0; }
 .suggestion-list li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; padding: 0.45rem 0; border-top: 1px solid var(--border); font-size: 0.875rem; overflow-wrap: anywhere; }
 .suggestion-list form { margin: 0; }

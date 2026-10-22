@@ -10,7 +10,7 @@
     {%- if failed == "add-source" %}
     <p class="form-error" role="alert">{{ feedback.error }}</p>
     {%- endif %}
-    <form method="post" action="/sources/add" class="stack-form">
+    <form method="post" action="/sources/add" class="stack-form" data-inline="Source added.">
       {%- set owner = f.owner_id or preselect_owner %}
       <div class="form-row">
         <label>
@@ -145,7 +145,7 @@
       {%- for o in g.owners %}
       <li>
         <span><strong>{{ o.name }}</strong> <span class="source-meta">{{ o.detail }} · {{ o.sources }} source{{ "s" if o.sources != 1 }}</span></span>
-        <form method="post" action="/suggestions/owner">
+        <form method="post" action="/suggestions/owner" data-inline="{{ o.name }} added.">
           <input type="hidden" name="owner_id" value="{{ o.id }}">
           <button type="submit" class="btn-small btn-quiet">Add</button>
         </form>
@@ -159,7 +159,7 @@
       {%- for s in suggestions.sources %}
       <li>
         <span><strong>{{ s.owner }}</strong> <span class="source-kind">{{ s.kind }}</span> {{ s.target }}</span>
-        <form method="post" action="/suggestions/source">
+        <form method="post" action="/suggestions/source" data-inline="Source added.">
           <input type="hidden" name="source_id" value="{{ s.id }}">
           <button type="submit" class="btn-small btn-quiet">Add</button>
         </form>
