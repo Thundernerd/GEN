@@ -29,8 +29,6 @@ pub enum FetchError {
     },
     #[error("parse error: {0}")]
     Parse(String),
-    #[error("{0} sources are not implemented yet")]
-    Unimplemented(&'static str),
 }
 
 /// Result of polling a source.
@@ -94,7 +92,6 @@ pub enum Conditional {
 
 pub struct Response {
     pub body: bytes::Bytes,
-    pub content_type: Option<String>,
     pub etag: Option<String>,
     pub last_modified: Option<String>,
 }
@@ -113,7 +110,8 @@ impl Http {
     }
 
     /// GET with `If-None-Match` / `If-Modified-Since` from `state`.
-    /// Non-success statuses other than 304 become errors (429 -> `RateLimited`).
+    /// Non-success statuses other than 304 become errors (429, or GitHub's rate-limit 403,
+    /// -> `RateLimited`).
     pub async fn get_conditional(
         &self,
         url: &str,
@@ -140,12 +138,22 @@ impl Http {
         if status == StatusCode::NOT_MODIFIED {
             return Ok(Conditional::NotModified);
         }
-        if status == StatusCode::TOO_MANY_REQUESTS {
-            let retry_after = resp
-                .headers()
-                .get(header::RETRY_AFTER)
+        let header_u64 = |name: &str| {
+            resp.headers()
+                .get(name)
                 .and_then(|v| v.to_str().ok())
                 .and_then(|v| v.parse::<u64>().ok())
+        };
+        // GitHub signals an exhausted rate limit with 403 + `x-ratelimit-remaining: 0`.
+        let github_limited =
+            status == StatusCode::FORBIDDEN && header_u64("x-ratelimit-remaining") == Some(0);
+        if status == StatusCode::TOO_MANY_REQUESTS || github_limited {
+            let retry_after = header_u64(header::RETRY_AFTER.as_str())
+                .or_else(|| {
+                    let reset = header_u64("x-ratelimit-reset")?;
+                    let now = chrono::Utc::now().timestamp().max(0) as u64;
+                    Some(reset.saturating_sub(now))
+                })
                 .map(Duration::from_secs);
             return Err(FetchError::RateLimited {
                 url: url.to_string(),
@@ -164,13 +172,11 @@ impl Http {
                 .and_then(|v: &HeaderValue| v.to_str().ok())
                 .map(str::to_string)
         };
-        let content_type = header_str(header::CONTENT_TYPE);
         let etag = header_str(header::ETAG);
         let last_modified = header_str(header::LAST_MODIFIED);
         let body = resp.bytes().await?;
         Ok(Conditional::Body(Response {
             body,
-            content_type,
             etag,
             last_modified,
         }))

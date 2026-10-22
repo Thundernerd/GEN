@@ -48,6 +48,7 @@ pub struct EngineConfig {
 pub struct OutletConfig {
     pub id: String,
     pub name: String,
+    #[allow(dead_code)] // accepted in config for documentation; not shown in the UI yet
     pub homepage: Option<String>,
     #[serde(default = "default_true")]
     pub enabled: bool,

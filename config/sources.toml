@@ -353,7 +353,7 @@ name = "BRUTAL"
 tier = 1
 csharp = "native (C# framework over native libs, Vulkan)"
 homepage = "https://ahwoo.com/brutal"
-aliases = ["brutal framework", "brutal game framework", "brutal c# framework", "ahwootech"]
+aliases = ["BRUTAL C#", "brutal framework", "brutal game framework", "brutal c# framework", "ahwootech"]
   [[engine.source]]
   kind = "github"
   repo = "ahwootech/BRUTAL"
@@ -967,7 +967,7 @@ require_engine_match = false
 id = "gamedevnet"
 name = "GameDev.net"
 homepage = "https://www.gamedev.net"
-require_engine_match = false
+require_engine_match = true  # mostly general industry news; keep only engine-related posts
   [[outlet.source]]
   kind = "feed"
   url = "https://www.gamedev.net/news/rss/"

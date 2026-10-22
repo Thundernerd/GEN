@@ -178,14 +178,7 @@ pub fn snippet(text: &str, max: usize) -> String {
     )
 }
 
-/// Whether text mentions C# or .NET.
-// TODO: replace with classify::mentions_csharp
-pub fn mentions_csharp(text: &str) -> bool {
-    let lower = text.to_lowercase();
-    ["c#", ".net", "dotnet", "nuget"]
-        .iter()
-        .any(|needle| lower.contains(needle))
-}
+pub use crate::classify::mentions_csharp;
 
 /// Builds a `?a=b&c=d` query string from the pairs that have a value ("" when none do).
 pub fn query_string(pairs: &[(&str, Option<String>)]) -> String {

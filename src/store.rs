@@ -84,6 +84,7 @@ impl Store {
         Self::init(conn)
     }
 
+    #[cfg(test)]
     pub fn open_in_memory() -> anyhow::Result<Self> {
         Self::init(Connection::open_in_memory()?)
     }
@@ -236,17 +237,6 @@ impl Store {
         Ok(inserted)
     }
 
-    pub fn item(&self, id: i64) -> anyhow::Result<Option<Item>> {
-        Ok(self
-            .conn
-            .query_row(
-                &format!("{ITEM_SELECT} WHERE i.id = ?1"),
-                [id],
-                item_from_row,
-            )
-            .optional()?)
-    }
-
     /// Newest first.
     pub fn query_items(&self, q: &ItemQuery) -> anyhow::Result<Vec<Item>> {
         let mut sql = format!("{ITEM_SELECT} WHERE 1 = 1");
@@ -305,18 +295,6 @@ impl Store {
             params![item_id, channel, Utc::now()],
         )?;
         Ok(changed > 0)
-    }
-
-    pub fn was_notified(&self, item_id: i64, channel: &str) -> anyhow::Result<bool> {
-        Ok(self
-            .conn
-            .query_row(
-                "SELECT 1 FROM notifications_sent WHERE item_id = ?1 AND channel = ?2",
-                params![item_id, channel],
-                |_| Ok(()),
-            )
-            .optional()?
-            .is_some())
     }
 }
 
@@ -441,6 +419,5 @@ mod tests {
             .remove(0);
         assert!(store.mark_notified(item.id, "discord").unwrap());
         assert!(!store.mark_notified(item.id, "discord").unwrap());
-        assert!(store.was_notified(item.id, "discord").unwrap());
     }
 }

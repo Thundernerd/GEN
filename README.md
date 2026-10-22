@@ -202,9 +202,9 @@ All source kinds also accept these fields:
 
 **Tiers:**
 
-- Tier 1 covers the major C# engines: Unity, Godot (.NET), Stride, Flax and S&Box.
-- Tier 2 covers niche or young C# engines such as Prowl, LODZERO and OpenEngine.
-- Tier 3 covers notable engines without C# support, such as Unreal. Tier-3 engines ship with `enabled = false`, so they are listed but not polled. Set `enabled = true` on any you want to follow.
+- Tier 1 covers major or very active engines with C# support, plus Unreal (C# via plugins only): Unity, Unreal, Godot (.NET), Stride, Flax, S&Box, Prowl, OpenEngine, MonoGame, FNA, NeoAxis, Evergine, UNIGINE, Silk.NET and BRUTAL.
+- Tier 2 covers niche C# engines, frameworks and libraries, such as LODZERO, KNI, Murder, Raylib-cs, Foster, MonoGame.Extended, Myra, Arch and BEPUphysics.
+- Tier 3 covers notable engines without C# support, such as Bevy, Defold, O3DE and GameMaker. Tier-3 engines ship with `enabled = false`, so they are listed but not polled. Set `enabled = true` on any you want to follow.
 
 You can disable a whole engine or outlet, or a single source, with `enabled = false`. Run `gen check-config` after editing.
 

@@ -1,6 +1,3 @@
-// Temporary while modules are stubbed out; remove once the scheduler wires everything up.
-#![allow(dead_code)]
-
 mod classify;
 mod config;
 mod fetch;
@@ -205,12 +202,35 @@ async fn serve(app: AppConfig, sources: SourcesConfig) -> anyhow::Result<()> {
         .await
         .with_context(|| format!("binding {}", state.config.server.bind))?;
     tracing::info!("listening on http://{}", listener.local_addr()?);
+    // Dropping the JoinSet when `serve` returns aborts the polling tasks.
+    let _scheduler = scheduler::spawn(pipeline, state.sources.clone(), state.config.clone());
     axum::serve(listener, web::router(state))
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
+        .with_graceful_shutdown(shutdown_signal())
         .await?;
+    tracing::info!("shut down");
     Ok(())
+}
+
+/// Resolves on Ctrl-C, or on SIGTERM (sent by `docker stop` and `systemctl stop`).
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        let _ = tokio::signal::ctrl_c().await;
+    };
+    #[cfg(unix)]
+    let terminate = async {
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+            Ok(mut sig) => {
+                sig.recv().await;
+            }
+            Err(_) => std::future::pending().await,
+        }
+    };
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+    tokio::select! {
+        () = ctrl_c => {}
+        () = terminate => {}
+    }
 }
 
 fn build_pipeline(app: &AppConfig, sources: &SourcesConfig) -> anyhow::Result<Pipeline> {
