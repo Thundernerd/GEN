@@ -13,7 +13,7 @@ GEN is a single Rust binary. It contains a web server and a background poller, a
 - Classifies each item as `release`, `prerelease`, `news`, `video` or `community`, and tags it with engines using per-engine aliases.
 - Removes cross-source duplicates, for example the same release announced on GitHub, the engine blog and GameFromScratch.
 - Provides a web UI by engine and by source, a combined Atom feed and a JSON API.
-- Sends notifications to Discord, ntfy and email, with per-channel filter rules. Email can be sent as a digest.
+- Sends notifications to Discord, ntfy, email and Apprise API (which reaches Telegram, Slack, Matrix, Pushover and many more), with per-channel filter rules. Email can be sent as a digest.
 - Uses conditional requests (ETag / Last-Modified) and per-source intervals. The first fetch of a new source fills the database without notifying, so adding a source never floods your channels.
 
 ### How it works
@@ -220,7 +220,7 @@ New sources fill the database silently on their first successful fetch.
 
 ## Notifications
 
-Channels are managed on the **Notifications** page (`/notifications`), which shows in the header once you're logged in as admin (see "Admin login"). Each channel sends to Discord (a webhook), ntfy (phone push) or email, and has rules for what it gets:
+Channels are managed on the **Notifications** page (`/notifications`), which shows in the header once you're logged in as admin (see "Admin login"). Each channel sends to Discord (a webhook), ntfy (phone push), email, or an [Apprise API](https://github.com/caronc/apprise-api) server, and has rules for what it gets:
 
 - **Kinds:** the item kinds to send. All checked means everything, including kinds added later.
 - **Engines:** only items tagged with one of these. None checked means every engine.
@@ -229,7 +229,7 @@ Channels are managed on the **Notifications** page (`/notifications`), which sho
 
 Each channel shows its last delivery or error. **Send test** sends it something right away, ignoring its rules, so you can see how notifications look there: one of several examples (a release, a prerelease, a news post, an outlet article about two engines, one with no engine, summary or link, and one long enough to be cut short), all examples at once (one digest mail for a digest channel), or one of the newest real items. Changes take effect on the notifier's next run, which starts right after a change. A new channel only gets items that arrive after it was added, and switching a channel off keeps its place, so it catches up on items from the last three days when switched back on.
 
-Secrets (the webhook URL, the ntfy topic and token, the SMTP password) are never shown back on the page; leave a secret field empty when editing to keep it. Instead of the secret itself, you can enter an environment variable reference such as `${GEN_DISCORD_WEBHOOK}`: it's expanded when sending, so the secret stays out of the database. A reference is shown on the page as written.
+Secrets (the webhook URL, the ntfy topic and token, the SMTP password, the Apprise key, URLs and password) are never shown back on the page; leave a secret field empty when editing to keep it. Instead of the secret itself, you can enter an environment variable reference such as `${GEN_DISCORD_WEBHOOK}`: it's expanded when sending, so the secret stays out of the database. A reference is shown on the page as written.
 
 ### Channels from gen.toml
 
@@ -238,8 +238,9 @@ Channels still configured as `[[notify.channel]]` in `gen.toml` are copied into 
 ```toml
 [[notify.channel]]
 name = "phone"
-kind = "ntfy"                    # or "discord" (webhook_url) or "email" (smtp_host, smtp_port,
-server = "https://ntfy.sh"       #   username, password, from, to = [...], digest)
+kind = "ntfy"                    # or "discord" (webhook_url), "email" (smtp_host, smtp_port,
+server = "https://ntfy.sh"       #   username, password, from, to = [...], digest) or "apprise"
+                                 #   (server, key or urls, tag, username, password)
 topic = "${GEN_NTFY_TOPIC}"
   [notify.channel.rules]
   engines = ["godot", "stride"]
@@ -253,6 +254,7 @@ topic = "${GEN_NTFY_TOPIC}"
 
 - **Discord:** in the channel settings, open Integrations, then Webhooks, then New Webhook, and copy the webhook URL. Treat the URL as a secret.
 - **ntfy:** choose a long, random topic name, because anyone who knows a topic on ntfy.sh can read it. Subscribe to it in the ntfy app or at `https://ntfy.sh/<topic>`. For a self-hosted server with access control, set the server and an access token.
+- **Apprise API:** point the channel at your Apprise API server (e.g. `http://apprise:8000`). Either enter the **key** of a configuration saved there (`POST /notify/{key}`, optionally with a **tag** to pick some of its URLs), or enter **Apprise URLs** such as `tgram://bottoken/chatid` to send to directly (`POST /notify`, which needs the server's stateless mode). Messages are Markdown, with the summary and a link; releases are sent as type `success`, everything else as `info`. Set a username and password if the server requires Basic Auth.
 - **SMTP:** use port 587 (STARTTLS). For Gmail or Fastmail, create an app password instead of using your account password. Set `digest = true` to avoid a mail per item.
 
 To check a channel without waiting for news, use **Send test**, or from the command line:

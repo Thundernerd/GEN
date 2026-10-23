@@ -550,7 +550,8 @@ details.panel .form-error { margin-top: 0; }
 .stack-form:has([name="kind"] option[value="html"]:checked) fieldset[data-kind]:not([data-kind="html"]),
 .stack-form:has([name="kind"] option[value="discord"]:checked) fieldset[data-kind]:not([data-kind="discord"]),
 .stack-form:has([name="kind"] option[value="ntfy"]:checked) fieldset[data-kind]:not([data-kind="ntfy"]),
-.stack-form:has([name="kind"] option[value="email"]:checked) fieldset[data-kind]:not([data-kind="email"]) { display: none; }
+.stack-form:has([name="kind"] option[value="email"]:checked) fieldset[data-kind]:not([data-kind="email"]),
+.stack-form:has([name="kind"] option[value="apprise"]:checked) fieldset[data-kind]:not([data-kind="apprise"]) { display: none; }
 .check-group { display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; }
 .check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); max-height: 12.5rem; overflow-y: auto; padding: 0.15rem 0; }
 .check-label { font-size: 0.9rem; color: var(--muted); margin-bottom: -0.3rem; }

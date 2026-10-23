@@ -140,6 +140,7 @@ fn kind_label(kind: &str) -> &'static str {
     match kind {
         "discord" => "Discord",
         "ntfy" => "ntfy",
+        "apprise" => "Apprise",
         _ => "Email",
     }
 }
@@ -177,6 +178,32 @@ fn target_summary(target: &ChannelTarget) -> String {
             to.join(", "),
             if *digest { " · digest" } else { "" }
         ),
+        ChannelTarget::Apprise {
+            server,
+            key,
+            urls,
+            tag,
+            ..
+        } => {
+            let shown = |v: &str| {
+                if is_reference(v) {
+                    v.to_string()
+                } else {
+                    "hidden".into()
+                }
+            };
+            let what = match (key, urls) {
+                (Some(k), _) if !k.is_empty() => format!("key {}", shown(k)),
+                (_, Some(u)) if !u.is_empty() => format!("URLs {}", shown(u)),
+                _ => "not set up".to_string(),
+            };
+            let tag = tag
+                .as_deref()
+                .filter(|t| !t.is_empty())
+                .map(|t| format!(" · tag {t}"))
+                .unwrap_or_default();
+            format!("{server} · {what}{tag}")
+        }
     }
 }
 
@@ -235,6 +262,16 @@ fn secret_hints(target: &ChannelTarget) -> Value {
             json!({"ntfy_topic": hint(Some(topic)), "ntfy_token": hint(token.as_ref())})
         }
         ChannelTarget::Email { password, .. } => json!({"smtp_password": hint(password.as_ref())}),
+        ChannelTarget::Apprise {
+            key,
+            urls,
+            password,
+            ..
+        } => json!({
+            "apprise_key": hint(key.as_ref()),
+            "apprise_urls": hint(urls.as_ref()),
+            "apprise_password": hint(password.as_ref()),
+        }),
     }
 }
 
@@ -269,6 +306,16 @@ fn form_values(c: &ChannelConfig) -> Value {
             form["from"] = json!(from);
             form["to"] = json!(to.join(", "));
             form["digest"] = json!(digest);
+        }
+        ChannelTarget::Apprise {
+            server,
+            tag,
+            username,
+            ..
+        } => {
+            form["apprise_server"] = json!(server);
+            form["apprise_tag"] = json!(tag);
+            form["apprise_username"] = json!(username);
         }
     }
     form
@@ -323,6 +370,9 @@ impl Posted {
             "smtp_username",
             "from",
             "to",
+            "apprise_server",
+            "apprise_tag",
+            "apprise_username",
         ] {
             form[key] = json!(self.get(key));
         }
@@ -378,7 +428,42 @@ impl Posted {
                 to: split_list(self.get("to")),
                 digest: self.checked("digest"),
             },
-            _ => return Err("Choose Discord, ntfy or email.".into()),
+            Some("apprise") => {
+                let (posted_key, posted_urls) = (self.get("apprise_key"), self.get("apprise_urls"));
+                let kept_key = || {
+                    kept(|t| match t {
+                        ChannelTarget::Apprise { key, .. } => key.clone(),
+                        _ => None,
+                    })
+                };
+                let kept_urls = || {
+                    kept(|t| match t {
+                        ChannelTarget::Apprise { urls, .. } => urls.clone(),
+                        _ => None,
+                    })
+                };
+                // Entering one of key and URLs replaces the other, so switching modes works.
+                let (key, urls) = match (posted_key, posted_urls) {
+                    (None, None) => (kept_key(), kept_urls()),
+                    (key, None) => (key, None),
+                    (None, urls) => (None, urls),
+                    both => both,
+                };
+                ChannelTarget::Apprise {
+                    server: self
+                        .get("apprise_server")
+                        .ok_or("Enter the Apprise API URL.")?,
+                    key,
+                    urls,
+                    tag: self.get("apprise_tag"),
+                    username: self.get("apprise_username"),
+                    password: secret("apprise_password", |t| match t {
+                        ChannelTarget::Apprise { password, .. } => password.clone(),
+                        _ => None,
+                    }),
+                }
+            }
+            _ => return Err("Choose Discord, ntfy, email or Apprise.".into()),
         };
         let checked: Vec<ItemKind> = self
             .all("kinds")

@@ -514,6 +514,20 @@ pub enum ChannelTarget {
         #[serde(default)]
         digest: bool,
     },
+    /// An Apprise API server, which forwards to the services it's configured for.
+    Apprise {
+        /// Base URL of the Apprise API, e.g. `http://apprise:8000`.
+        server: String,
+        /// Key of a configuration saved on the server (`POST /notify/{key}`).
+        key: Option<String>,
+        /// Apprise URLs to notify directly (`POST /notify`), instead of a saved key.
+        urls: Option<String>,
+        /// With a key: only notify the saved URLs with this tag (Apprise tag syntax).
+        tag: Option<String>,
+        /// HTTP Basic auth, when the server requires it.
+        username: Option<String>,
+        password: Option<String>,
+    },
 }
 
 impl ChannelTarget {
@@ -522,6 +536,7 @@ impl ChannelTarget {
             ChannelTarget::Discord { .. } => "discord",
             ChannelTarget::Ntfy { .. } => "ntfy",
             ChannelTarget::Email { .. } => "email",
+            ChannelTarget::Apprise { .. } => "apprise",
         }
     }
 
@@ -546,6 +561,16 @@ impl ChannelTarget {
                 .chain(username.as_mut())
                 .chain(password.as_mut())
                 .chain(to.iter_mut())
+                .collect(),
+            ChannelTarget::Apprise {
+                server,
+                key,
+                urls,
+                tag,
+                username,
+                password,
+            } => std::iter::once(server)
+                .chain([key, urls, tag, username, password].into_iter().flatten())
                 .collect(),
         }
     }
@@ -610,6 +635,33 @@ impl ChannelConfig {
                 }
                 if to.is_empty() {
                     return Err("Enter at least one recipient.".into());
+                }
+            }
+            ChannelTarget::Apprise {
+                server, key, urls, ..
+            } => {
+                if literal(server) {
+                    check_url(server)?;
+                }
+                let set = |v: &Option<String>| v.as_deref().is_some_and(|v| !v.trim().is_empty());
+                match (set(key), set(urls)) {
+                    (false, false) => {
+                        return Err("Enter a configuration key or Apprise URLs.".into());
+                    }
+                    (true, true) => {
+                        return Err(
+                            "Use either a configuration key or Apprise URLs, not both.".into()
+                        );
+                    }
+                    _ => {}
+                }
+                if let Some(key) = key.as_deref().filter(|k| literal(k)) {
+                    let re = regex::Regex::new(r"^[A-Za-z0-9_-]{1,128}$").expect("valid regex");
+                    if !re.is_match(key) {
+                        return Err(
+                            "The configuration key may only hold letters, digits, - and _.".into(),
+                        );
+                    }
                 }
             }
         }
@@ -918,5 +970,19 @@ mod tests {
             ok("name = \"m\"\nkind = \"email\"\nsmtp_host = \"smtp.x\"\nfrom = \"a@x\"\nto = []")
                 .unwrap_err();
         assert!(err.contains("recipient"), "{err}");
+        let apprise = |rest: &str| {
+            ok(&format!(
+                "name = \"a\"\nkind = \"apprise\"\nserver = \"http://apprise:8000\"\n{rest}"
+            ))
+        };
+        assert!(apprise("key = \"gen\"").is_ok());
+        assert!(apprise("urls = \"${GEN_APPRISE_URLS}\"").is_ok());
+        assert!(apprise("").unwrap_err().contains("key or Apprise URLs"));
+        assert!(
+            apprise("key = \"gen\"\nurls = \"tgram://x\"")
+                .unwrap_err()
+                .contains("not both")
+        );
+        assert!(apprise("key = \"a/b\"").unwrap_err().contains("letters"));
     }
 }

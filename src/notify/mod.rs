@@ -1,5 +1,6 @@
 //! Notifications: rule matching per channel and delivery to Discord, ntfy and email.
 
+pub mod apprise;
 pub mod discord;
 pub mod email;
 pub mod ntfy;
@@ -136,6 +137,24 @@ pub async fn send(
             token,
         } => ntfy::send(ctx, server, topic, token.as_deref(), items).await,
         ChannelTarget::Email { .. } => email::send(ctx, &channel.target, items).await,
+        ChannelTarget::Apprise {
+            server,
+            key,
+            urls,
+            tag,
+            username,
+            password,
+        } => {
+            let target = apprise::Target {
+                server,
+                key: key.as_deref().filter(|k| !k.is_empty()),
+                urls: urls.as_deref().filter(|u| !u.is_empty()),
+                tag: tag.as_deref(),
+                username: username.as_deref().filter(|u| !u.is_empty()),
+                password: password.as_deref().filter(|p| !p.is_empty()),
+            };
+            apprise::send(ctx, &target, items).await
+        }
     }
 }
 

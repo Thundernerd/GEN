@@ -964,3 +964,44 @@ async fn test_sends_offer_examples_and_recent_items() {
         assert!(body.contains(message), "{choice}");
     }
 }
+
+#[tokio::test]
+async fn apprise_channels_keep_their_secrets() {
+    let st = state();
+    let cookie = login(&st).await;
+    let form = "name=relay&kind=apprise&apprise_server=http%3A%2F%2Fapprise%3A8000&apprise_key=sekritkey\
+                &apprise_tag=releases&apprise_username=gen&apprise_password=hunter2&kinds=release&enabled=1";
+    let (status, _, _) = send(&st, post_form("/notifications/add", form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    let (_, body) = get_as(&st, "/notifications", &cookie).await;
+    assert!(body.contains("apprise:8000 · key hidden · tag releases"));
+    assert!(!body.contains("sekritkey") && !body.contains("hunter2"));
+
+    // Entering URLs replaces the key; the password is kept.
+    let form = "original_name=relay&kind=apprise&apprise_server=http%3A%2F%2Fapprise%3A8000\
+                &apprise_urls=%24%7BGEN_APPRISE_URLS%7D&kinds=release&enabled=1";
+    let (status, _, _) = send(&st, post_form("/notifications/edit", form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    let relay = &stored_channels(&st)[0];
+    let crate::config::ChannelTarget::Apprise {
+        key,
+        urls,
+        password,
+        ..
+    } = &relay.target
+    else {
+        panic!("{relay:?}");
+    };
+    assert_eq!(
+        (key.as_deref(), urls.as_deref()),
+        (None, Some("${GEN_APPRISE_URLS}"))
+    );
+    assert_eq!(password.as_deref(), Some("hunter2"));
+    let (_, body) = get_as(&st, "/notifications", &cookie).await;
+    assert!(body.contains("URLs ${GEN_APPRISE_URLS}"));
+
+    let form = "name=bad&kind=apprise&apprise_server=http%3A%2F%2Fapprise%3A8000&kinds=release";
+    let (status, _, body) = send(&st, post_form("/notifications/add", form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(body.contains("key or Apprise URLs"));
+}

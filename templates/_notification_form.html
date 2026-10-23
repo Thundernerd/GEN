@@ -30,7 +30,7 @@
       <label>
         <span>Send to</span>
         <select name="kind" required>
-          {%- for value, label in [("discord", "Discord webhook"), ("ntfy", "ntfy (phone push)"), ("email", "Email")] %}
+          {%- for value, label in [("discord", "Discord webhook"), ("ntfy", "ntfy (phone push)"), ("email", "Email"), ("apprise", "Apprise API (many services)")] %}
           <option value="{{ value }}"{% if value == f.kind %} selected{% endif %}>{{ label }}</option>
           {%- endfor %}
         </select>
@@ -65,6 +65,20 @@
         <label><span>To (comma-separated)</span><input name="to" value="{{ f.to or "" }}" placeholder="you@example.com"></label>
       </div>
       <label class="check"><input type="checkbox" name="digest" value="1"{% if f.digest %} checked{% endif %}> One digest mail per batch instead of one mail per item</label>
+    </fieldset>
+    <fieldset data-kind="apprise">
+      <legend>Apprise API</legend>
+      <label><span>Apprise API URL</span><input type="url" name="apprise_server" value="{{ f.apprise_server or "" }}" placeholder="http://apprise:8000"></label>
+      <p class="form-hint">Send to a configuration saved on the Apprise server by its key, or list Apprise URLs (such as <code>tgram://…</code> or <code>mailto://…</code>) to send to directly. Entering one replaces the other.</p>
+      <div class="form-row">
+        {{ secret_input("apprise_key", "Configuration key", secrets) }}
+        <label><span>Tag (optional, with a key)</span><input name="apprise_tag" value="{{ f.apprise_tag or "" }}" placeholder="gen"></label>
+      </div>
+      {{ secret_input("apprise_urls", "Apprise URLs (instead of a key)", secrets) }}
+      <div class="form-row">
+        <label><span>Username (optional)</span><input name="apprise_username" value="{{ f.apprise_username or "" }}" autocomplete="off"></label>
+        {{ secret_input("apprise_password", "Password", secrets, optional_label="(optional)") }}
+      </div>
     </fieldset>
 
     <fieldset>

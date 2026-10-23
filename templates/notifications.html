@@ -57,7 +57,7 @@
 </ul>
 {%- else %}
 <div class="empty-state">
-  <p>No channels yet. Add one to get new releases and news on Discord, your phone (ntfy) or by email.</p>
+  <p>No channels yet. Add one to get new releases and news on Discord, your phone (ntfy), by email, or through Apprise to almost any service.</p>
 </div>
 {%- endif %}
 
@@ -74,7 +74,7 @@
       {%- for s in samples %}
       <label class="check test-choice"><input type="radio" name="sample" value="{{ s.key }}"{% if loop.first %} checked{% endif %}><span><i class="kind-dot kind-{{ s.kind }}" aria-hidden="true"></i>{{ s.label }}<span class="test-title">{{ s.title }}</span></span></label>
       {%- endfor %}
-      <label class="check test-choice"><input type="radio" name="sample" value="all"><span>All examples at once<span class="test-title">{% if c.kind == "email" %}one digest mail, or one mail each when digests are off{% elif c.kind == "discord" %}one message with an embed each{% else %}one push each{% endif %}</span></span></label>
+      <label class="check test-choice"><input type="radio" name="sample" value="all"><span>All examples at once<span class="test-title">{% if c.kind == "email" %}one digest mail, or one mail each when digests are off{% elif c.kind == "discord" %}one message with an embed each{% else %}one notification each{% endif %}</span></span></label>
     </fieldset>
     {%- if recent %}
     <fieldset>
