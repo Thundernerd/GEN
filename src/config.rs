@@ -226,7 +226,7 @@ impl SourceSpec {
 }
 
 /// Longest polling interval accepted from the web UI: one week.
-const MAX_INTERVAL_MINUTES: u64 = 7 * 24 * 60;
+pub const MAX_INTERVAL_MINUTES: u64 = 7 * 24 * 60;
 
 impl SourceConfig {
     /// Checks a source entered in the web UI. The error is a message for the user.

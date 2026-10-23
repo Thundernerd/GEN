@@ -5,11 +5,12 @@
 
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use tokio::sync::{Notify, Semaphore};
+use tokio::sync::{Notify, Semaphore, mpsc, oneshot};
 use tokio::task::{AbortHandle, JoinSet};
+use tokio::time::Instant;
 
 use crate::config::{AppConfig, ChannelConfig, ChannelTarget, ResolvedSource};
 use crate::fetch::FetchError;
@@ -30,13 +31,66 @@ const NOTIFY_MAX_AGE: chrono::TimeDelta = chrono::TimeDelta::days(3);
 /// Items handled per channel per notifier run.
 const NOTIFY_BATCH: u32 = 100;
 
+/// The outcome of a requested fetch.
+#[derive(Debug, Clone)]
+pub struct FetchReport {
+    pub new_items: usize,
+    pub not_modified: bool,
+    pub error: Option<String>,
+}
+
+impl FetchReport {
+    fn failed(error: impl Into<String>) -> Self {
+        FetchReport {
+            new_items: 0,
+            not_modified: false,
+            error: Some(error.into()),
+        }
+    }
+}
+
+type FetchReply = oneshot::Sender<FetchReport>;
+
+/// "Fetch now" requests, routed to the poller of each running source.
+#[derive(Default)]
+pub struct FetchRequests {
+    pollers: Mutex<HashMap<String, mpsc::Sender<FetchReply>>>,
+}
+
+impl FetchRequests {
+    fn register(&self, source_id: &str) -> mpsc::Receiver<FetchReply> {
+        let (tx, rx) = mpsc::channel(4);
+        self.lock().insert(source_id.to_string(), tx);
+        rx
+    }
+
+    fn unregister(&self, source_id: &str) {
+        self.lock().remove(source_id);
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<String, mpsc::Sender<FetchReply>>> {
+        self.pollers.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Asks a source's poller to fetch now. The receiver gets the result once the fetch is
+    /// done; `None` if the source has no running poller.
+    pub fn request(&self, source_id: &str) -> Option<oneshot::Receiver<FetchReport>> {
+        let tx = self.lock().get(source_id)?.clone();
+        let (reply, rx) = oneshot::channel();
+        // A full queue means fetches are already waiting; the reply then reports that.
+        if let Err(mpsc::error::TrySendError::Full(reply)) = tx.try_send(reply) {
+            let _ = reply.send(FetchReport::failed("a fetch is already queued"));
+        }
+        Some(rx)
+    }
+}
+
 /// Spawns the poller supervisor and the notifier task. Dropping the returned `JoinSet`
 /// stops them, and with the supervisor every polling task.
 pub fn spawn(pipeline: Pipeline, app: Arc<AppConfig>) -> JoinSet<()> {
     let wake = pipeline.notify_wake.clone();
     let poller = Poller {
         pipeline: pipeline.clone(),
-        app: app.clone(),
         permits: Arc::new(Semaphore::new(app.polling.concurrency.max(1))),
         wake: wake.clone(),
     };
@@ -55,6 +109,7 @@ pub fn spawn(pipeline: Pipeline, app: Arc<AppConfig>) -> JoinSet<()> {
 /// switched on), starting and stopping tasks whenever the registry changes.
 async fn supervise(poller: Poller) {
     let mut changes = poller.pipeline.registry.subscribe();
+    let fetches = poller.pipeline.fetches.clone();
     let mut tasks = JoinSet::new();
     let mut running: HashMap<String, (ResolvedSource, AbortHandle)> = HashMap::new();
     let mut startup = true;
@@ -64,6 +119,7 @@ async fn supervise(poller: Poller) {
         for id in stop {
             if let Some((_, task)) = running.remove(&id) {
                 task.abort();
+                fetches.unregister(&id);
             }
         }
         for source in start {
@@ -74,7 +130,8 @@ async fn supervise(poller: Poller) {
                 tracing::debug!(source = %source.id, "poller started");
                 Duration::ZERO
             };
-            let task = tasks.spawn(poller.clone().run(source.clone(), delay));
+            let requests = fetches.register(&source.id);
+            let task = tasks.spawn(poller.clone().run(source.clone(), delay, requests));
             running.insert(source.id.clone(), (source, task));
         }
         if startup {
@@ -123,29 +180,55 @@ fn plan<T>(
 #[derive(Clone)]
 struct Poller {
     pipeline: Pipeline,
-    app: Arc<AppConfig>,
     permits: Arc<Semaphore>,
     /// Woken when new notifiable items were stored.
     wake: Arc<Notify>,
 }
 
 impl Poller {
-    async fn run(self, source: ResolvedSource, initial_delay: Duration) {
-        let interval = Duration::from_secs(
-            60 * source
+    async fn run(
+        self,
+        source: ResolvedSource,
+        initial_delay: Duration,
+        mut requests: mpsc::Receiver<FetchReply>,
+    ) {
+        let settings = self.pipeline.settings.clone();
+        let mut defaults = settings.subscribe();
+        let interval = || {
+            let minutes = source
                 .interval_minutes
-                .unwrap_or(self.app.polling.default_interval_minutes)
-                .max(1),
-        );
-        tokio::time::sleep(initial_delay).await;
-
+                .unwrap_or_else(|| settings.default_interval());
+            Duration::from_secs(60 * minutes.max(1))
+        };
+        let mut next = Instant::now() + initial_delay;
+        let mut last_poll: Option<Instant> = None;
         let mut failures: u32 = 0;
         loop {
+            // Wait for the next poll, a "fetch now" request, or a new default interval.
+            let reply = loop {
+                tokio::select! {
+                    () = tokio::time::sleep_until(next) => break None,
+                    Some(reply) = requests.recv() => break Some(reply),
+                    Ok(()) = defaults.changed(), if source.interval_minutes.is_none() => {
+                        // Reschedule from the last poll; a failing source keeps its backoff.
+                        if let (Some(last), 0) = (last_poll, failures) {
+                            next = last + interval() + spread(&source.id, interval() / 20);
+                        }
+                    }
+                }
+            };
+            let mut reply = reply;
             while !self.pipeline.toggles.is_enabled(&source) {
+                if let Some(r) = reply.take() {
+                    let _ = r.send(FetchReport::failed("the source is switched off"));
+                }
                 // The timeout is a fallback; toggles wake waiters directly.
                 tokio::select! {
                     () = self.pipeline.toggles.changed() => {}
                     () = tokio::time::sleep(DISABLED_RECHECK) => {}
+                    Some(r) = requests.recv() => {
+                        let _ = r.send(FetchReport::failed("the source is switched off"));
+                    }
                 }
             }
             let result = {
@@ -154,7 +237,9 @@ impl Poller {
                 };
                 self.pipeline.poll(&source).await
             };
-            let delay = match result {
+            last_poll = Some(Instant::now());
+            let interval = interval();
+            let (delay, report) = match result {
                 Ok(poll) => {
                     failures = 0;
                     if !poll.new_items.is_empty() {
@@ -165,7 +250,12 @@ impl Poller {
                             tracing::info!(source = %source.id, "first fetch: stored without notifying");
                         }
                     }
-                    interval
+                    let report = FetchReport {
+                        new_items: poll.new_items.len(),
+                        not_modified: poll.not_modified,
+                        error: None,
+                    };
+                    (interval, report)
                 }
                 Err(err) => {
                     failures += 1;
@@ -180,10 +270,13 @@ impl Poller {
                         .map_or(backoff, |r| r.max(interval))
                         .min(MAX_BACKOFF);
                     tracing::warn!(source = %source.id, failures, retry_in = ?delay, "poll failed: {err:#}");
-                    delay
+                    (delay, FetchReport::failed(format!("{err:#}")))
                 }
             };
-            tokio::time::sleep(delay.saturating_add(spread(&source.id, interval / 20))).await;
+            if let Some(reply) = reply {
+                let _ = reply.send(report);
+            }
+            next = Instant::now() + delay.saturating_add(spread(&source.id, interval / 20));
         }
     }
 }
@@ -331,11 +424,94 @@ mod tests {
         }
     }
 
+    /// "Fetch now" makes a poller fetch right away, long before its next poll, and reports
+    /// what it found. A request for a switched-off source is answered without fetching.
+    #[tokio::test]
+    async fn fetches_on_request() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let feed = include_str!("../tests/fixtures/feed/godot.xml");
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            loop {
+                let Ok((mut conn, _)) = listener.accept().await else {
+                    return;
+                };
+                let mut buf = vec![0u8; 8 * 1024];
+                let _ = conn.read(&mut buf).await;
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-type: application/rss+xml\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{feed}",
+                    feed.len()
+                );
+                let _ = conn.write_all(reply.as_bytes()).await;
+            }
+        });
+
+        let mut store = crate::store::Store::open_in_memory().unwrap();
+        let config = format!(
+            r#"
+            [[engine]]
+            id = "godot"
+            name = "Godot"
+            tier = 1
+            csharp = "first-class"
+              [[engine.source]]
+              kind = "feed"
+              url = "http://{addr}/rss.xml"
+              category = "news"
+            "#
+        );
+        let registry = crate::registry::SourceRegistry::with_owners(&mut store, &config);
+        let source = registry.current().config.all_sources().remove(0);
+        let pipeline = Pipeline {
+            http: crate::fetch::Http::new("gen-test", None).unwrap(),
+            store: Arc::new(Mutex::new(store)),
+            registry: Arc::new(registry),
+            toggles: Arc::new(crate::toggles::SourceToggles::default()),
+            notify_wake: Arc::new(Notify::new()),
+            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
+            fetches: Arc::new(FetchRequests::default()),
+        };
+        let poller = Poller {
+            pipeline: pipeline.clone(),
+            permits: Arc::new(Semaphore::new(1)),
+            wake: pipeline.notify_wake.clone(),
+        };
+        let requests = pipeline.fetches.register(&source.id);
+        // The first scheduled poll is an hour away.
+        let task = tokio::spawn(poller.run(source.clone(), Duration::from_secs(3600), requests));
+
+        let fetch = || async {
+            let rx = pipeline
+                .fetches
+                .request(&source.id)
+                .expect("poller is running");
+            tokio::time::timeout(Duration::from_secs(10), rx)
+                .await
+                .unwrap()
+                .unwrap()
+        };
+        let first = fetch().await;
+        assert_eq!((first.new_items, first.error.as_deref()), (4, None));
+        let second = fetch().await;
+        assert_eq!(
+            (second.new_items, second.error.as_deref()),
+            (0, None),
+            "already stored"
+        );
+
+        pipeline.toggles.set(&source.id, false);
+        let off = fetch().await;
+        assert!(off.error.unwrap().contains("switched off"));
+        assert!(pipeline.fetches.request("unknown").is_none());
+        task.abort();
+    }
+
     /// A channel stored in the database (as the website does) is delivered on the next
     /// notifier run, and the result is recorded on the channel.
     #[tokio::test]
     async fn delivers_to_channels_from_the_store() {
-        use std::sync::Mutex;
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
         // A one-shot HTTP sink that records the request.
@@ -379,6 +555,8 @@ mod tests {
             registry: Arc::new(registry),
             toggles: Arc::new(crate::toggles::SourceToggles::default()),
             notify_wake: Arc::new(Notify::new()),
+            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
+            fetches: Arc::new(FetchRequests::default()),
         };
         let notifier = Notifier {
             pipeline: pipeline.clone(),

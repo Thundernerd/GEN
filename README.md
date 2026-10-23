@@ -125,7 +125,7 @@ static_dir = "static"              # default
 path = "data/gen.db"               # SQLite file; parent dir must be writable
 
 [polling]
-default_interval_minutes = 60      # per-source override: interval_minutes
+default_interval_minutes = 60      # until changed on the Sources page; per source: interval_minutes
 concurrency = 8                    # max sources fetched at the same time
 # user_agent = "GEN/0.1.0 (Game Engine News aggregator)"
 # github_token = "${GITHUB_TOKEN}" # optional; the GITHUB_TOKEN env var is used automatically
@@ -288,6 +288,13 @@ Each source (on `/sources` and on every engine page) gets an **Enable** / **Disa
 
 - The choice is stored in the database as an override of the source's own `enabled` flag, so it survives restarts. Catalog sources marked `enabled = false` are added switched off and can be switched on the same way.
 - It takes effect immediately: a disabled source stops polling, and a re-enabled one polls right away. Items it already fetched stay visible.
+
+### Fetching and polling intervals
+
+- **Fetch now** (next to Enable / Disable) fetches a source right away, waits for the result and shows it, e.g. "Fetched Godot feed …: 2 new items" or the error. New items are notified as usual.
+- **Fetch all now** (above the table) does that for every enabled source, within `concurrency`, and reports the totals. It waits up to 45 seconds; slower sources keep fetching in the background.
+- **every N min** under a source opens a small form for its own polling interval; leave it empty to use the default again. Saving fetches the source once right away.
+- **Change** next to the default interval sets it for every source without its own (1 minute to 1 week). It's stored in the database and overrides `default_interval_minutes` in `gen.toml`. Sources pick up the new default after their current wait, so they aren't all fetched at once.
 
 ### Adding and removing sources, engines and outlets
 

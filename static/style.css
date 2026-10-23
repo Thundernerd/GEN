@@ -159,6 +159,7 @@ main.wrap { padding-top: 2.5rem; padding-bottom: 3rem; }
   background: var(--surface-2);
   border-radius: var(--radius);
   padding: 0.5rem 0.75rem;
+  margin: 0 0 1rem;
 }
 
 /* -- filters: kind tabs and engine links -------------------------------------- */
@@ -397,6 +398,14 @@ a.group-name:hover { color: var(--link); text-decoration: underline; }
 
 .sources-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem; }
 .sources-toolbar .summary-line { margin: 0; }
+.poll-bar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem 1rem; margin: -0.25rem 0 1rem; color: var(--muted); font-size: 0.875rem; }
+.poll-bar p { margin: 0; }
+.poll-bar b { color: var(--text); font-weight: 600; }
+.poll-bar form { margin: 0; }
+.interval-button { font-size: inherit; font-weight: inherit; color: inherit; text-decoration: underline dotted; text-underline-offset: 0.2em; }
+.interval-button:hover { color: var(--highlight); }
+.interval-field { display: flex; align-items: center; gap: 0.5rem; margin: 0.5rem 0; color: var(--muted); }
+.interval-field input { width: 7rem; font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.5rem; }
 .segmented { display: inline-flex; align-items: center; gap: 0.15rem; font-size: 0.85rem; background: var(--surface); border: 1px solid var(--border); border-radius: 999px; padding: 0.15rem; }
 .segmented-label { color: var(--muted); padding: 0 0.5rem 0 0.6rem; }
 .segmented a { color: var(--text); text-decoration: none; padding: 0.2rem 0.7rem; border-radius: 999px; }

@@ -24,6 +24,30 @@
     {%- endfor %}
   </nav>
 </div>
+{%- if admin %}
+<div class="poll-bar">
+  <p>Sources without their own interval are polled every <b>{{ default_interval }} min</b>.
+    <button type="button" class="link-button" popovertarget="default-interval">Change</button>
+  </p>
+  <div popover id="default-interval" class="confirm-dialog" role="dialog" aria-labelledby="default-interval-title">
+    <h2 id="default-interval-title">Default polling interval</h2>
+    <form method="post" action="/sources/default-interval" data-inline="Default interval saved.">
+      <label class="interval-field"><span>Every</span><input type="number" name="minutes" min="1" max="{{ max_interval }}" value="{{ default_interval }}" required aria-label="Minutes between polls"><span>minutes</span></label>
+      <p class="dialog-note">Used by every source without its own interval. Each one picks it up after its current wait, without fetching everything at once.</p>
+      <div class="dialog-actions">
+        <button type="button" class="btn-small btn-quiet" popovertarget="default-interval" popovertargetaction="hide">Cancel</button>
+        <button type="submit" class="btn-small">Save</button>
+      </div>
+    </form>
+  </div>
+  <form method="post" action="/sources/fetch-all" data-inline="Fetched all sources.">
+    <button type="submit" class="btn-small btn-quiet">Fetch all now</button>
+  </form>
+</div>
+{%- endif %}
+{%- if notice %}
+<p class="notice{% if not notice.ok %} form-error{% endif %}" role="status">{{ notice.message }}</p>
+{%- endif %}
 {%- if admin %}{% include "_sources_admin.html" %}{% endif %}
 {% include "_sources_table.html" %}
 {% endblock %}

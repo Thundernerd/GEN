@@ -2,12 +2,13 @@
 
 use std::sync::{Arc, Mutex};
 
-use tokio::sync::Notify;
+use tokio::sync::{Notify, watch};
 
 use crate::config::ResolvedSource;
 use crate::fetch::{self, FetchOutcome, Http};
 use crate::model::{Item, NewItem};
 use crate::registry::SourceRegistry;
+use crate::scheduler::FetchRequests;
 use crate::store::Store;
 use crate::toggles::SourceToggles;
 
@@ -22,6 +23,39 @@ pub struct Pipeline {
     pub toggles: Arc<SourceToggles>,
     /// Wakes the notifier: new notifiable items were stored, or channels changed.
     pub notify_wake: Arc<Notify>,
+    pub settings: Arc<PollSettings>,
+    /// "Fetch now" requests for the running pollers.
+    pub fetches: Arc<FetchRequests>,
+}
+
+/// `meta` key holding the default polling interval set on the website.
+pub const DEFAULT_INTERVAL_KEY: &str = "default_interval_minutes";
+
+/// Polling settings that can change while GEN runs.
+pub struct PollSettings {
+    default_interval: watch::Sender<u64>,
+}
+
+impl PollSettings {
+    pub fn new(default_interval_minutes: u64) -> Self {
+        PollSettings {
+            default_interval: watch::Sender::new(default_interval_minutes.max(1)),
+        }
+    }
+
+    /// Minutes between polls of a source without its own interval.
+    pub fn default_interval(&self) -> u64 {
+        *self.default_interval.borrow()
+    }
+
+    pub fn set_default_interval(&self, minutes: u64) {
+        self.default_interval.send_replace(minutes.max(1));
+    }
+
+    /// Marked changed whenever the default interval changes.
+    pub fn subscribe(&self) -> watch::Receiver<u64> {
+        self.default_interval.subscribe()
+    }
 }
 
 #[derive(Debug)]

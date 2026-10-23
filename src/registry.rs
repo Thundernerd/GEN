@@ -206,6 +206,11 @@ pub enum SourceEdit {
         config: SourceConfig,
     },
     RemoveSource(String),
+    /// Sets how often a source is polled; `None` uses the default interval.
+    SetInterval {
+        source_id: String,
+        minutes: Option<u64>,
+    },
     /// Adds an engine or outlet with the sources it carries.
     AddOwner(NewOwner),
     RemoveOwner(String),
@@ -280,6 +285,23 @@ impl SourceRegistry {
                 self.commit(stored, || store.remove_source(&id))?;
                 tracing::info!(source = %id, "source removed");
                 Ok(vec![id])
+            }
+            SourceEdit::SetInterval { source_id, minutes } => {
+                let Some(stored_source) = stored.sources.iter_mut().find(|s| s.id == source_id)
+                else {
+                    return Err(EditError::Invalid(format!(
+                        "There is no source “{source_id}”."
+                    )));
+                };
+                stored_source.config.interval_minutes = minutes;
+                stored_source.config.check().map_err(EditError::Invalid)?;
+                let json =
+                    serde_json::to_string(&stored_source.config).map_err(anyhow::Error::from)?;
+                self.commit(stored, || {
+                    store.update_source(&source_id, &json).map(|_| ())
+                })?;
+                tracing::info!(source = %source_id, ?minutes, "polling interval changed");
+                Ok(Vec::new())
             }
             SourceEdit::AddOwner(mut owner) => {
                 owner.check().map_err(EditError::Invalid)?;
@@ -507,6 +529,51 @@ mod tests {
         let reloaded = SourceRegistry::load(&store).unwrap();
         assert_eq!(ids(&reloaded), ids(&reg));
         assert_eq!(store.sources().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn sets_polling_intervals() {
+        let mut store = Store::open_in_memory().unwrap();
+        let reg = registry(&mut store);
+        let set = |reg: &SourceRegistry, store: &mut Store, minutes| {
+            reg.apply(
+                store,
+                SourceEdit::SetInterval {
+                    source_id: GODOT_SRC.into(),
+                    minutes,
+                },
+            )
+        };
+        set(&reg, &mut store, Some(15)).unwrap();
+        let interval = |reg: &SourceRegistry| {
+            reg.current()
+                .config
+                .all_sources()
+                .into_iter()
+                .find(|s| s.id == GODOT_SRC)
+                .unwrap()
+                .interval_minutes
+        };
+        assert_eq!(interval(&reg), Some(15));
+        assert_eq!(
+            interval(&SourceRegistry::load(&store).unwrap()),
+            Some(15),
+            "stored"
+        );
+        set(&reg, &mut store, None).unwrap();
+        assert_eq!(interval(&reg), None);
+        assert!(matches!(
+            set(&reg, &mut store, Some(0)),
+            Err(EditError::Invalid(_))
+        ));
+        let missing = reg.apply(
+            &mut store,
+            SourceEdit::SetInterval {
+                source_id: "nope".into(),
+                minutes: None,
+            },
+        );
+        assert!(matches!(missing, Err(EditError::Invalid(_))));
     }
 
     #[test]

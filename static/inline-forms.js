@@ -128,7 +128,9 @@
       const opener = dialog?.id && next.querySelector(`[commandfor="${dialog.id}"][command="show-modal"]`);
       if (opener) opener.focus({ preventScroll: true });
       else refocus(next, action, key, index);
-      announce(form.dataset.inline || "Saved.");
+      // A result message on the page says more than the form's generic one.
+      const status = next.querySelector(".notice[role=status]");
+      announce(status ? status.textContent.trim() : form.dataset.inline || "Saved.");
     }
   });
 

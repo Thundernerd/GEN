@@ -256,11 +256,18 @@ fn build_pipeline(app: &AppConfig) -> anyhow::Result<Pipeline> {
     catalog::seed_once(&registry, &mut store)?;
     notify::import_once(app, &store)?;
     let toggles = SourceToggles::new(store.source_overrides()?);
+    // The default interval set on the website wins over gen.toml.
+    let default_interval = match store.meta(pipeline::DEFAULT_INTERVAL_KEY)? {
+        Some(v) => v.parse().unwrap_or(app.polling.default_interval_minutes),
+        None => app.polling.default_interval_minutes,
+    };
     Ok(Pipeline {
         http: Http::new(&app.polling.user_agent, app.polling.github_token.clone())?,
         store: Arc::new(Mutex::new(store)),
         registry: Arc::new(registry),
         toggles: Arc::new(toggles),
         notify_wake: Arc::new(tokio::sync::Notify::new()),
+        settings: Arc::new(pipeline::PollSettings::new(default_interval)),
+        fetches: Arc::new(scheduler::FetchRequests::default()),
     })
 }

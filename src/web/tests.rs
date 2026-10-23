@@ -120,6 +120,8 @@ fn state() -> AppState {
         registry,
         toggles: Arc::new(SourceToggles::default()),
         notify_wake: Arc::new(tokio::sync::Notify::new()),
+        settings: Arc::new(crate::pipeline::PollSettings::new(60)),
+        fetches: Arc::new(crate::scheduler::FetchRequests::default()),
     };
     AppState::new(&pipeline, config).unwrap()
 }
@@ -603,8 +605,8 @@ async fn removing_a_catalog_source_purges_it_until_added_again() {
     assert!(body.contains("godotengine&#x2f;godot (releases)"));
     assert_eq!(
         body.matches(godot_value).count(),
-        2,
-        "toggle and remove forms"
+        4,
+        "fetch, interval, toggle and remove forms"
     );
 
     // A suggestion that isn't in the catalog is refused.
@@ -1004,4 +1006,94 @@ async fn apprise_channels_keep_their_secrets() {
     let (status, _, body) = send(&st, post_form("/notifications/add", form, Some(&cookie))).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert!(body.contains("key or Apprise URLs"));
+}
+
+#[tokio::test]
+async fn admin_schedules_sources() {
+    let st = state();
+    for uri in [
+        "/sources/fetch",
+        "/sources/fetch-all",
+        "/sources/interval",
+        "/sources/default-interval",
+    ] {
+        let (status, _, _) = send(&st, post_form(uri, "source_id=x&minutes=5", None)).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{uri}");
+    }
+    let cookie = login(&st).await;
+    let (_, body) = get_as(&st, "/sources", &cookie).await;
+    assert!(body.contains("polled every <b>60 min</b>"));
+    assert!(body.contains("every 60 min (default)"));
+    assert!(body.contains("Fetch all now") && body.contains("Fetch now"));
+
+    // A source's own interval, then back to the default.
+    let form = format!(
+        "source_id={}&minutes=15&next=%2Fengine%2Fgodot",
+        urlenc(GODOT_SRC)
+    );
+    let (status, headers, _) =
+        send(&st, post_form("/sources/interval", &form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(headers[header::LOCATION], "/engine/godot");
+    let interval = |st: &AppState| {
+        st.registry
+            .current()
+            .config
+            .all_sources()
+            .into_iter()
+            .find(|s| s.id == GODOT_SRC)
+            .unwrap()
+            .interval_minutes
+    };
+    assert_eq!(interval(&st), Some(15));
+    let (_, body) = get_as(&st, "/engine/godot", &cookie).await;
+    assert!(body.contains("every 15 min<"));
+    let form = format!("source_id={}&minutes=", urlenc(GODOT_SRC));
+    send(&st, post_form("/sources/interval", &form, Some(&cookie))).await;
+    assert_eq!(interval(&st), None);
+    let form = format!(
+        "source_id={}&minutes=0&next=%2Fengine%2Fgodot",
+        urlenc(GODOT_SRC)
+    );
+    let (status, _, body) = send(&st, post_form("/sources/interval", &form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(body.contains("whole number of minutes"));
+    assert!(
+        body.contains("first-class (.NET build)"),
+        "back on the engine page"
+    );
+
+    // The default, stored and live.
+    let (status, _, _) = send(
+        &st,
+        post_form("/sources/default-interval", "minutes=30", Some(&cookie)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(st.settings.default_interval(), 30);
+    assert_eq!(
+        st.store
+            .lock()
+            .unwrap()
+            .meta(crate::pipeline::DEFAULT_INTERVAL_KEY)
+            .unwrap()
+            .as_deref(),
+        Some("30")
+    );
+    let (_, body) = get_as(&st, "/sources", &cookie).await;
+    assert!(body.contains("every 30 min (default)"));
+
+    // No scheduler runs in these tests, so fetches report that the source isn't running.
+    let form = format!("source_id={}", urlenc(GODOT_SRC));
+    let (status, _, body) = send(&st, post_form("/sources/fetch", &form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("isn&#x27;t running yet"), "{body}");
+    let (_, _, body) = send(&st, post_form("/sources/fetch-all", "", Some(&cookie))).await;
+    assert!(body.contains("Nothing to fetch"));
+    let (status, _, _) = send(
+        &st,
+        post_form("/sources/fetch", "source_id=nope", Some(&cookie)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }

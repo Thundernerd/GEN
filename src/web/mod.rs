@@ -32,8 +32,9 @@ use crate::catalog;
 use crate::config::{AppConfig, Owner, SourceSpec};
 use crate::fetch::Http;
 use crate::model::{Item, ItemKind, SourceState};
-use crate::pipeline::Pipeline;
+use crate::pipeline::{Pipeline, PollSettings};
 use crate::registry::{NewOwner, Snapshot, SourceRegistry};
+use crate::scheduler::FetchRequests;
 use crate::store::Store;
 use crate::toggles::SourceToggles;
 
@@ -68,6 +69,8 @@ pub struct AppState {
     pub http: Http,
     /// Wakes the notifier after channels change.
     pub notify_wake: Arc<tokio::sync::Notify>,
+    pub settings: Arc<PollSettings>,
+    pub fetches: Arc<FetchRequests>,
     templates: Arc<Environment<'static>>,
 }
 
@@ -87,6 +90,8 @@ impl AppState {
             toggles: pipeline.toggles.clone(),
             http: pipeline.http.clone(),
             notify_wake: pipeline.notify_wake.clone(),
+            settings: pipeline.settings.clone(),
+            fetches: pipeline.fetches.clone(),
             templates: Arc::new(env),
         })
     }
@@ -251,6 +256,13 @@ pub fn router(state: AppState) -> Router {
         .route("/sources/toggle", post(toggle_source))
         .route("/sources/add", post(admin::add_source))
         .route("/sources/remove", post(admin::remove_source))
+        .route("/sources/fetch", post(admin::fetch_source))
+        .route("/sources/fetch-all", post(admin::fetch_all))
+        .route("/sources/interval", post(admin::set_interval))
+        .route(
+            "/sources/default-interval",
+            post(admin::set_default_interval),
+        )
         .route("/suggestions/source", post(admin::add_suggested_source))
         .route("/owners/add", post(admin::add_owner))
         .route("/owners/remove", post(admin::remove_owner))
@@ -484,11 +496,18 @@ async fn engine(
     headers: HeaderMap,
 ) -> Response {
     let admin = st.is_admin(&headers);
-    let result = engine_page(&st, id, params, admin).await;
+    let result = engine_page(&st, id, params, admin, None).await;
     st.respond(result)
 }
 
-async fn engine_page(st: &AppState, id: String, params: ListParams, admin: bool) -> PageResult {
+/// Renders `/engine/{id}`; `notice` reports the result of an admin action.
+async fn engine_page(
+    st: &AppState,
+    id: String,
+    params: ListParams,
+    admin: bool,
+    notice: Option<serde_json::Value>,
+) -> PageResult {
     let snapshot = st.registry.current();
     let Some(engine) = snapshot.config.engine(&id) else {
         return Err(AppError::NotFound(format!("Unknown engine “{id}”.")));
@@ -546,6 +565,9 @@ async fn engine_page(st: &AppState, id: String, params: ListParams, admin: bool)
                 "enabled": engine.enabled,
             },
             "source_count": sources.len(),
+            "notice": notice,
+            "default_interval": st.settings.default_interval(),
+            "max_interval": crate::config::MAX_INTERVAL_MINUTES,
             "groups": group_by_owner(&[(Owner::Engine(engine.id.clone()), &engine.name)], &sources),
             "grouped": false,
             "admin": admin,
@@ -573,16 +595,18 @@ async fn sources(
     headers: HeaderMap,
 ) -> Response {
     let admin = st.is_admin(&headers);
-    let result = sources_page(&st, admin, params, None).await;
+    let result = sources_page(&st, admin, params, None, None).await;
     st.respond(result)
 }
 
-/// Renders `/sources`. `feedback` re-opens a failed admin form with its message and values.
+/// Renders `/sources`. `feedback` re-opens a failed admin form with its message and values;
+/// `notice` reports the result of an admin action.
 async fn sources_page(
     st: &AppState,
     admin: bool,
     params: SourcesParams,
     feedback: Option<serde_json::Value>,
+    notice: Option<serde_json::Value>,
 ) -> PageResult {
     let states = st.with_store(|s| s.source_states()).await?;
     let now = Utc::now();
@@ -658,7 +682,9 @@ async fn sources_page(
             "next": next,
             "owners": {"engines": owners(true), "outlets": owners(false)},
             "categories": kind_names(),
-            "default_interval": st.config.polling.default_interval_minutes,
+            "default_interval": st.settings.default_interval(),
+            "max_interval": crate::config::MAX_INTERVAL_MINUTES,
+            "notice": notice,
             "preselect_owner": non_empty(&params.owner),
             "suggestions": suggestions,
             "tiers": tiers,
@@ -719,6 +745,42 @@ fn suggestions_view(snapshot: &Snapshot) -> serde_json::Value {
         "groups": groups,
         "sources": sources,
     })
+}
+
+/// Renders the page an admin action on a source came from (`next`: `/sources…` or
+/// `/engine/{id}…`) with `notice` showing how it went.
+async fn page_with_notice(
+    st: &AppState,
+    next: Option<&str>,
+    notice: serde_json::Value,
+) -> PageResult {
+    let next = safe_next(next);
+    let url = url::Url::parse(&format!("http://gen{next}")).ok();
+    let query = |key: &str| {
+        url.as_ref().and_then(|u| {
+            u.query_pairs()
+                .find(|(k, _)| k == key)
+                .map(|(_, v)| v.into_owned())
+        })
+    };
+    let path = url
+        .as_ref()
+        .map(|u| u.path().to_string())
+        .unwrap_or_default();
+    if let Some(id) = path.strip_prefix("/engine/") {
+        let params = ListParams {
+            kind: query("kind"),
+            page: query("page"),
+            ..Default::default()
+        };
+        return engine_page(st, id.to_string(), params, true, Some(notice)).await;
+    }
+    let params = SourcesParams {
+        sort: query("sort"),
+        dir: query("dir"),
+        owner: None,
+    };
+    sources_page(st, true, params, None, Some(notice)).await
 }
 
 /// One group of source rows per owner, in the given owner order. Owners without sources
@@ -921,7 +983,8 @@ fn source_row(
         "target": target,
         "target_url": target_url,
         "category": s.category.map(ItemKind::as_str),
-        "interval": s.interval_minutes.unwrap_or(st.config.polling.default_interval_minutes),
+        "interval": s.interval_minutes.unwrap_or_else(|| st.settings.default_interval()),
+        "interval_custom": s.interval_minutes.is_some(),
         "in_catalog": catalog::has_source(&s.id),
         "status": status,
         "last_ok": state.last_ok.map(|d| DateView::new(d, now)),

@@ -306,6 +306,15 @@ impl Store {
         Ok(())
     }
 
+    /// Replaces a stored source's settings. Returns false if there is no such source.
+    pub fn update_source(&self, id: &str, config: &str) -> anyhow::Result<bool> {
+        let changed = self.conn.execute(
+            "UPDATE sources SET config = ?2 WHERE id = ?1",
+            params![id, config],
+        )?;
+        Ok(changed > 0)
+    }
+
     /// Removes a source with its items, fetch state and override.
     pub fn remove_source(&mut self, id: &str) -> anyhow::Result<()> {
         let tx = self.conn.transaction()?;

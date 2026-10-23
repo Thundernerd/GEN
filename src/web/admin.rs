@@ -9,11 +9,19 @@ use axum::response::{IntoResponse, Redirect, Response};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
-use super::{AppError, AppState, PageResult, SourcesParams, non_empty, safe_next, sources_page};
+use super::{
+    AppError, AppState, PageResult, SourcesParams, describe, non_empty, page_with_notice,
+    safe_next, sources_page,
+};
 use crate::catalog;
-use crate::config::{EngineConfig, GithubMode, OutletConfig, SourceConfig, SourceSpec};
+use crate::config::{
+    EngineConfig, GithubMode, MAX_INTERVAL_MINUTES, OutletConfig, ResolvedSource, SourceConfig,
+    SourceSpec,
+};
 use crate::model::ItemKind;
+use crate::pipeline::DEFAULT_INTERVAL_KEY;
 use crate::registry::{EditError, NewOwner, SourceEdit};
+use crate::scheduler::FetchReport;
 
 impl AppState {
     /// Applies an edit under the store lock and drops the toggles of purged sources.
@@ -155,7 +163,8 @@ async fn add_source_inner(st: &AppState, headers: &HeaderMap, form: AddSourceFor
         // Show the form again, filled in, with the message.
         Err(AppError::Invalid(msg)) => {
             let feedback = json!({"panel": "add-source", "error": msg, "form": form});
-            let page = sources_page(st, true, SourcesParams::default(), Some(feedback)).await?;
+            let page =
+                sources_page(st, true, SourcesParams::default(), Some(feedback), None).await?;
             Ok((StatusCode::UNPROCESSABLE_ENTITY, page).into_response())
         }
         Err(err) => Err(err),
@@ -290,7 +299,8 @@ async fn add_owner_inner(st: &AppState, headers: &HeaderMap, form: AddOwnerForm)
                 _ => "add-engine",
             };
             let feedback = json!({"panel": panel, "error": msg, "form": form});
-            let page = sources_page(st, true, SourcesParams::default(), Some(feedback)).await?;
+            let page =
+                sources_page(st, true, SourcesParams::default(), Some(feedback), None).await?;
             Ok((StatusCode::UNPROCESSABLE_ENTITY, page).into_response())
         }
         Err(err) => Err(err),
@@ -332,6 +342,214 @@ pub(super) async fn add_suggested_owner(
             ))
         })?;
         st.apply_edit(SourceEdit::AddOwner(owner)).await?;
+        Ok(Redirect::to("/sources").into_response())
+    }
+    .await;
+    st.respond(result)
+}
+
+/// How long a "Fetch now" waits for its result before reporting that it's still running.
+const FETCH_WAIT: std::time::Duration = std::time::Duration::from_secs(60);
+/// How long "Fetch all now" waits for the results.
+const FETCH_ALL_WAIT: std::time::Duration = std::time::Duration::from_secs(45);
+
+#[derive(Deserialize)]
+pub(super) struct FetchForm {
+    source_id: Option<String>,
+    next: Option<String>,
+}
+
+/// A source's display name for messages, e.g. "Godot github godotengine/godot (releases)".
+fn source_label(s: &ResolvedSource) -> String {
+    let (kind, target, _) = describe(&s.spec);
+    format!("{} {kind} {target}", s.owner_name)
+}
+
+/// Asks the source's poller to fetch now, waits for the result and shows it.
+pub(super) async fn fetch_source(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    Form(form): Form<FetchForm>,
+) -> Response {
+    let result = async {
+        require_admin(&st, &headers)?;
+        let id = form.source_id.clone().unwrap_or_default();
+        let source = st
+            .registry
+            .current()
+            .config
+            .manageable_sources()
+            .into_iter()
+            .find(|s| s.id == id)
+            .ok_or_else(|| AppError::Invalid(format!("There is no source “{id}”.")))?;
+        let label = source_label(&source);
+        let notice = if !st.toggles.is_enabled(&source) {
+            json!({"ok": false, "message": format!("{label} is switched off; enable it first.")})
+        } else {
+            match st.fetches.request(&id) {
+                None => json!({"ok": false, "message": format!("{label} isn't running yet; try again in a moment.")}),
+                Some(rx) => match tokio::time::timeout(FETCH_WAIT, rx).await {
+                    Ok(Ok(report)) => report_notice(&label, &report),
+                    Ok(Err(_)) => json!({"ok": false, "message": format!("{label} was stopped before it could fetch.")}),
+                    Err(_) => json!({"ok": true, "message": format!("{label} is still fetching; its status updates when it's done.")}),
+                },
+            }
+        };
+        page_with_notice(&st, form.next.as_deref(), notice).await
+    }
+    .await;
+    st.respond(result)
+}
+
+fn report_notice(label: &str, report: &FetchReport) -> serde_json::Value {
+    let message = match (&report.error, report.new_items, report.not_modified) {
+        (Some(err), _, _) => {
+            return json!({"ok": false, "message": format!("Fetching {label} failed: {err}")});
+        }
+        (None, 0, true) => format!("Fetched {label}: unchanged since the last fetch."),
+        (None, 0, false) => format!("Fetched {label}: no new items."),
+        (None, 1, _) => format!("Fetched {label}: 1 new item."),
+        (None, n, _) => format!("Fetched {label}: {n} new items."),
+    };
+    json!({"ok": true, "message": message})
+}
+
+/// Asks every enabled source to fetch now and reports how it went.
+pub(super) async fn fetch_all(State(st): State<AppState>, headers: HeaderMap) -> Response {
+    let result = async {
+        require_admin(&st, &headers)?;
+        let sources: Vec<ResolvedSource> = st
+            .registry
+            .current()
+            .config
+            .manageable_sources()
+            .into_iter()
+            .filter(|s| st.toggles.is_enabled(s))
+            .collect();
+        let pending: Vec<_> = sources
+            .iter()
+            .filter_map(|s| st.fetches.request(&s.id).map(|rx| (s, rx)))
+            .collect();
+        if pending.is_empty() {
+            let notice =
+                json!({"ok": false, "message": "Nothing to fetch: no enabled source is running."});
+            return page_with_notice(&st, Some("/sources"), notice).await;
+        }
+        let deadline = tokio::time::Instant::now() + FETCH_ALL_WAIT;
+        let (mut new_items, mut failed, mut running) = (0, Vec::new(), 0);
+        let requested = pending.len();
+        for (source, rx) in pending {
+            match tokio::time::timeout_at(deadline, rx).await {
+                Ok(Ok(report)) if report.error.is_none() => new_items += report.new_items,
+                Ok(Ok(_)) | Ok(Err(_)) => failed.push(source.owner_name.clone()),
+                Err(_) => running += 1,
+            }
+        }
+        let mut message = format!(
+            "Fetched {} of {requested} sources: {new_items} new item{}",
+            requested - running,
+            if new_items == 1 { "" } else { "s" }
+        );
+        if !failed.is_empty() {
+            failed.dedup();
+            message.push_str(&format!(
+                ", {} failed ({})",
+                failed.len(),
+                failed.join(", ")
+            ));
+        }
+        if running > 0 {
+            message.push_str(&format!(", {running} still fetching"));
+        }
+        message.push('.');
+        let notice = json!({"ok": failed.is_empty(), "message": message});
+        page_with_notice(&st, Some("/sources"), notice).await
+    }
+    .await;
+    st.respond(result)
+}
+
+#[derive(Deserialize)]
+pub(super) struct IntervalForm {
+    source_id: Option<String>,
+    /// Empty means "use the default".
+    minutes: Option<String>,
+    next: Option<String>,
+}
+
+fn parse_minutes(text: Option<&str>) -> Result<Option<u64>, String> {
+    match text.map(str::trim).filter(|m| !m.is_empty()) {
+        None => Ok(None),
+        Some(m) => match m.parse::<u64>() {
+            Ok(n) if (1..=MAX_INTERVAL_MINUTES).contains(&n) => Ok(Some(n)),
+            _ => Err(format!(
+                "The interval must be a whole number of minutes from 1 to {MAX_INTERVAL_MINUTES}."
+            )),
+        },
+    }
+}
+
+/// Sets how often one source is polled (or back to the default).
+pub(super) async fn set_interval(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    Form(form): Form<IntervalForm>,
+) -> Response {
+    let result = async {
+        require_admin(&st, &headers)?;
+        let edit = parse_minutes(form.minutes.as_deref()).map(|minutes| SourceEdit::SetInterval {
+            source_id: form.source_id.clone().unwrap_or_default(),
+            minutes,
+        });
+        let result = match edit {
+            Ok(edit) => st.apply_edit(edit).await,
+            Err(msg) => Err(AppError::Invalid(msg)),
+        };
+        match result {
+            Ok(()) => Ok(Redirect::to(&safe_next(form.next.as_deref())).into_response()),
+            Err(AppError::Invalid(msg)) => {
+                let page = page_with_notice(
+                    &st,
+                    form.next.as_deref(),
+                    json!({"ok": false, "message": msg}),
+                )
+                .await?;
+                Ok((StatusCode::UNPROCESSABLE_ENTITY, page).into_response())
+            }
+            Err(err) => Err(err),
+        }
+    }
+    .await;
+    st.respond(result)
+}
+
+#[derive(Deserialize)]
+pub(super) struct DefaultIntervalForm {
+    minutes: Option<String>,
+}
+
+/// Sets the polling interval of every source without its own.
+pub(super) async fn set_default_interval(
+    State(st): State<AppState>,
+    headers: HeaderMap,
+    Form(form): Form<DefaultIntervalForm>,
+) -> Response {
+    let result = async {
+        require_admin(&st, &headers)?;
+        let minutes = match parse_minutes(form.minutes.as_deref()) {
+            Ok(Some(minutes)) => minutes,
+            Ok(None) => st.config.polling.default_interval_minutes,
+            Err(msg) => {
+                let page =
+                    page_with_notice(&st, Some("/sources"), json!({"ok": false, "message": msg}))
+                        .await?;
+                return Ok((StatusCode::UNPROCESSABLE_ENTITY, page).into_response());
+            }
+        };
+        st.with_store(move |s| s.set_meta(DEFAULT_INTERVAL_KEY, &minutes.to_string()))
+            .await?;
+        st.settings.set_default_interval(minutes);
+        tracing::info!(minutes, "default polling interval changed");
         Ok(Redirect::to("/sources").into_response())
     }
     .await;

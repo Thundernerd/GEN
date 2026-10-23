@@ -17,8 +17,11 @@
   {%- endif %}
 </header>
 
+{%- if notice %}
+<p class="notice{% if not notice.ok %} form-error{% endif %}" role="status">{{ notice.message }}</p>
+{%- endif %}
 {%- if source_count %}
-<details class="engine-sources">
+<details class="engine-sources" id="engine-sources"{% if notice %} open{% endif %}>
   <summary>Sources ({{ source_count }})</summary>
   {% include "_sources_table.html" %}
 </details>
