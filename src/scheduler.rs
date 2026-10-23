@@ -33,7 +33,7 @@ const NOTIFY_BATCH: u32 = 100;
 /// Spawns the poller supervisor and the notifier task. Dropping the returned `JoinSet`
 /// stops them, and with the supervisor every polling task.
 pub fn spawn(pipeline: Pipeline, app: Arc<AppConfig>) -> JoinSet<()> {
-    let wake = Arc::new(Notify::new());
+    let wake = pipeline.notify_wake.clone();
     let poller = Poller {
         pipeline: pipeline.clone(),
         app: app.clone(),
@@ -197,11 +197,7 @@ struct Notifier {
 impl Notifier {
     async fn run(self) {
         loop {
-            for channel in self.app.notify.channels.iter().filter(|c| c.enabled) {
-                if let Err(err) = self.deliver(channel).await {
-                    tracing::error!(channel = %channel.name, "notification failed: {err:#}");
-                }
-            }
+            self.run_once().await;
             tokio::select! {
                 () = self.wake.notified() => {}
                 () = tokio::time::sleep(NOTIFY_RETRY_INTERVAL) => {}
@@ -209,9 +205,48 @@ impl Notifier {
         }
     }
 
+    /// One pass over every enabled channel, recording each one's delivery result.
+    async fn run_once(&self) {
+        // Read every run, so channels edited on the website take effect right away.
+        let channels = match self.pipeline.with_store(|s| notify::load_channels(s)).await {
+            Ok(channels) => channels,
+            Err(err) => {
+                tracing::error!("loading notify channels failed: {err:#}");
+                Vec::new()
+            }
+        };
+        for channel in channels.iter().map(|c| &c.config).filter(|c| c.enabled) {
+            let name = channel.name.clone();
+            let result = match channel.resolved() {
+                Ok(resolved) => self.deliver(&resolved).await,
+                Err(err) => Err(err),
+            };
+            let record = match &result {
+                Ok(true) => Some(None),
+                Ok(false) => None,
+                Err(err) => {
+                    tracing::error!(channel = %name, "notification failed: {err:#}");
+                    Some(Some(format!("{err:#}")))
+                }
+            };
+            if let Some(error) = record {
+                let stored = self
+                    .pipeline
+                    .with_store(move |s| match error {
+                        None => s.record_channel_ok(&name),
+                        Some(e) => s.record_channel_error(&name, &e),
+                    })
+                    .await;
+                if let Err(err) = stored {
+                    tracing::error!("recording a delivery result failed: {err:#}");
+                }
+            }
+        }
+    }
     /// Sends one channel's pending items. Each item is marked as handled right after it is
     /// sent (or skipped by the rules), so a failure only leaves unsent items pending.
-    async fn deliver(&self, channel: &ChannelConfig) -> anyhow::Result<()> {
+    /// Returns whether anything was sent.
+    async fn deliver(&self, channel: &ChannelConfig) -> anyhow::Result<bool> {
         let name = channel.name.clone();
         let pending = self
             .pipeline
@@ -222,7 +257,7 @@ impl Notifier {
             })
             .await?;
         if pending.is_empty() {
-            return Ok(());
+            return Ok(false);
         }
         let (matching, skipped): (Vec<Item>, Vec<Item>) = pending
             .into_iter()
@@ -241,12 +276,14 @@ impl Notifier {
         } else {
             matching.chunks(1).collect()
         };
+        let mut sent = false;
         for batch in batches.into_iter().filter(|b| !b.is_empty()) {
             notify::send(&ctx, channel, batch).await?;
             self.mark(channel, batch).await?;
+            sent = true;
             tracing::info!(channel = %channel.name, items = batch.len(), "notified");
         }
-        Ok(())
+        Ok(sent)
     }
 
     async fn mark(&self, channel: &ChannelConfig, items: &[Item]) -> anyhow::Result<()> {
@@ -292,6 +329,69 @@ mod tests {
             require_engine_match: false,
             spec: SourceSpec::Hn { query: id.into() },
         }
+    }
+
+    /// A channel stored in the database (as the website does) is delivered on the next
+    /// notifier run, and the result is recorded on the channel.
+    #[tokio::test]
+    async fn delivers_to_channels_from_the_store() {
+        use std::sync::Mutex;
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        // A one-shot HTTP sink that records the request.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let sink = tokio::spawn(async move {
+            let (mut conn, _) = listener.accept().await.unwrap();
+            let mut buf = vec![0u8; 16 * 1024];
+            let n = conn.read(&mut buf).await.unwrap();
+            conn.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
+                .await
+                .unwrap();
+            String::from_utf8_lossy(&buf[..n]).into_owned()
+        });
+
+        let mut store = crate::store::Store::open_in_memory().unwrap();
+        let registry = crate::registry::SourceRegistry::load(&store).unwrap();
+        let channel = format!(
+            r#"{{"name":"phone","kind":"ntfy","server":"http://{addr}","topic":"gen-test"}}"#
+        );
+        store.add_channel("phone", &channel).unwrap();
+        // Notifiable items must arrive after the channel was added.
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        store
+            .insert_items(&[crate::model::NewItem {
+                source_id: "godot:github:godotengine/godot".into(),
+                guid: "4.8".into(),
+                engines: vec!["godot".into()],
+                kind: crate::model::ItemKind::Release,
+                title: "Godot 4.8".into(),
+                url: None,
+                summary: None,
+                published: None,
+                story_key: "godot 4 8".into(),
+                notify: true,
+            }])
+            .unwrap();
+        let pipeline = Pipeline {
+            http: crate::fetch::Http::new("gen-test", None).unwrap(),
+            store: Arc::new(Mutex::new(store)),
+            registry: Arc::new(registry),
+            toggles: Arc::new(crate::toggles::SourceToggles::default()),
+            notify_wake: Arc::new(Notify::new()),
+        };
+        let notifier = Notifier {
+            pipeline: pipeline.clone(),
+            app: Arc::new(AppConfig::default()),
+            wake: pipeline.notify_wake.clone(),
+        };
+        notifier.run_once().await;
+
+        let request = sink.await.unwrap();
+        assert!(request.starts_with("POST /gen-test "), "{request}");
+        assert!(request.contains("Godot 4.8"), "{request}");
+        let channels = notify::load_channels(&pipeline.store.lock().unwrap()).unwrap();
+        assert!(channels[0].last_ok.is_some() && channels[0].last_error.is_none());
     }
 
     #[test]

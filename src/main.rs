@@ -55,7 +55,7 @@ enum Command {
     CheckConfig,
     /// Send a sample item to one notification channel, ignoring its rules.
     NotifyTest {
-        /// Channel name from `[[notify.channel]]`.
+        /// Channel name, as shown on the Notifications page.
         #[arg(long)]
         channel: String,
     },
@@ -84,6 +84,13 @@ fn check_config(app: &AppConfig) -> anyhow::Result<()> {
     let pipeline = build_pipeline(app)?;
     let snapshot = pipeline.registry.current();
     let sources = &snapshot.config;
+    let channels = {
+        let store = pipeline
+            .store
+            .lock()
+            .map_err(|_| anyhow::anyhow!("store mutex poisoned"))?;
+        notify::load_channels(&store)?
+    };
     let all = sources.all_sources();
     let enabled = sources.enabled_sources();
     println!(
@@ -93,7 +100,7 @@ fn check_config(app: &AppConfig) -> anyhow::Result<()> {
         sources.outlets.len(),
         all.len(),
         enabled.len(),
-        app.notify.channels.len(),
+        channels.len(),
     );
     for s in &enabled {
         println!("  {}", s.id);
@@ -160,13 +167,14 @@ async fn fetch_once(app: &AppConfig, filter: Option<&str>) -> anyhow::Result<()>
 }
 
 async fn notify_test(app: &AppConfig, channel: &str) -> anyhow::Result<()> {
-    let Some(cfg) = app.notify.channels.iter().find(|c| c.name == channel) else {
-        let names: Vec<_> = app
-            .notify
-            .channels
-            .iter()
-            .map(|c| c.name.as_str())
-            .collect();
+    let pipeline = build_pipeline(app)?;
+    let channels = pipeline.with_store(|s| notify::load_channels(s)).await?;
+    let Some(cfg) = channels
+        .iter()
+        .map(|c| &c.config)
+        .find(|c| c.name == channel)
+    else {
+        let names: Vec<_> = channels.iter().map(|c| c.config.name.as_str()).collect();
         anyhow::bail!(
             "no notify channel named `{channel}` (configured: {})",
             if names.is_empty() {
@@ -176,15 +184,13 @@ async fn notify_test(app: &AppConfig, channel: &str) -> anyhow::Result<()> {
             }
         );
     };
-    let http = Http::new(&app.polling.user_agent, None)?;
-    let store = Store::open(&app.database.path)?;
-    let snapshot = SourceRegistry::load(&store)?.current();
+    let snapshot = pipeline.registry.current();
     let ctx = notify::NotifyContext {
-        http: &http,
+        http: &pipeline.http,
         sources: &snapshot.config,
         base_url: &app.server.base_url,
     };
-    notify::send(&ctx, cfg, &[notify::sample_item()])
+    notify::send(&ctx, &cfg.resolved()?, &[notify::sample_item()])
         .await
         .with_context(|| format!("sending test notification to `{channel}`"))?;
     println!("sent test notification to `{channel}`");
@@ -193,12 +199,7 @@ async fn notify_test(app: &AppConfig, channel: &str) -> anyhow::Result<()> {
 
 async fn serve(app: AppConfig) -> anyhow::Result<()> {
     let pipeline = build_pipeline(&app)?;
-    let state = web::AppState::new(
-        pipeline.store.clone(),
-        pipeline.toggles.clone(),
-        pipeline.registry.clone(),
-        app,
-    )?;
+    let state = web::AppState::new(&pipeline, app)?;
     let listener = tokio::net::TcpListener::bind(&state.config.server.bind)
         .await
         .with_context(|| format!("binding {}", state.config.server.bind))?;
@@ -239,11 +240,13 @@ fn build_pipeline(app: &AppConfig) -> anyhow::Result<Pipeline> {
     let mut store = Store::open(&app.database.path)?;
     let registry = SourceRegistry::load(&store)?;
     catalog::seed_once(&registry, &mut store)?;
+    notify::import_once(app, &store)?;
     let toggles = SourceToggles::new(store.source_overrides()?);
     Ok(Pipeline {
         http: Http::new(&app.polling.user_agent, app.polling.github_token.clone())?,
         store: Arc::new(Mutex::new(store)),
         registry: Arc::new(registry),
         toggles: Arc::new(toggles),
+        notify_wake: Arc::new(tokio::sync::Notify::new()),
     })
 }

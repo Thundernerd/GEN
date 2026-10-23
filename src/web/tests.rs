@@ -10,7 +10,9 @@ use tower::ServiceExt;
 
 use super::{AppState, router};
 use crate::config::AppConfig;
+use crate::fetch::Http;
 use crate::model::{ItemKind, NewItem};
+use crate::pipeline::Pipeline;
 use crate::registry::SourceRegistry;
 use crate::store::Store;
 use crate::toggles::SourceToggles;
@@ -111,9 +113,15 @@ fn state() -> AppState {
     config.server.static_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/static").into();
     config.server.base_url = "https://gen.example.org/".into();
     config.server.admin_token = Some(ADMIN_TOKEN.into());
-    let toggles = Arc::new(SourceToggles::default());
     let registry = Arc::new(SourceRegistry::with_owners(&mut store, SOURCES));
-    AppState::new(Arc::new(Mutex::new(store)), toggles, registry, config).unwrap()
+    let pipeline = Pipeline {
+        http: Http::new("gen-test", None).unwrap(),
+        store: Arc::new(Mutex::new(store)),
+        registry,
+        toggles: Arc::new(SourceToggles::default()),
+        notify_wake: Arc::new(tokio::sync::Notify::new()),
+    };
+    AppState::new(&pipeline, config).unwrap()
 }
 
 const ADMIN_TOKEN: &str = "test-admin-token";
@@ -740,4 +748,176 @@ async fn removed_engines_come_back_from_the_suggestions() {
     )
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+fn stored_channels(st: &AppState) -> Vec<crate::config::ChannelConfig> {
+    crate::notify::load_channels(&st.store.lock().unwrap())
+        .unwrap()
+        .into_iter()
+        .map(|c| c.config)
+        .collect()
+}
+
+const HOOK: &str = "https%3A%2F%2Fdiscord.com%2Fapi%2Fwebhooks%2F1%2FSUPERSECRET";
+
+#[tokio::test]
+async fn notifications_require_admin() {
+    let st = state();
+    let (status, headers, _) = send(
+        &st,
+        Request::get("/notifications").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(headers[header::LOCATION], "/login?next=/notifications");
+    for uri in [
+        "/notifications/add",
+        "/notifications/edit",
+        "/notifications/toggle",
+        "/notifications/remove",
+        "/notifications/test",
+    ] {
+        let (status, _, _) = send(&st, post_form(uri, "name=x", None)).await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{uri}");
+    }
+    // The nav link only shows when logged in.
+    let (_, _, body) = send(&st, Request::get("/").body(Body::empty()).unwrap()).await;
+    assert!(!body.contains(r#"href="/notifications""#));
+    let cookie = login(&st).await;
+    let (_, body) = get_as(&st, "/", &cookie).await;
+    assert!(body.contains(r#"href="/notifications""#));
+}
+
+#[tokio::test]
+async fn admin_manages_notification_channels() {
+    let st = state();
+    let cookie = login(&st).await;
+    let (status, body) = get_as(&st, "/notifications", &cookie).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("No channels yet"));
+
+    let form = format!(
+        "name=chat&kind=discord&webhook_url={HOOK}&kinds=release&kinds=prerelease&engines=godot&enabled=1"
+    );
+    let (status, headers, _) =
+        send(&st, post_form("/notifications/add", &form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(headers[header::LOCATION], "/notifications");
+    let chat = &stored_channels(&st)[0];
+    assert!(chat.enabled);
+    assert_eq!(chat.rules.engines, ["godot"]);
+    assert_eq!(chat.rules.kinds, [ItemKind::Release, ItemKind::Prerelease]);
+
+    let (_, body) = get_as(&st, "/notifications", &cookie).await;
+    assert!(body.contains("Discord webhook"));
+    assert!(body.contains("release, prerelease · Godot"));
+    assert!(!body.contains("SUPERSECRET"), "secrets are never shown");
+    assert!(body.contains("set · leave empty to keep"));
+
+    // Editing without retyping the webhook keeps it; every kind checked means "all".
+    let kinds: String = ItemKind::ALL
+        .iter()
+        .map(|k| format!("&kinds={}", k.as_str()))
+        .collect();
+    let form = format!(
+        "original_name=chat&kind=discord&webhook_url=&keywords=4.8%2C+C%23&enabled=1{kinds}"
+    );
+    let (status, _, _) = send(&st, post_form("/notifications/edit", &form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    let chat = &stored_channels(&st)[0];
+    assert!(
+        matches!(&chat.target, crate::config::ChannelTarget::Discord { webhook_url } if webhook_url.ends_with("SUPERSECRET"))
+    );
+    assert!(chat.rules.kinds.is_empty() && chat.rules.engines.is_empty());
+    assert_eq!(chat.rules.keywords, ["4.8", "C#"]);
+
+    let (status, _, _) = send(
+        &st,
+        post_form(
+            "/notifications/toggle",
+            "name=chat&enabled=0",
+            Some(&cookie),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert!(!stored_channels(&st)[0].enabled);
+
+    let (status, _, _) = send(
+        &st,
+        post_form("/notifications/remove", "name=chat", Some(&cookie)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert!(stored_channels(&st).is_empty());
+}
+
+#[tokio::test]
+async fn invalid_channels_reopen_their_dialog() {
+    let st = state();
+    let cookie = login(&st).await;
+    for (form, message) in [
+        (
+            "name=chat&kind=discord&webhook_url=https%3A%2F%2Fexample.com&kinds=news",
+            "discord.com",
+        ),
+        (
+            "name=chat&kind=discord&kinds=news",
+            "Enter the Discord webhook URL",
+        ),
+        (
+            "name=Chat+Room&kind=ntfy&ntfy_topic=t&kinds=news",
+            "be used as a name",
+        ),
+        ("name=chat&kind=ntfy&ntfy_topic=t", "at least one kind"),
+        (
+            "name=mail&kind=email&smtp_host=smtp.x&from=a%40x&kinds=news",
+            "recipient",
+        ),
+    ] {
+        let (status, _, body) =
+            send(&st, post_form("/notifications/add", form, Some(&cookie))).await;
+        assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{form}");
+        assert!(body.contains(message), "{form}: {message}");
+        assert!(
+            body.contains(r#"aria-labelledby="add-channel-title" open data-reopen"#),
+            "{form}"
+        );
+    }
+    assert!(stored_channels(&st).is_empty());
+    // Values are shown again, secrets aren't.
+    let (_, _, body) = send(
+        &st,
+        post_form("/notifications/add", "name=mail&kind=email&smtp_host=smtp.example.org&smtp_password=hunter2&from=a%40x&kinds=news", Some(&cookie)),
+    )
+    .await;
+    assert!(body.contains(r#"value="smtp.example.org""#));
+    assert!(!body.contains("hunter2"));
+}
+
+#[tokio::test]
+async fn env_references_are_shown_and_resolved_when_sending() {
+    let st = state();
+    let cookie = login(&st).await;
+    let form = "name=phone&kind=ntfy&ntfy_server=https%3A%2F%2Fntfy.sh&ntfy_topic=%24%7BGEN_TEST_UNSET_TOPIC%7D&kinds=release&enabled=1";
+    let (status, _, _) = send(&st, post_form("/notifications/add", form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    let (_, body) = get_as(&st, "/notifications", &cookie).await;
+    assert!(body.contains("ntfy.sh · topic ${GEN_TEST_UNSET_TOPIC}"));
+    assert!(
+        body.contains(r#"value="${GEN_TEST_UNSET_TOPIC}""#),
+        "a reference is not a secret"
+    );
+
+    // The variable is unset, so the test send fails without touching the network.
+    let (status, _, body) = send(
+        &st,
+        post_form("/notifications/test", "name=phone", Some(&cookie)),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("Sending to phone failed"), "{body}");
+    assert!(body.contains("GEN_TEST_UNSET_TOPIC"));
+    let (_, body) = get_as(&st, "/notifications", &cookie).await;
+    assert!(body.contains("status-failing"));
 }

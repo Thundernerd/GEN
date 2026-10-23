@@ -2,6 +2,8 @@
 
 use std::sync::{Arc, Mutex};
 
+use tokio::sync::Notify;
+
 use crate::config::ResolvedSource;
 use crate::fetch::{self, FetchOutcome, Http};
 use crate::model::{Item, NewItem};
@@ -18,6 +20,8 @@ pub struct Pipeline {
     pub store: Arc<Mutex<Store>>,
     pub registry: Arc<SourceRegistry>,
     pub toggles: Arc<SourceToggles>,
+    /// Wakes the notifier: new notifiable items were stored, or channels changed.
+    pub notify_wake: Arc<Notify>,
 }
 
 #[derive(Debug)]

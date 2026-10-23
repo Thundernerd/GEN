@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+{% from "_notification_form.html" import channel_dialog %}
+{% block title %}Notifications — GEN{% endblock %}
+{% block content %}
+<div class="page-head">
+  <h1 class="page-title">Notifications</h1>
+  <button type="button" class="btn-small" commandfor="add-channel" command="show-modal">Add a channel</button>
+</div>
+<p class="page-lede">Channels are sent new items as they arrive, filtered by what each one wants. Items from a source's first fetch are never sent.</p>
+
+{%- if notice %}
+<p class="notice{% if not notice.ok %} form-error{% endif %}" role="status">{{ notice.message }}</p>
+{%- endif %}
+
+{%- if channels %}
+<ul class="channel-list">
+  {%- for c in channels %}
+  <li class="channel{% if not c.enabled %} is-disabled{% endif %}">
+    <div class="channel-main">
+      <h2 class="channel-name">{{ c.name }} <span class="channel-kind">{{ c.kind_label }}</span>{% if not c.enabled %} <span class="channel-kind">off</span>{% endif %}</h2>
+      <p class="channel-target">{{ c.target }}</p>
+      <p class="channel-rules">{{ c.rules }}</p>
+      <p class="channel-status">
+        {%- if c.last_error %}
+        <span class="badge status-failing">failed</span> <time datetime="{{ c.last_error_at.iso }}" title="{{ c.last_error_at.abs }}">{{ c.last_error_at.rel }}</time>: <span class="error-text">{{ c.last_error }}</span>
+        {%- elif c.last_ok %}
+        <span class="badge status-ok">delivered</span> <time datetime="{{ c.last_ok.iso }}" title="{{ c.last_ok.abs }}">{{ c.last_ok.rel }}</time>
+        {%- else %}
+        <span class="badge status-pending">nothing sent yet</span>
+        {%- endif %}
+      </p>
+    </div>
+    <div class="channel-actions">
+      <form method="post" action="/notifications/test" data-inline="Test sent.">
+        <input type="hidden" name="name" value="{{ c.name }}">
+        <button type="submit" class="btn-small btn-quiet">Send test</button>
+      </form>
+      <button type="button" class="btn-small btn-quiet" commandfor="{{ c.dialog }}" command="show-modal">Edit</button>
+      <form method="post" action="/notifications/toggle" data-inline="Channel {{ 'disabled' if c.enabled else 'enabled' }}.">
+        <input type="hidden" name="name" value="{{ c.name }}">
+        <input type="hidden" name="enabled" value="{{ '0' if c.enabled else '1' }}">
+        <button type="submit" class="btn-small btn-quiet">{{ "Disable" if c.enabled else "Enable" }}</button>
+      </form>
+      {%- set confirm = "remove-channel-" ~ loop.index %}
+      <button type="button" class="btn-small btn-quiet" popovertarget="{{ confirm }}">Remove</button>
+      <div popover id="{{ confirm }}" class="confirm-dialog" role="dialog" aria-labelledby="{{ confirm }}-title">
+        <h2 id="{{ confirm }}-title">Remove {{ c.name }}?</h2>
+        <p>GEN stops sending to this channel and forgets what it sent there.</p>
+        <div class="dialog-actions">
+          <button type="button" class="btn-small btn-quiet" popovertarget="{{ confirm }}" popovertargetaction="hide">Cancel</button>
+          <form method="post" action="/notifications/remove" data-inline="{{ c.name }} removed.">
+            <input type="hidden" name="name" value="{{ c.name }}">
+            <button type="submit" class="btn-small btn-danger">Remove channel</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </li>
+  {%- endfor %}
+</ul>
+{%- else %}
+<div class="empty-state">
+  <p>No channels yet. Add one to get new releases and news on Discord, your phone (ntfy) or by email.</p>
+</div>
+{%- endif %}
+
+{{ channel_dialog("add-channel", "Add a channel", "/notifications/add", add_form, engines, kinds, feedback) }}
+{%- for c in channels %}
+{{ channel_dialog(c.dialog, "Edit " ~ c.name, "/notifications/edit", c.form, engines, kinds, feedback, c.secrets, true) }}
+{%- endfor %}
+{% endblock %}

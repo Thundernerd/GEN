@@ -4,18 +4,80 @@ pub mod discord;
 pub mod email;
 pub mod ntfy;
 
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 
-use crate::config::{ChannelConfig, ChannelTarget, NotifyRules, SourcesConfig};
+use crate::config::{AppConfig, ChannelConfig, ChannelTarget, NotifyRules, SourcesConfig};
 use crate::fetch::Http;
 use crate::model::{Item, ItemKind};
+use crate::store::Store;
+
+/// `meta` key set once the channels from gen.toml were imported.
+const IMPORTED_KEY: &str = "channels_imported";
+
+/// A configured channel with its last delivery result.
+#[derive(Debug, Clone)]
+pub struct Channel {
+    pub config: ChannelConfig,
+    pub last_ok: Option<DateTime<Utc>>,
+    pub last_error: Option<String>,
+    pub last_error_at: Option<DateTime<Utc>>,
+}
+
+/// The channels stored in the database. Unreadable rows are skipped with a warning.
+pub fn load_channels(store: &Store) -> anyhow::Result<Vec<Channel>> {
+    let mut out = Vec::new();
+    for row in store.channels()? {
+        match serde_json::from_str::<ChannelConfig>(&row.config) {
+            Ok(config) => out.push(Channel {
+                config,
+                last_ok: row.last_ok,
+                last_error: row.last_error,
+                last_error_at: row.last_error_at,
+            }),
+            Err(err) => tracing::warn!(channel = %row.name, "skipping unreadable channel: {err}"),
+        }
+    }
+    Ok(out)
+}
+
+/// Once per database: copies the channels from gen.toml into it. After that they're managed
+/// on the website, and channels left in gen.toml are ignored.
+pub fn import_once(app: &AppConfig, store: &Store) -> anyhow::Result<()> {
+    let channels = &app.notify.channels;
+    if store.meta(IMPORTED_KEY)?.is_some() {
+        if !channels.is_empty() {
+            tracing::info!(
+                "notify channels in gen.toml are ignored; manage them on the Notifications page"
+            );
+        }
+        return Ok(());
+    }
+    for channel in channels {
+        let json = serde_json::to_string(channel)?;
+        if store.import_channel(&channel.name, &json)? {
+            tracing::info!(channel = %channel.name, "imported notify channel from gen.toml");
+        } else {
+            tracing::warn!(channel = %channel.name, "not imported: a channel with this name exists");
+        }
+    }
+    store.set_meta(IMPORTED_KEY, &Utc::now().to_rfc3339())?;
+    Ok(())
+}
 
 #[derive(Debug, thiserror::Error)]
 pub enum NotifyError {
     #[error("http error: {0}")]
-    Http(#[from] reqwest::Error),
+    Http(reqwest::Error),
     #[error("{0}")]
     Other(String),
+}
+
+/// Drops the URL from HTTP errors: webhook URLs and ntfy topics are secrets, and errors
+/// are shown on the Notifications page.
+impl From<reqwest::Error> for NotifyError {
+    fn from(err: reqwest::Error) -> Self {
+        NotifyError::Http(err.without_url())
+    }
 }
 
 /// Context shared by notifiers for rendering messages.
@@ -330,6 +392,59 @@ pub(crate) mod tests {
         for (name, rules, item, expected) in cases {
             assert_eq!(matches(&rules, item), expected, "{name}");
         }
+    }
+
+    #[tokio::test]
+    async fn send_errors_leave_out_the_url() {
+        let http = Http::new("gen-test", None).unwrap();
+        let ctx = NotifyContext {
+            http: &http,
+            sources: &sources(),
+            base_url: "https://gen.example.org/",
+        };
+        // Nothing listens on port 9 (discard) here, so the request fails.
+        let channel: ChannelConfig = toml::from_str(
+            r#"
+            name = "phone"
+            kind = "ntfy"
+            server = "http://127.0.0.1:9"
+            topic = "secret-topic"
+            "#,
+        )
+        .unwrap();
+        let err = send(&ctx, &channel, &[sample_item()])
+            .await
+            .unwrap_err()
+            .to_string();
+        assert!(!err.contains("secret-topic"), "{err}");
+    }
+
+    #[test]
+    fn imports_channels_from_gen_toml_once() {
+        let mut app: AppConfig = toml::from_str(
+            r#"
+            [[notify.channel]]
+            name = "phone"
+            kind = "ntfy"
+            topic = "${GEN_NTFY_TOPIC}"
+            "#,
+        )
+        .unwrap();
+        let store = Store::open_in_memory().unwrap();
+        store.add_channel("chat", "{}").unwrap();
+        import_once(&app, &store).unwrap();
+        let channels = load_channels(&store).unwrap();
+        // "chat" isn't valid channel JSON, so only the import is readable.
+        assert_eq!(channels.len(), 1);
+        assert_eq!(
+            channels[0].config, app.notify.channels[0],
+            "references kept"
+        );
+
+        // Later changes to gen.toml are ignored.
+        app.notify.channels[0].name = "other".into();
+        import_once(&app, &store).unwrap();
+        assert_eq!(load_channels(&store).unwrap().len(), 1);
     }
 
     #[test]

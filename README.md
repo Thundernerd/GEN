@@ -49,7 +49,7 @@ The image is multi-stage. It builds on `rust:1.96-slim-bookworm` and runs on `de
 
 ```sh
 cp deploy/.env.example .env      # optional: tokens and notification secrets
-$EDITOR deploy/gen.docker.toml   # base_url, notification channels
+$EDITOR deploy/gen.docker.toml   # base_url, admin token
 docker compose up -d --build
 docker compose logs -f gen
 ```
@@ -111,7 +111,7 @@ journalctl -u gen -f
 
 ### gen.toml
 
-String values can reference environment variables as `${NAME}`. If a referenced variable is unset, GEN refuses to start, so leave out any line you don't use. When `gen.toml` is missing, the defaults below apply.
+String values can reference environment variables as `${NAME}`. If a referenced variable is unset, GEN refuses to start, so leave out any line you don't use. (References in notification channels are an exception: they're expanded when sending.) When `gen.toml` is missing, the defaults below apply.
 
 ```toml
 [server]
@@ -130,9 +130,7 @@ concurrency = 8                    # max sources fetched at the same time
 # user_agent = "GEN/0.1.0 (Game Engine News aggregator)"
 # github_token = "${GITHUB_TOKEN}" # optional; the GITHUB_TOKEN env var is used automatically
 
-[[notify.channel]]                 # repeat for each channel, see "Notifications"
-name = "..."
-kind = "discord" | "ntfy" | "email"
+# [[notify.channel]]               # imported once, then managed on the website; see "Notifications"
 ```
 
 Relative paths resolve against the working directory. A GitHub token is optional, but without one the GitHub API allows only 60 requests per hour.
@@ -222,54 +220,42 @@ New sources fill the database silently on their first successful fetch.
 
 ## Notifications
 
-Each `[[notify.channel]]` has a `name`, a `kind`, optional `enabled = false` and an optional `[notify.channel.rules]` table. An empty or missing rule list means "no restriction".
+Channels are managed on the **Notifications** page (`/notifications`), which shows in the header once you're logged in as admin (see "Admin login"). Each channel sends to Discord (a webhook), ntfy (phone push) or email, and has rules for what it gets:
 
-| Rule | Meaning |
-|---|---|
-| `engines = ["godot", "stride"]` | Only items tagged with one of these engine ids. |
-| `kinds = ["release"]` | Only these item kinds. |
-| `exclude_kinds = ["prerelease"]` | Never these kinds. |
-| `keywords = ["LTS", "security"]` | The title or summary must contain at least one (case-insensitive). |
-| `include_untagged = true` | Also send outlet items that matched no engine. Off by default. |
+- **Kinds:** the item kinds to send. All checked means everything, including kinds added later.
+- **Engines:** only items tagged with one of these. None checked means every engine.
+- **Also news-outlet items that mention no engine:** off by default.
+- **Keywords:** the title or summary must contain at least one (case-insensitive).
+
+Each channel shows its last delivery or error. **Send test** sends it a sample item right away, ignoring its rules. Changes take effect on the notifier's next run, which starts right after a change. A new channel only gets items that arrive after it was added, and switching a channel off keeps its place, so it catches up on items from the last three days when switched back on.
+
+Secrets (the webhook URL, the ntfy topic and token, the SMTP password) are never shown back on the page; leave a secret field empty when editing to keep it. Instead of the secret itself, you can enter an environment variable reference such as `${GEN_DISCORD_WEBHOOK}`: it's expanded when sending, so the secret stays out of the database. A reference is shown on the page as written.
+
+### Channels from gen.toml
+
+Channels still configured as `[[notify.channel]]` in `gen.toml` are copied into the database on the first start after upgrading, keeping their `${VAR}` references and their delivery history. After that, `gen.toml` channels are ignored (GEN logs a line saying so), and you can remove them from the file. The format, for reference:
 
 ```toml
 [[notify.channel]]
-name = "discord-releases"
-kind = "discord"
-webhook_url = "${GEN_DISCORD_WEBHOOK}"
-  [notify.channel.rules]
-  engines = ["godot", "unity", "stride", "flax"]
-  kinds = ["release"]
-
-[[notify.channel]]
 name = "phone"
-kind = "ntfy"
-server = "https://ntfy.sh"       # default; or your own ntfy server
+kind = "ntfy"                    # or "discord" (webhook_url) or "email" (smtp_host, smtp_port,
+server = "https://ntfy.sh"       #   username, password, from, to = [...], digest)
 topic = "${GEN_NTFY_TOPIC}"
-# token = "${GEN_NTFY_TOKEN}"    # for protected topics / self-hosted servers
   [notify.channel.rules]
+  engines = ["godot", "stride"]
   kinds = ["release", "news"]
   exclude_kinds = ["prerelease"]
-
-[[notify.channel]]
-name = "mail-digest"
-kind = "email"
-smtp_host = "smtp.example.com"
-smtp_port = 587                  # default; STARTTLS
-username = "${GEN_SMTP_USER}"
-password = "${GEN_SMTP_PASSWORD}"
-from = "GEN <gen@example.com>"
-to = ["you@example.com"]
-digest = true                    # one mail per poll cycle instead of one per item
+  keywords = ["LTS"]
+  include_untagged = false
 ```
 
 ### Setup tips
 
-- **Discord:** in the channel settings, open Integrations, then Webhooks, then New Webhook, and copy the webhook URL into `GEN_DISCORD_WEBHOOK`. Treat the URL as a secret.
-- **ntfy:** choose a long, random topic name, because anyone who knows a topic on ntfy.sh can read it. Subscribe to it in the ntfy app or at `https://ntfy.sh/<topic>`. For a self-hosted server with access control, set `server` and `token`.
+- **Discord:** in the channel settings, open Integrations, then Webhooks, then New Webhook, and copy the webhook URL. Treat the URL as a secret.
+- **ntfy:** choose a long, random topic name, because anyone who knows a topic on ntfy.sh can read it. Subscribe to it in the ntfy app or at `https://ntfy.sh/<topic>`. For a self-hosted server with access control, set the server and an access token.
 - **SMTP:** use port 587 (STARTTLS). For Gmail or Fastmail, create an app password instead of using your account password. Set `digest = true` to avoid a mail per item.
 
-To check a channel without waiting for news, send it a test message:
+To check a channel without waiting for news, use **Send test**, or from the command line:
 
 ```sh
 gen notify-test --channel phone
@@ -283,6 +269,7 @@ gen notify-test --channel phone
 | `/engines` | Engine list with tier, C# support and recent activity. |
 | `/engine/{id}` | Items for one engine. |
 | `/sources` | Every source with its last fetch time and errors. Admins can switch sources on and off, add sources, engines and outlets (by hand or from the suggestions) and remove them here. |
+| `/notifications` | Admin only: notification channels, their rules and last deliveries. |
 | `/login`, `/logout` | Admin login with `server.admin_token`. |
 | `/feed.xml` | Combined Atom feed. |
 | `/api/items` | JSON API for items. |
@@ -309,7 +296,7 @@ Each source (on `/sources` and on every engine page) gets an **Enable** / **Disa
 
 ### Admin login
 
-- The login sets an `HttpOnly`, `SameSite=Strict` cookie holding a hash of the token (also `Secure` when `base_url` is `https://`). Use a long random token, e.g. `openssl rand -hex 32`. Without a token, source management is off.
+- The login sets an `HttpOnly`, `SameSite=Strict` cookie holding a hash of the token (also `Secure` when `base_url` is `https://`). Use a long random token, e.g. `openssl rand -hex 32`. Without a token, source and notification management is off.
 
 ## Development
 

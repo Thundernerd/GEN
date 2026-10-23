@@ -5,6 +5,7 @@
 
 mod admin;
 mod feed;
+mod notifications;
 mod queries;
 #[cfg(test)]
 mod tests;
@@ -29,7 +30,9 @@ use tower_http::services::ServeDir;
 
 use crate::catalog;
 use crate::config::{AppConfig, Owner, SourceSpec};
+use crate::fetch::Http;
 use crate::model::{Item, ItemKind, SourceState};
+use crate::pipeline::Pipeline;
 use crate::registry::{NewOwner, Snapshot, SourceRegistry};
 use crate::store::Store;
 use crate::toggles::SourceToggles;
@@ -61,17 +64,16 @@ pub struct AppState {
     pub registry: Arc<SourceRegistry>,
     pub config: Arc<AppConfig>,
     pub toggles: Arc<SourceToggles>,
+    /// For sending test notifications.
+    pub http: Http,
+    /// Wakes the notifier after channels change.
+    pub notify_wake: Arc<tokio::sync::Notify>,
     templates: Arc<Environment<'static>>,
 }
 
 impl AppState {
     /// Builds the state and sets up the template environment from `server.templates_dir`.
-    pub fn new(
-        store: Arc<Mutex<Store>>,
-        toggles: Arc<SourceToggles>,
-        registry: Arc<SourceRegistry>,
-        config: AppConfig,
-    ) -> anyhow::Result<Self> {
+    pub fn new(pipeline: &Pipeline, config: AppConfig) -> anyhow::Result<Self> {
         let dir = config.server.templates_dir.clone();
         let mut env = Environment::new();
         env.set_loader(minijinja::path_loader(&dir));
@@ -79,12 +81,30 @@ impl AppState {
         env.get_template("base.html")
             .with_context(|| format!("loading templates from {}", dir.display()))?;
         Ok(AppState {
-            store,
-            registry,
+            store: pipeline.store.clone(),
+            registry: pipeline.registry.clone(),
             config: Arc::new(config),
-            toggles,
+            toggles: pipeline.toggles.clone(),
+            http: pipeline.http.clone(),
+            notify_wake: pipeline.notify_wake.clone(),
             templates: Arc::new(env),
         })
+    }
+
+    /// Runs a write on the blocking pool.
+    async fn with_store_mut<T, F>(&self, f: F) -> anyhow::Result<T>
+    where
+        F: FnOnce(&mut Store) -> anyhow::Result<T> + Send + 'static,
+        T: Send + 'static,
+    {
+        let store = self.store.clone();
+        tokio::task::spawn_blocking(move || {
+            let mut guard = store
+                .lock()
+                .map_err(|_| anyhow::anyhow!("store mutex poisoned"))?;
+            f(&mut guard)
+        })
+        .await?
     }
 
     /// Runs a read on the blocking pool (see `Pipeline::with_store`).
@@ -235,6 +255,12 @@ pub fn router(state: AppState) -> Router {
         .route("/owners/add", post(admin::add_owner))
         .route("/owners/remove", post(admin::remove_owner))
         .route("/suggestions/owner", post(admin::add_suggested_owner))
+        .route("/notifications", get(notifications::page))
+        .route("/notifications/add", post(notifications::add))
+        .route("/notifications/edit", post(notifications::edit))
+        .route("/notifications/toggle", post(notifications::toggle))
+        .route("/notifications/remove", post(notifications::remove))
+        .route("/notifications/test", post(notifications::test))
         .route("/login", get(login_form).post(login))
         .route("/logout", post(logout))
         .route("/feed.xml", get(feed))
@@ -333,12 +359,16 @@ async fn not_found(State(st): State<AppState>) -> Response {
     )))
 }
 
-async fn index(State(st): State<AppState>, Query(params): Query<ListParams>) -> Response {
-    let result = index_page(&st, params).await;
+async fn index(
+    State(st): State<AppState>,
+    Query(params): Query<ListParams>,
+    headers: HeaderMap,
+) -> Response {
+    let result = index_page(&st, params, st.is_admin(&headers)).await;
     st.respond(result)
 }
 
-async fn index_page(st: &AppState, params: ListParams) -> PageResult {
+async fn index_page(st: &AppState, params: ListParams, admin: bool) -> PageResult {
     let filter = params.filter();
     let page = params.page();
     let (mut items, dups) = st
@@ -388,6 +418,7 @@ async fn index_page(st: &AppState, params: ListParams) -> PageResult {
         "index.html",
         json!({
             "nav": "latest",
+            "admin": admin,
             "items": st.item_views(&items, &dups),
             "kind_tabs": kind_tabs,
             "engine_links": engine_links,
@@ -406,12 +437,12 @@ async fn index_page(st: &AppState, params: ListParams) -> PageResult {
     )
 }
 
-async fn engines(State(st): State<AppState>) -> Response {
-    let result = engines_page(&st).await;
+async fn engines(State(st): State<AppState>, headers: HeaderMap) -> Response {
+    let result = engines_page(&st, st.is_admin(&headers)).await;
     st.respond(result)
 }
 
-async fn engines_page(st: &AppState) -> PageResult {
+async fn engines_page(st: &AppState, admin: bool) -> PageResult {
     let stats = st.with_store(queries::engine_stats).await?;
     let now = Utc::now();
     let snapshot = st.registry.current();
@@ -440,7 +471,10 @@ async fn engines_page(st: &AppState) -> PageResult {
             json!({"tier": tier, "label": label, "engines": engines})
         })
         .collect();
-    st.render("engines.html", json!({"nav": "engines", "tiers": tiers}))
+    st.render(
+        "engines.html",
+        json!({"nav": "engines", "admin": admin, "tiers": tiers}),
+    )
 }
 
 async fn engine(

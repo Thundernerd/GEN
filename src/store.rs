@@ -115,7 +115,26 @@ CREATE TABLE meta (
     value TEXT NOT NULL
 );
 "#,
+    r#"
+-- Notification channels are managed on the website. `config` is the JSON of ChannelConfig;
+-- rows without one only record when a since-removed gen.toml channel was first used.
+ALTER TABLE notify_channels ADD COLUMN config TEXT;
+ALTER TABLE notify_channels ADD COLUMN last_ok TEXT;
+ALTER TABLE notify_channels ADD COLUMN last_error TEXT;
+ALTER TABLE notify_channels ADD COLUMN last_error_at TEXT;
+"#,
 ];
+
+/// A configured notification channel with its last delivery result.
+#[derive(Debug, Clone)]
+pub struct StoredChannel {
+    pub name: String,
+    /// JSON of `ChannelConfig`.
+    pub config: String,
+    pub last_ok: Option<DateTime<Utc>>,
+    pub last_error: Option<String>,
+    pub last_error_at: Option<DateTime<Utc>>,
+}
 
 /// Filters for listing items. `Default` lists the newest non-duplicate items.
 #[derive(Debug, Clone, Default)]
@@ -477,6 +496,87 @@ impl Store {
         Ok(out)
     }
 
+    // -- notification channels ----------------------------------------------
+
+    /// Configured channels, oldest first.
+    pub fn channels(&self) -> anyhow::Result<Vec<StoredChannel>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT name, config, last_ok, last_error, last_error_at FROM notify_channels
+             WHERE config IS NOT NULL ORDER BY created_at, rowid",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(StoredChannel {
+                name: r.get(0)?,
+                config: r.get(1)?,
+                last_ok: r.get(2)?,
+                last_error: r.get(3)?,
+                last_error_at: r.get(4)?,
+            })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Adds a channel starting now, so it isn't sent items from before. Returns false if a
+    /// channel with this name exists.
+    pub fn add_channel(&self, name: &str, config: &str) -> anyhow::Result<bool> {
+        let changed = self.conn.execute(
+            "INSERT INTO notify_channels (name, created_at, config) VALUES (?1, ?2, ?3)
+             ON CONFLICT (name) DO UPDATE SET config = excluded.config,
+                 created_at = excluded.created_at, last_ok = NULL, last_error = NULL,
+                 last_error_at = NULL
+             WHERE notify_channels.config IS NULL",
+            params![name, Utc::now(), config],
+        )?;
+        Ok(changed > 0)
+    }
+
+    /// Adds a channel imported from gen.toml, keeping when it was first used so its pending
+    /// items are neither lost nor sent again. Returns false if a channel with this name exists.
+    pub fn import_channel(&self, name: &str, config: &str) -> anyhow::Result<bool> {
+        let changed = self.conn.execute(
+            "INSERT INTO notify_channels (name, created_at, config) VALUES (?1, ?2, ?3)
+             ON CONFLICT (name) DO UPDATE SET config = excluded.config
+             WHERE notify_channels.config IS NULL",
+            params![name, Utc::now(), config],
+        )?;
+        Ok(changed > 0)
+    }
+
+    /// Replaces a channel's settings. Returns false if there is no such channel.
+    pub fn update_channel(&self, name: &str, config: &str) -> anyhow::Result<bool> {
+        let changed = self.conn.execute(
+            "UPDATE notify_channels SET config = ?2 WHERE name = ?1 AND config IS NOT NULL",
+            params![name, config],
+        )?;
+        Ok(changed > 0)
+    }
+
+    /// Removes a channel and its delivery history.
+    pub fn remove_channel(&mut self, name: &str) -> anyhow::Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM notifications_sent WHERE channel = ?1", [name])?;
+        tx.execute("DELETE FROM notify_channels WHERE name = ?1", [name])?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn record_channel_ok(&self, name: &str) -> anyhow::Result<()> {
+        self.conn.execute(
+            "UPDATE notify_channels SET last_ok = ?2, last_error = NULL, last_error_at = NULL
+             WHERE name = ?1",
+            params![name, Utc::now()],
+        )?;
+        Ok(())
+    }
+
+    pub fn record_channel_error(&self, name: &str, error: &str) -> anyhow::Result<()> {
+        self.conn.execute(
+            "UPDATE notify_channels SET last_error = ?2, last_error_at = ?3 WHERE name = ?1",
+            params![name, error, Utc::now()],
+        )?;
+        Ok(())
+    }
+
     // -- notifications ------------------------------------------------------
 
     /// Records a channel's first use (idempotent) and returns that time.
@@ -807,6 +907,53 @@ mod tests {
         let listed = store.query_items(&ItemQuery::default()).unwrap();
         assert_eq!(listed.len(), 1);
         assert!(listed[0].engines.is_empty());
+    }
+
+    #[test]
+    fn stores_notification_channels() {
+        let mut store = Store::open_in_memory().unwrap();
+        // A gen.toml channel used before channels moved into the database.
+        let first_used = store.register_channel("phone").unwrap();
+        assert!(store.channels().unwrap().is_empty(), "no config yet");
+
+        assert!(store.import_channel("phone", "{\"a\":1}").unwrap());
+        assert_eq!(
+            store.register_channel("phone").unwrap(),
+            first_used,
+            "history kept"
+        );
+        assert!(
+            !store.import_channel("phone", "{}").unwrap(),
+            "already configured"
+        );
+        assert!(!store.add_channel("phone", "{}").unwrap());
+
+        assert!(store.add_channel("chat", "{}").unwrap());
+        assert!(store.update_channel("chat", "{\"b\":2}").unwrap());
+        assert!(!store.update_channel("nope", "{}").unwrap());
+        store.record_channel_error("chat", "HTTP 404").unwrap();
+        let chat = store.channels().unwrap().pop().unwrap();
+        assert_eq!(
+            (chat.name.as_str(), chat.config.as_str()),
+            ("chat", "{\"b\":2}")
+        );
+        assert_eq!(chat.last_error.as_deref(), Some("HTTP 404"));
+        store.record_channel_ok("chat").unwrap();
+        let chat = store.channels().unwrap().pop().unwrap();
+        assert!(chat.last_ok.is_some() && chat.last_error.is_none());
+
+        let items = store
+            .insert_items(&[NewItem {
+                notify: true,
+                ..new_item("a", "1", "one")
+            }])
+            .unwrap();
+        store.mark_notified(items[0].id, "chat").unwrap();
+        store.remove_channel("chat").unwrap();
+        assert_eq!(store.channels().unwrap().len(), 1);
+        // Re-added, it starts afresh instead of picking up its old history.
+        assert!(store.add_channel("chat", "{}").unwrap());
+        assert!(store.register_channel("chat").unwrap() > items[0].first_seen);
     }
 
     #[test]

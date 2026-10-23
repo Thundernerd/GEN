@@ -20,34 +20,6 @@ concurrency = 8
 # The GITHUB_TOKEN env var is picked up automatically when set, so there is
 # no need to reference it here.
 
-# Notification channels. Empty rule lists mean "everything".
-#
-# [[notify.channel]]
-# name = "discord-releases"
-# kind = "discord"
-# webhook_url = "${GEN_DISCORD_WEBHOOK}"
-#   [notify.channel.rules]
-#   engines = ["godot", "unity", "stride", "flax"]
-#   kinds = ["release"]
-#
-# [[notify.channel]]
-# name = "phone"
-# kind = "ntfy"
-# server = "https://ntfy.sh"
-# topic = "${GEN_NTFY_TOPIC}"
-#   [notify.channel.rules]
-#   kinds = ["release", "news"]
-#
-# [[notify.channel]]
-# name = "mail-digest"
-# kind = "email"
-# smtp_host = "smtp.example.com"
-# smtp_port = 587
-# username = "${GEN_SMTP_USER}"
-# password = "${GEN_SMTP_PASSWORD}"
-# from = "GEN <gen@example.com>"
-# to = ["you@example.com"]
-# digest = true
-#   [notify.channel.rules]
-#   exclude_kinds = ["community"]
-#   include_untagged = true
+# Notification channels are managed on the website (/notifications, after
+# logging in with the admin token). Their secrets can be entered as
+# ${GEN_DISCORD_WEBHOOK} and the like, read from .env when sending.

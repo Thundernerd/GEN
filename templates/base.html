@@ -19,6 +19,9 @@
         {%- for key, label, href in [("latest", "Latest", "/"), ("engines", "Engines", "/engines"), ("sources", "Sources", "/sources")] %}
         <a href="{{ href }}"{% if nav == key %} aria-current="page"{% endif %}>{{ label }}</a>
         {%- endfor %}
+        {%- if admin %}
+        <a href="/notifications"{% if nav == "notifications" %} aria-current="page"{% endif %}>Notifications</a>
+        {%- endif %}
         <a class="feed-link" href="{{ feed_url or '/feed.xml' }}"{% if nav == "feed" %} aria-current="page"{% endif %}>RSS</a>
       </nav>
     </div>

@@ -450,6 +450,8 @@ impl Default for PollingConfig {
     }
 }
 
+/// Channels from `gen.toml`. They're imported into the database once
+/// ([`crate::notify::import_once`]) and managed on the website after that.
 #[derive(Debug, Clone, Deserialize, Default)]
 #[serde(deny_unknown_fields)]
 pub struct NotifyConfig {
@@ -457,7 +459,9 @@ pub struct NotifyConfig {
     pub channels: Vec<ChannelConfig>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+/// A notification channel. Its strings may hold `${VAR}` references, which are expanded
+/// when sending ([`ChannelConfig::resolved`]), so secrets can stay in the environment.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 pub struct ChannelConfig {
     pub name: String,
     #[serde(default = "default_true")]
@@ -469,7 +473,7 @@ pub struct ChannelConfig {
 }
 
 /// Which items a channel is notified about. Empty lists mean "no restriction".
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
 #[serde(deny_unknown_fields)]
 pub struct NotifyRules {
     #[serde(default)]
@@ -486,7 +490,7 @@ pub struct NotifyRules {
     pub include_untagged: bool,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(tag = "kind", rename_all = "lowercase")]
 pub enum ChannelTarget {
     Discord {
@@ -512,8 +516,110 @@ pub enum ChannelTarget {
     },
 }
 
+impl ChannelTarget {
+    pub fn kind(&self) -> &'static str {
+        match self {
+            ChannelTarget::Discord { .. } => "discord",
+            ChannelTarget::Ntfy { .. } => "ntfy",
+            ChannelTarget::Email { .. } => "email",
+        }
+    }
+
+    /// Every string of the target, mutably, for `${VAR}` expansion.
+    fn strings_mut(&mut self) -> Vec<&mut String> {
+        match self {
+            ChannelTarget::Discord { webhook_url } => vec![webhook_url],
+            ChannelTarget::Ntfy {
+                server,
+                topic,
+                token,
+            } => [server, topic].into_iter().chain(token.as_mut()).collect(),
+            ChannelTarget::Email {
+                smtp_host,
+                username,
+                password,
+                from,
+                to,
+                ..
+            } => [smtp_host, from]
+                .into_iter()
+                .chain(username.as_mut())
+                .chain(password.as_mut())
+                .chain(to.iter_mut())
+                .collect(),
+        }
+    }
+}
+
+impl ChannelConfig {
+    /// A copy with `${VAR}` references expanded from the environment, ready to send with.
+    pub fn resolved(&self) -> anyhow::Result<ChannelConfig> {
+        let mut channel = self.clone();
+        for s in channel.target.strings_mut() {
+            *s = expand_env(s)?;
+        }
+        Ok(channel)
+    }
+
+    /// Checks a channel entered in the web UI. The error is a message for the user.
+    pub fn check(&self) -> Result<(), String> {
+        if !valid_owner_id(&self.name) {
+            return Err(format!(
+                "“{}” can't be used as a name: use up to 40 lowercase letters, digits and dashes.",
+                self.name
+            ));
+        }
+        // A `${VAR}` reference is checked when sending, once it's expanded.
+        let literal = |s: &str| !s.contains("${");
+        match &self.target {
+            ChannelTarget::Discord { webhook_url } => {
+                if literal(webhook_url)
+                    && !webhook_url.starts_with("https://discord.com/api/webhooks/")
+                    && !webhook_url.starts_with("https://discordapp.com/api/webhooks/")
+                {
+                    return Err(
+                        "The webhook URL must start with https://discord.com/api/webhooks/ \
+                                (or be a ${VARIABLE})."
+                            .into(),
+                    );
+                }
+            }
+            ChannelTarget::Ntfy { server, topic, .. } => {
+                if literal(server) {
+                    check_url(server)?;
+                }
+                if topic.trim().is_empty() {
+                    return Err("Enter the ntfy topic.".into());
+                }
+            }
+            ChannelTarget::Email {
+                smtp_host,
+                smtp_port,
+                from,
+                to,
+                ..
+            } => {
+                if smtp_host.trim().is_empty() {
+                    return Err("Enter the SMTP host.".into());
+                }
+                if *smtp_port == 0 {
+                    return Err("Enter the SMTP port.".into());
+                }
+                if from.trim().is_empty() {
+                    return Err("Enter the From address.".into());
+                }
+                if to.is_empty() {
+                    return Err("Enter at least one recipient.".into());
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
 impl AppConfig {
-    /// Loads `gen.toml`, expanding `${VAR}` references from the environment.
+    /// Loads `gen.toml`, expanding `${VAR}` references from the environment. The `notify`
+    /// section is left as written: channels expand their references when sending.
     /// A missing file yields the defaults.
     pub fn load(path: &Path) -> anyhow::Result<Self> {
         let mut cfg: AppConfig = if path.exists() {
@@ -540,15 +646,26 @@ impl AppConfig {
     }
 }
 
-/// Applies `expand_env` to every string in a parsed TOML document (so comments are ignored).
+/// Applies `expand_env` to every string in a parsed `gen.toml` (so comments are ignored),
+/// except under the top-level `notify` table.
 fn expand_env_in_value(value: &mut toml::Value) -> anyhow::Result<()> {
     match value {
+        toml::Value::Table(table) => table
+            .iter_mut()
+            .filter(|(k, _)| *k != "notify")
+            .try_for_each(|(_, v)| expand_env_in_strings(v)),
+        other => expand_env_in_strings(other),
+    }
+}
+
+fn expand_env_in_strings(value: &mut toml::Value) -> anyhow::Result<()> {
+    match value {
         toml::Value::String(s) => *s = expand_env(s)?,
-        toml::Value::Array(items) => items.iter_mut().try_for_each(expand_env_in_value)?,
+        toml::Value::Array(items) => items.iter_mut().try_for_each(expand_env_in_strings)?,
         toml::Value::Table(table) => table
             .iter_mut()
             .map(|(_, v)| v)
-            .try_for_each(expand_env_in_value)?,
+            .try_for_each(expand_env_in_strings)?,
         _ => {}
     }
     Ok(())
@@ -732,5 +849,74 @@ mod tests {
         unsafe { std::env::set_var("GEN_TEST_HOOK", "abc") };
         assert_eq!(expand_env("x=${GEN_TEST_HOOK}").unwrap(), "x=abc");
         assert!(expand_env("${GEN_TEST_DEFINITELY_UNSET}").is_err());
+    }
+
+    fn channel(toml: &str) -> ChannelConfig {
+        toml::from_str(toml).unwrap()
+    }
+
+    #[test]
+    fn leaves_notify_references_for_send_time() {
+        let mut value: toml::Value = toml::from_str(
+            r#"
+            [server]
+            base_url = "${GEN_TEST_DEFINITELY_UNSET_TOO}"
+            "#,
+        )
+        .unwrap();
+        assert!(
+            expand_env_in_value(&mut value).is_err(),
+            "other sections expand"
+        );
+
+        let mut value: toml::Value = toml::from_str(
+            r#"
+            [[notify.channel]]
+            name = "phone"
+            kind = "ntfy"
+            topic = "${GEN_TEST_DEFINITELY_UNSET}"
+            "#,
+        )
+        .unwrap();
+        expand_env_in_value(&mut value).unwrap();
+        let cfg: AppConfig = value.try_into().unwrap();
+        let phone = &cfg.notify.channels[0];
+        assert!(
+            matches!(&phone.target, ChannelTarget::Ntfy { topic, .. } if topic == "${GEN_TEST_DEFINITELY_UNSET}")
+        );
+        assert!(phone.resolved().is_err(), "unset when sending");
+
+        // SAFETY: test-only, single-threaded access to this unique variable.
+        unsafe { std::env::set_var("GEN_TEST_NTFY_TOPIC", "gen-alerts") };
+        let resolved = channel(
+            r#"
+            name = "phone"
+            kind = "ntfy"
+            topic = "${GEN_TEST_NTFY_TOPIC}"
+            "#,
+        )
+        .resolved()
+        .unwrap();
+        assert!(
+            matches!(resolved.target, ChannelTarget::Ntfy { topic, .. } if topic == "gen-alerts")
+        );
+    }
+
+    #[test]
+    fn checks_channels_from_the_web_ui() {
+        let ok = |toml: &str| channel(toml).check();
+        assert!(ok("name = \"chat\"\nkind = \"discord\"\nwebhook_url = \"https://discord.com/api/webhooks/1/x\"").is_ok());
+        assert!(ok("name = \"chat\"\nkind = \"discord\"\nwebhook_url = \"${GEN_HOOK}\"").is_ok());
+        let err =
+            ok("name = \"chat\"\nkind = \"discord\"\nwebhook_url = \"https://example.com/hook\"")
+                .unwrap_err();
+        assert!(err.contains("discord.com"), "{err}");
+        let err = ok("name = \"Chat Room\"\nkind = \"ntfy\"\ntopic = \"t\"").unwrap_err();
+        assert!(err.contains("can't be used as a name"), "{err}");
+        assert!(ok("name = \"p\"\nkind = \"ntfy\"\ntopic = \" \"").is_err());
+        let err =
+            ok("name = \"m\"\nkind = \"email\"\nsmtp_host = \"smtp.x\"\nfrom = \"a@x\"\nto = []")
+                .unwrap_err();
+        assert!(err.contains("recipient"), "{err}");
     }
 }

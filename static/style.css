@@ -130,13 +130,13 @@ a:hover { color: var(--highlight); text-decoration-color: currentColor; }
   min-height: var(--header-height);
 }
 
-.brand { display: flex; align-items: baseline; gap: 0.6rem; color: var(--text); text-decoration: none; }
+.brand { display: flex; flex: none; align-items: baseline; gap: 0.6rem; color: var(--text); text-decoration: none; }
 .brand-mark { font-weight: 800; font-size: 1.25rem; letter-spacing: -0.04em; }
 .brand-mark::after { content: ""; display: inline-block; width: 7px; height: 7px; margin-left: 2px; background: var(--highlight); border-radius: 50%; }
 .brand-sub { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); }
 
-.site-nav { display: flex; align-items: center; gap: 1.4rem; font-size: 0.9rem; }
-.site-nav a { color: var(--muted); text-decoration: none; }
+.site-nav { display: flex; align-items: center; gap: 1.4rem; min-width: 0; font-size: 0.9rem; }
+.site-nav a { color: var(--muted); text-decoration: none; white-space: nowrap; }
 .site-nav a:hover { color: var(--text); }
 .site-nav a[aria-current="page"] { color: var(--text); font-weight: 600; }
 .site-nav .feed-link { font-family: var(--mono); font-size: 0.75rem; border: 1px solid var(--border); border-radius: 4px; padding: 0.1rem 0.4rem; }
@@ -433,7 +433,8 @@ table.sources td.last-ok { white-space: nowrap; }
 
 @media (max-width: 40rem) {
   .brand-sub { display: none; }
-  .site-nav { gap: 0.9rem; }
+  /* Links stay on one line; the nav scrolls sideways when they don't fit. */
+  .site-nav { gap: 0.9rem; overflow-x: auto; scrollbar-width: none; padding: 0.25rem 0; }
   .page-title { font-size: 1.9rem; }
   .day { grid-template-columns: 1fr; }
   .day-label { padding: 0.9rem 0 0.2rem; background: var(--bg); z-index: 1; }
@@ -546,7 +547,35 @@ details.panel .form-error { margin-top: 0; }
 .stack-form:has([name="kind"] option[value="feed"]:checked, [name="kind"] option[value="github"]:checked, [name="kind"] option[value="html"]:checked) .form-hint { display: none; }
 .stack-form:has([name="kind"] option[value="feed"]:checked) fieldset[data-kind]:not([data-kind="feed"]),
 .stack-form:has([name="kind"] option[value="github"]:checked) fieldset[data-kind]:not([data-kind="github"]),
-.stack-form:has([name="kind"] option[value="html"]:checked) fieldset[data-kind]:not([data-kind="html"]) { display: none; }
+.stack-form:has([name="kind"] option[value="html"]:checked) fieldset[data-kind]:not([data-kind="html"]),
+.stack-form:has([name="kind"] option[value="discord"]:checked) fieldset[data-kind]:not([data-kind="discord"]),
+.stack-form:has([name="kind"] option[value="ntfy"]:checked) fieldset[data-kind]:not([data-kind="ntfy"]),
+.stack-form:has([name="kind"] option[value="email"]:checked) fieldset[data-kind]:not([data-kind="email"]) { display: none; }
+.check-group { display: flex; flex-wrap: wrap; gap: 0.4rem 1.1rem; }
+.check-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr)); max-height: 12.5rem; overflow-y: auto; padding: 0.15rem 0; }
+.check-label { font-size: 0.9rem; color: var(--muted); margin-bottom: -0.3rem; }
+.check-label .form-hint { font-size: 0.8rem; }
+.check-group label.check { text-transform: none; color: var(--text); font-size: 0.875rem; }
+.check-group .kind-dot { margin-right: 0.1rem; }
+.stack-form input:disabled { color: var(--muted); }
+
+/* -- notifications page ---------------------------------------------------- */
+
+.page-lede { color: var(--muted); max-width: var(--measure); margin: -0.5rem 0 1.25rem; }
+.channel-list { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--border); }
+.channel { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.75rem 1.5rem; padding: 1rem 0; border-bottom: 1px solid var(--border); }
+.channel.is-disabled .channel-main { opacity: 0.6; }
+.channel-main { min-width: 0; flex: 1 1 22rem; }
+.channel-name { margin: 0; font-size: 1.05rem; font-weight: 600; letter-spacing: -0.01em; }
+.channel-kind { font-family: var(--mono); font-size: 0.6875rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.03em; color: var(--muted); border: 1px solid var(--border); border-radius: 4px; padding: 0.05rem 0.35rem; margin-left: 0.35rem; vertical-align: 0.15em; }
+.channel-target { margin: 0.25rem 0 0; font-family: var(--mono); font-size: 0.8125rem; }
+.channel-rules { margin: 0.15rem 0 0; color: var(--muted); font-size: 0.875rem; }
+.channel-status { margin: 0.45rem 0 0; font-size: 0.8125rem; color: var(--muted); }
+.channel-status .error-text { max-width: none; }
+.channel-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.channel-actions form { margin: 0; }
+.empty-state { color: var(--muted); padding: 2rem 0; border-top: 1px solid var(--border); }
+.notice.form-error { color: var(--fail); }
 
 .group-action { font-size: 0.8rem; font-weight: 500; margin-left: 0.6rem; }
 .group-action::before { content: "·"; display: inline-block; margin-right: 0.6rem; color: var(--muted); }

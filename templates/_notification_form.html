@@ -1,0 +1,95 @@
+{#- The add/edit channel dialog. `f` holds the form values; `secrets` (edit only) says per
+    secret field whether one is set and, for a ${VAR} reference, what it is. Secrets are
+    never filled in. -#}
+{%- macro secret_input(name, label, secrets, required=false, optional_label="") %}
+{%- set s = secrets[name] if secrets and secrets[name] else none %}
+<label><span>{{ label }}{% if optional_label %} {{ optional_label }}{% endif %}</span>
+  {%- if s and s.reference %}
+  <input name="{{ name }}" value="{{ s.reference }}" autocomplete="off" spellcheck="false">
+  {%- else %}
+  <input type="password" name="{{ name }}" autocomplete="new-password" spellcheck="false"{% if s and s.set %} placeholder="•••••• set · leave empty to keep"{% endif %}>
+  {%- endif %}
+</label>
+{%- endmacro %}
+
+{%- macro channel_dialog(id, title, action, f, engines, kinds, feedback, secrets=none, edit=false) %}
+{%- set failed = feedback and feedback.dialog == id %}
+<dialog id="{{ id }}" class="form-dialog" aria-labelledby="{{ id }}-title"{% if failed %} open data-reopen{% endif %}>
+  <h2 id="{{ id }}-title">{{ title }}</h2>
+  {%- if failed %}
+  <p class="form-error" role="alert">{{ feedback.error }}</p>
+  {%- endif %}
+  <form method="post" action="{{ action }}" class="stack-form" data-inline="{{ 'Channel saved.' if edit else 'Channel added.' }}">
+    <div class="form-row">
+      {%- if edit %}
+      <input type="hidden" name="original_name" value="{{ f.name }}">
+      <label><span>Name</span><input value="{{ f.name }}" disabled></label>
+      {%- else %}
+      <label><span>Name (lowercase, e.g. <code>discord-releases</code>)</span><input name="name" value="{{ f.name or "" }}" pattern="[a-z0-9][a-z0-9\-]{0,39}" required autofocus></label>
+      {%- endif %}
+      <label>
+        <span>Send to</span>
+        <select name="kind" required>
+          {%- for value, label in [("discord", "Discord webhook"), ("ntfy", "ntfy (phone push)"), ("email", "Email")] %}
+          <option value="{{ value }}"{% if value == f.kind %} selected{% endif %}>{{ label }}</option>
+          {%- endfor %}
+        </select>
+      </label>
+    </div>
+    <p class="form-hint">Secrets can be written as <code>${VARIABLE}</code> to read them from GEN's environment instead of storing them.</p>
+
+    <fieldset data-kind="discord">
+      <legend>Discord</legend>
+      {{ secret_input("webhook_url", "Webhook URL", secrets) }}
+    </fieldset>
+    <fieldset data-kind="ntfy">
+      <legend>ntfy</legend>
+      <div class="form-row">
+        <label><span>Server</span><input type="url" name="ntfy_server" value="{{ f.ntfy_server or "https://ntfy.sh" }}"></label>
+        {{ secret_input("ntfy_topic", "Topic", secrets) }}
+      </div>
+      {{ secret_input("ntfy_token", "Access token", secrets, optional_label="(optional)") }}
+    </fieldset>
+    <fieldset data-kind="email">
+      <legend>Email</legend>
+      <div class="form-row">
+        <label><span>SMTP host</span><input name="smtp_host" value="{{ f.smtp_host or "" }}" placeholder="smtp.example.com"></label>
+        <label><span>Port</span><input type="number" name="smtp_port" min="1" max="65535" value="{{ f.smtp_port or 587 }}"></label>
+      </div>
+      <div class="form-row">
+        <label><span>Username (optional)</span><input name="smtp_username" value="{{ f.smtp_username or "" }}" autocomplete="off"></label>
+        {{ secret_input("smtp_password", "Password", secrets, optional_label="(optional)") }}
+      </div>
+      <div class="form-row">
+        <label><span>From</span><input name="from" value="{{ f.from or "" }}" placeholder="GEN &lt;gen@example.com&gt;"></label>
+        <label><span>To (comma-separated)</span><input name="to" value="{{ f.to or "" }}" placeholder="you@example.com"></label>
+      </div>
+      <label class="check"><input type="checkbox" name="digest" value="1"{% if f.digest %} checked{% endif %}> One digest mail per batch instead of one mail per item</label>
+    </fieldset>
+
+    <fieldset>
+      <legend>What to send</legend>
+      <span class="check-label" id="{{ id }}-kinds">Kinds</span>
+      <div class="check-group" role="group" aria-labelledby="{{ id }}-kinds">
+        {%- for k in kinds %}
+        <label class="check"><input type="checkbox" name="kinds" value="{{ k }}"{% if k in (f.kinds or []) %} checked{% endif %}><i class="kind-dot kind-{{ k }}" aria-hidden="true"></i>{{ k }}</label>
+        {%- endfor %}
+      </div>
+      <span class="check-label" id="{{ id }}-engines">Engines <span class="form-hint">(none checked: every engine)</span></span>
+      <div class="check-group check-grid" role="group" aria-labelledby="{{ id }}-engines">
+        {%- for e in engines %}
+        <label class="check"><input type="checkbox" name="engines" value="{{ e.id }}"{% if e.id in (f.engines or []) %} checked{% endif %}> {{ e.name }}</label>
+        {%- endfor %}
+      </div>
+      <label class="check"><input type="checkbox" name="include_untagged" value="1"{% if f.include_untagged %} checked{% endif %}> Also news-outlet items that mention no engine</label>
+      <label><span>Keywords (optional, comma-separated: only items mentioning one)</span><input name="keywords" value="{{ f.keywords or "" }}"></label>
+    </fieldset>
+
+    <label class="check"><input type="checkbox" name="enabled" value="1"{% if f.enabled %} checked{% endif %}> Enabled</label>
+    <div class="dialog-actions">
+      <button type="button" class="btn-small btn-quiet" commandfor="{{ id }}" command="close">Cancel</button>
+      <button type="submit">{{ "Save" if edit else "Add channel" }}</button>
+    </div>
+  </form>
+</dialog>
+{%- endmacro %}
