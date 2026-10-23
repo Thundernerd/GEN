@@ -921,3 +921,46 @@ async fn env_references_are_shown_and_resolved_when_sending() {
     let (_, body) = get_as(&st, "/notifications", &cookie).await;
     assert!(body.contains("status-failing"));
 }
+
+#[tokio::test]
+async fn test_sends_offer_examples_and_recent_items() {
+    let st = state();
+    let cookie = login(&st).await;
+    let form = "name=phone&kind=ntfy&ntfy_server=https%3A%2F%2Fntfy.sh&ntfy_topic=%24%7BGEN_TEST_UNSET_TOPIC%7D&kinds=release&enabled=1";
+    send(&st, post_form("/notifications/add", form, Some(&cookie))).await;
+    let (_, body) = get_as(&st, "/notifications", &cookie).await;
+    for sample in crate::notify::samples() {
+        assert!(
+            body.contains(&format!(r#"value="{}""#, sample.key)),
+            "{}",
+            sample.key
+        );
+    }
+    assert!(body.contains(r#"value="all""#));
+    // The fixture's newest item is offered too.
+    assert!(body.contains("Godot 4.8 released"));
+    let item_value = body.split(r#"value="item:"#).nth(1).unwrap();
+    let id: String = item_value
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+
+    // Each choice gets as far as expanding the (unset) topic, so nothing is sent.
+    for choice in ["prerelease", "all", &format!("item:{id}")] {
+        let form = format!("name=phone&sample={choice}");
+        let (status, _, body) =
+            send(&st, post_form("/notifications/test", &form, Some(&cookie))).await;
+        assert_eq!(status, StatusCode::OK, "{choice}");
+        assert!(body.contains("Sending to phone failed"), "{choice}");
+    }
+    for (choice, message) in [
+        ("nope", "Choose what to send"),
+        ("item:999999", "no longer exists"),
+    ] {
+        let form = format!("name=phone&sample={choice}");
+        let (status, _, body) =
+            send(&st, post_form("/notifications/test", &form, Some(&cookie))).await;
+        assert_eq!(status, StatusCode::OK, "{choice}");
+        assert!(body.contains(message), "{choice}");
+    }
+}

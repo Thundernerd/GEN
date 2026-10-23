@@ -12,11 +12,15 @@ use axum::response::{IntoResponse, Redirect, Response};
 use chrono::Utc;
 use serde_json::{Value, json};
 
-use super::view::DateView;
+use super::queries::{self, ItemFilter};
+use super::view::{DateView, snippet};
 use super::{AppError, AppState, PageResult};
 use crate::config::{ChannelConfig, ChannelTarget, NotifyRules};
-use crate::model::ItemKind;
+use crate::model::{Item, ItemKind};
 use crate::notify::{self, Channel, NotifyContext};
+
+/// How many recent items the test dialog offers.
+const RECENT_TEST_ITEMS: u32 = 8;
 
 fn require_admin(st: &AppState, headers: &HeaderMap) -> Result<(), AppError> {
     if st.is_admin(headers) {
@@ -42,6 +46,27 @@ async fn render(st: &AppState, feedback: Option<Value>, notice: Option<Value>) -
     let channels = st.with_store(notify::load_channels).await?;
     let now = Utc::now();
     let engines = engine_choices(st, &channels);
+    let lookup = &st.registry.current().lookup;
+    let samples: Vec<_> = notify::samples()
+        .into_iter()
+        .map(|s| {
+            json!({"key": s.key, "label": s.label, "kind": s.item.kind.as_str(),
+                   "title": snippet(&s.item.title, 70)})
+        })
+        .collect();
+    let recent: Vec<_> = recent_items(st)
+        .await?
+        .into_iter()
+        .map(|i| {
+            json!({
+                "id": i.id,
+                "kind": i.kind.as_str(),
+                "title": snippet(&i.title, 80),
+                "source": lookup.source_name(&i.source_id),
+                "date": DateView::new(i.date(), now),
+            })
+        })
+        .collect();
     let failed = feedback.as_ref().and_then(|f| f["dialog"].as_str());
     let views: Vec<_> = channels
         .iter()
@@ -81,6 +106,8 @@ async fn render(st: &AppState, feedback: Option<Value>, notice: Option<Value>) -
             "add_form": add_form,
             "engines": engines,
             "kinds": ItemKind::ALL.map(ItemKind::as_str),
+            "samples": samples,
+            "recent": recent,
             "feedback": feedback,
             "notice": notice,
         }),
@@ -512,11 +539,66 @@ pub(super) async fn remove(
     st.respond(result)
 }
 
-/// Sends a sample item to one channel, ignoring its rules, and shows how it went.
+/// The newest items, as offered for test sends.
+async fn recent_items(st: &AppState) -> anyhow::Result<Vec<Item>> {
+    let snapshot = st.registry.current();
+    st.with_store(move |s| {
+        queries::list_items(
+            s,
+            &snapshot.config,
+            &snapshot.lookup,
+            &ItemFilter::default(),
+            RECENT_TEST_ITEMS,
+            0,
+        )
+    })
+    .await
+}
+
+/// What a test send sends: one example, every example (`all`), or a recent item
+/// (`item:<id>`), with a description for the result message.
+async fn test_items(st: &AppState, choice: &str) -> Result<(Vec<Item>, String), AppError> {
+    if choice == "all" {
+        let items: Vec<Item> = notify::samples().into_iter().map(|s| s.item).collect();
+        let what = format!("{} example notifications", items.len());
+        return Ok((items, what));
+    }
+    if let Some(id) = choice.strip_prefix("item:") {
+        let id: i64 = id
+            .parse()
+            .map_err(|_| AppError::Invalid("Choose what to send.".into()))?;
+        let item = st
+            .with_store(move |s| s.item(id))
+            .await?
+            .ok_or_else(|| AppError::Invalid("That item no longer exists.".into()))?;
+        let what = format!("“{}”", snippet(&item.title, 70));
+        return Ok((vec![item], what));
+    }
+    notify::samples()
+        .into_iter()
+        .find(|s| s.key == choice)
+        .map(|s| {
+            let what = format!("“{}”", snippet(&s.item.title, 70));
+            (vec![s.item], what)
+        })
+        .ok_or_else(|| AppError::Invalid("Choose what to send.".into()))
+}
+
+/// Sends example or recent items to one channel, ignoring its rules, and shows how it went.
 pub(super) async fn test(State(st): State<AppState>, headers: HeaderMap, body: Bytes) -> Response {
     let result = async {
         require_admin(&st, &headers)?;
-        let channel = find(&st, &Posted::parse(&body).get("name").unwrap_or_default()).await?;
+        let posted = Posted::parse(&body);
+        let channel = find(&st, &posted.get("name").unwrap_or_default()).await?;
+        let choice = posted.get("sample").unwrap_or_else(|| "release".into());
+        let (items, what) = match test_items(&st, &choice).await {
+            Ok(chosen) => chosen,
+            Err(AppError::Invalid(msg)) => {
+                let notice = json!({"ok": false, "message": msg});
+                return render(&st, None, Some(notice)).await;
+            }
+            Err(err) => return Err(err),
+        };
         let snapshot = st.registry.current();
         let ctx = NotifyContext {
             http: &st.http,
@@ -524,7 +606,7 @@ pub(super) async fn test(State(st): State<AppState>, headers: HeaderMap, body: B
             base_url: &st.config.server.base_url,
         };
         let sent = match channel.resolved() {
-            Ok(resolved) => notify::send(&ctx, &resolved, &[notify::sample_item()])
+            Ok(resolved) => notify::send(&ctx, &resolved, &items)
                 .await
                 .map_err(|e| format!("{e:#}")),
             Err(e) => Err(format!("{e:#}")),
@@ -537,8 +619,10 @@ pub(super) async fn test(State(st): State<AppState>, headers: HeaderMap, body: B
         })
         .await?;
         let notice = match sent {
-            Ok(()) => json!({"ok": true, "message": format!("Test notification sent to {}.", channel.name)}),
-            Err(e) => json!({"ok": false, "message": format!("Sending to {} failed: {e}", channel.name)}),
+            Ok(()) => json!({"ok": true, "message": format!("Sent {what} to {}.", channel.name)}),
+            Err(e) => {
+                json!({"ok": false, "message": format!("Sending to {} failed: {e}", channel.name)})
+            }
         };
         render(&st, None, Some(notice)).await
     }

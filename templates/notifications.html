@@ -31,10 +31,7 @@
       </p>
     </div>
     <div class="channel-actions">
-      <form method="post" action="/notifications/test" data-inline="Test sent.">
-        <input type="hidden" name="name" value="{{ c.name }}">
-        <button type="submit" class="btn-small btn-quiet">Send test</button>
-      </form>
+      <button type="button" class="btn-small btn-quiet" commandfor="test-{{ c.name }}" command="show-modal">Send test</button>
       <button type="button" class="btn-small btn-quiet" commandfor="{{ c.dialog }}" command="show-modal">Edit</button>
       <form method="post" action="/notifications/toggle" data-inline="Channel {{ 'disabled' if c.enabled else 'enabled' }}.">
         <input type="hidden" name="name" value="{{ c.name }}">
@@ -67,5 +64,31 @@
 {{ channel_dialog("add-channel", "Add a channel", "/notifications/add", add_form, engines, kinds, feedback) }}
 {%- for c in channels %}
 {{ channel_dialog(c.dialog, "Edit " ~ c.name, "/notifications/edit", c.form, engines, kinds, feedback, c.secrets, true) }}
+<dialog id="test-{{ c.name }}" class="form-dialog test-dialog" aria-labelledby="test-{{ c.name }}-title">
+  <h2 id="test-{{ c.name }}-title">Send a test to {{ c.name }}</h2>
+  <p class="form-hint">Pick what to send to see how it looks there. Test sends ignore the channel's rules.</p>
+  <form method="post" action="/notifications/test" class="stack-form" data-inline="Test sent.">
+    <input type="hidden" name="name" value="{{ c.name }}">
+    <fieldset>
+      <legend>Examples</legend>
+      {%- for s in samples %}
+      <label class="check test-choice"><input type="radio" name="sample" value="{{ s.key }}"{% if loop.first %} checked{% endif %}><span><i class="kind-dot kind-{{ s.kind }}" aria-hidden="true"></i>{{ s.label }}<span class="test-title">{{ s.title }}</span></span></label>
+      {%- endfor %}
+      <label class="check test-choice"><input type="radio" name="sample" value="all"><span>All examples at once<span class="test-title">{% if c.kind == "email" %}one digest mail, or one mail each when digests are off{% elif c.kind == "discord" %}one message with an embed each{% else %}one push each{% endif %}</span></span></label>
+    </fieldset>
+    {%- if recent %}
+    <fieldset>
+      <legend>Recent items</legend>
+      {%- for r in recent %}
+      <label class="check test-choice"><input type="radio" name="sample" value="item:{{ r.id }}"><span><i class="kind-dot kind-{{ r.kind }}" aria-hidden="true"></i>{{ r.title }}<span class="test-title">{{ r.source }} · {{ r.date.short }}</span></span></label>
+      {%- endfor %}
+    </fieldset>
+    {%- endif %}
+    <div class="dialog-actions">
+      <button type="button" class="btn-small btn-quiet" commandfor="test-{{ c.name }}" command="close">Cancel</button>
+      <button type="submit">Send</button>
+    </div>
+  </form>
+</dialog>
 {%- endfor %}
 {% endblock %}

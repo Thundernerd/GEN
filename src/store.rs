@@ -592,6 +592,13 @@ impl Store {
         )?)
     }
 
+    pub fn item(&self, id: i64) -> anyhow::Result<Option<Item>> {
+        let mut stmt = self
+            .conn
+            .prepare_cached(&format!("{ITEM_SELECT} WHERE i.id = ?1"))?;
+        Ok(stmt.query_row([id], item_from_row).optional()?)
+    }
+
     /// Notifiable, non-duplicate items first seen at or after `since` that haven't been
     /// handled for `channel` yet, oldest first.
     pub fn pending_notifications(

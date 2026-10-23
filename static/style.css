@@ -575,6 +575,12 @@ details.panel .form-error { margin-top: 0; }
 .channel-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .channel-actions form { margin: 0; }
 .empty-state { color: var(--muted); padding: 2rem 0; border-top: 1px solid var(--border); }
+.test-dialog { width: min(36rem, calc(100vw - 2rem)); }
+.test-dialog fieldset { gap: 0.15rem; }
+.stack-form label.test-choice { align-items: flex-start; gap: 0.6rem; padding: 0.35rem 0; color: var(--text); font-size: 0.9rem; }
+.test-choice input { margin-top: 0.2rem; accent-color: var(--accent); }
+.test-choice .kind-dot { margin-right: 0.45rem; vertical-align: 0.1em; }
+.test-title { display: block; color: var(--muted); font-family: var(--mono); font-size: 0.75rem; overflow-wrap: anywhere; }
 .notice.form-error { color: var(--fail); }
 
 .group-action { font-size: 0.8rem; font-weight: 500; margin-left: 0.6rem; }

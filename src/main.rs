@@ -58,6 +58,10 @@ enum Command {
         /// Channel name, as shown on the Notifications page.
         #[arg(long)]
         channel: String,
+        /// Which example to send: release, prerelease, news, outlet, untagged, long, or
+        /// `all` for every one at once.
+        #[arg(long, default_value = "release")]
+        sample: String,
     },
 }
 
@@ -76,7 +80,7 @@ async fn main() -> anyhow::Result<()> {
         Command::CheckConfig => check_config(&app),
         Command::Fetch { source } => fetch_once(&app, source.as_deref()).await,
         Command::Serve => serve(app).await,
-        Command::NotifyTest { channel } => notify_test(&app, &channel).await,
+        Command::NotifyTest { channel, sample } => notify_test(&app, &channel, &sample).await,
     }
 }
 
@@ -166,7 +170,17 @@ async fn fetch_once(app: &AppConfig, filter: Option<&str>) -> anyhow::Result<()>
     Ok(())
 }
 
-async fn notify_test(app: &AppConfig, channel: &str) -> anyhow::Result<()> {
+async fn notify_test(app: &AppConfig, channel: &str, sample: &str) -> anyhow::Result<()> {
+    let samples = notify::samples();
+    let items: Vec<_> = samples
+        .iter()
+        .filter(|s| sample == "all" || s.key == sample)
+        .map(|s| s.item.clone())
+        .collect();
+    if items.is_empty() {
+        let keys: Vec<_> = samples.iter().map(|s| s.key).collect();
+        anyhow::bail!("no example `{sample}` (try: {}, all)", keys.join(", "));
+    }
     let pipeline = build_pipeline(app)?;
     let channels = pipeline.with_store(|s| notify::load_channels(s)).await?;
     let Some(cfg) = channels
@@ -190,7 +204,7 @@ async fn notify_test(app: &AppConfig, channel: &str) -> anyhow::Result<()> {
         sources: &snapshot.config,
         base_url: &app.server.base_url,
     };
-    notify::send(&ctx, &cfg.resolved()?, &[notify::sample_item()])
+    notify::send(&ctx, &cfg.resolved()?, &items)
         .await
         .with_context(|| format!("sending test notification to `{channel}`"))?;
     println!("sent test notification to `{channel}`");

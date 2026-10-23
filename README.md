@@ -227,7 +227,7 @@ Channels are managed on the **Notifications** page (`/notifications`), which sho
 - **Also news-outlet items that mention no engine:** off by default.
 - **Keywords:** the title or summary must contain at least one (case-insensitive).
 
-Each channel shows its last delivery or error. **Send test** sends it a sample item right away, ignoring its rules. Changes take effect on the notifier's next run, which starts right after a change. A new channel only gets items that arrive after it was added, and switching a channel off keeps its place, so it catches up on items from the last three days when switched back on.
+Each channel shows its last delivery or error. **Send test** sends it something right away, ignoring its rules, so you can see how notifications look there: one of several examples (a release, a prerelease, a news post, an outlet article about two engines, one with no engine, summary or link, and one long enough to be cut short), all examples at once (one digest mail for a digest channel), or one of the newest real items. Changes take effect on the notifier's next run, which starts right after a change. A new channel only gets items that arrive after it was added, and switching a channel off keeps its place, so it catches up on items from the last three days when switched back on.
 
 Secrets (the webhook URL, the ntfy topic and token, the SMTP password) are never shown back on the page; leave a secret field empty when editing to keep it. Instead of the secret itself, you can enter an environment variable reference such as `${GEN_DISCORD_WEBHOOK}`: it's expanded when sending, so the secret stays out of the database. A reference is shown on the page as written.
 
@@ -258,7 +258,8 @@ topic = "${GEN_NTFY_TOPIC}"
 To check a channel without waiting for news, use **Send test**, or from the command line:
 
 ```sh
-gen notify-test --channel phone
+gen notify-test --channel phone                  # the release example
+gen notify-test --channel phone --sample all     # or: prerelease, news, outlet, untagged, long
 ```
 
 ## Web routes

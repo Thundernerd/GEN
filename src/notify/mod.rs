@@ -205,27 +205,132 @@ pub fn prefixed_title(sources: &SourcesConfig, item: &Item) -> String {
     }
 }
 
-/// A realistic item for `gen notify-test`.
-pub fn sample_item() -> Item {
+/// An example notification, for trying out how a channel shows each kind of item.
+pub struct Sample {
+    pub key: &'static str,
+    pub label: &'static str,
+    pub item: Item,
+}
+
+/// Examples covering what changes how a message looks: the kind (emoji, colour, ntfy
+/// priority), zero, one or several engines in the title prefix, with or without a summary
+/// and a link, and text long enough to be cut short.
+pub fn samples() -> Vec<Sample> {
     let now = Utc::now();
-    Item {
+    let item = |key: &str,
+                engines: &[&str],
+                kind,
+                title: &str,
+                url: Option<&str>,
+                summary: Option<&str>| Item {
         id: 0,
-        source_id: "godot:github:godotengine/godot".into(),
-        guid: "gen-notify-test".into(),
-        engines: vec!["godot".into()],
-        kind: ItemKind::Release,
-        title: "Godot 4.8 released".into(),
-        url: Some("https://godotengine.org/releases/4.8/".into()),
-        summary: Some(
-            "Godot 4.8 is out, with improvements to C# support, rendering and the editor. \
-             This is a test notification from GEN."
-                .into(),
-        ),
+        source_id: format!("gen:test:{key}"),
+        guid: format!("gen-notify-test-{key}"),
+        engines: engines.iter().map(|e| e.to_string()).collect(),
+        kind,
+        title: title.into(),
+        url: url.map(str::to_string),
+        summary: summary.map(str::to_string),
         published: Some(now),
         first_seen: now,
-        story_key: "godot 4.8 released".into(),
+        story_key: title.to_lowercase(),
         duplicate_of: None,
-    }
+    };
+    let long_summary = "Two years in the making, this release reworks the renderer, adds a \
+        new physics backend and brings C# hot reload to every platform. "
+        .repeat(40);
+    vec![
+        Sample {
+            key: "release",
+            label: "Release, one engine",
+            item: item(
+                "release",
+                &["godot"],
+                ItemKind::Release,
+                "Godot 4.8 released",
+                Some("https://godotengine.org/releases/4.8/"),
+                Some(
+                    "Godot 4.8 is out, with improvements to C# support, rendering and the \
+                      editor. This is a test notification from GEN.",
+                ),
+            ),
+        },
+        Sample {
+            key: "prerelease",
+            label: "Prerelease",
+            item: item(
+                "prerelease",
+                &["unity"],
+                ItemKind::Prerelease,
+                "Unity 6000.4.0b2 (Beta)",
+                Some("https://unity.com/releases/editor/beta"),
+                Some("Unity beta release. This is a test notification from GEN."),
+            ),
+        },
+        Sample {
+            key: "news",
+            label: "News post",
+            item: item(
+                "news",
+                &["unreal"],
+                ItemKind::News,
+                "Unreal Engine 5.8 roadmap: what's coming next",
+                Some("https://www.unrealengine.com/en-US/news"),
+                Some(
+                    "A look at the features planned for the next releases. This is a test \
+                      notification from GEN.",
+                ),
+            ),
+        },
+        Sample {
+            key: "outlet",
+            label: "Outlet article, several engines",
+            item: item(
+                "outlet",
+                &["godot", "unity"],
+                ItemKind::News,
+                "Godot vs. Unity for C# developers in 2026",
+                Some("https://gamefromscratch.com/"),
+                Some(
+                    "An article from a news outlet that mentions two engines. This is a test \
+                      notification from GEN.",
+                ),
+            ),
+        },
+        Sample {
+            key: "untagged",
+            label: "No engine, no summary, no link",
+            item: item(
+                "untagged",
+                &[],
+                ItemKind::News,
+                "The state of open-source game engines (GEN test notification)",
+                None,
+                None,
+            ),
+        },
+        Sample {
+            key: "long",
+            label: "Very long title and summary",
+            item: item(
+                "long",
+                &["godot"],
+                ItemKind::Release,
+                &format!(
+                    "Godot 5.0 released: {}",
+                    "the biggest update yet, ".repeat(12)
+                ),
+                Some("https://godotengine.org/"),
+                Some(&long_summary),
+            ),
+        },
+    ]
+}
+
+/// The first example, as a base for test items.
+#[cfg(test)]
+pub fn sample_item() -> Item {
+    samples().remove(0).item
 }
 
 #[cfg(test)]
@@ -417,6 +522,38 @@ pub(crate) mod tests {
             .unwrap_err()
             .to_string();
         assert!(!err.contains("secret-topic"), "{err}");
+    }
+
+    #[test]
+    fn samples_cover_the_message_shapes() {
+        let samples = samples();
+        let keys: Vec<_> = samples.iter().map(|s| s.key).collect();
+        assert_eq!(
+            keys.len(),
+            keys.iter().collect::<std::collections::HashSet<_>>().len()
+        );
+        let items: Vec<&Item> = samples.iter().map(|s| &s.item).collect();
+        assert!(
+            items
+                .iter()
+                .any(|i| i.engines.is_empty() && i.summary.is_none() && i.url.is_none())
+        );
+        assert!(items.iter().any(|i| i.engines.len() > 1));
+        for kind in [ItemKind::Release, ItemKind::Prerelease, ItemKind::News] {
+            assert!(items.iter().any(|i| i.kind == kind), "{kind:?}");
+        }
+        // The long one is cut short by every channel.
+        let long = &samples.iter().find(|s| s.key == "long").unwrap().item;
+        assert!(long.title.chars().count() > 256 && long.summary.as_ref().unwrap().len() > 4096);
+        let payload = &discord::build_payloads(&sources(), std::slice::from_ref(long))[0];
+        assert!(
+            payload["embeds"][0]["title"]
+                .as_str()
+                .unwrap()
+                .chars()
+                .count()
+                <= 256
+        );
     }
 
     #[test]
