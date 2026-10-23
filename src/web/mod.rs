@@ -49,6 +49,10 @@ const FEED_SIZE: u32 = 100;
 const API_DEFAULT_LIMIT: u32 = 50;
 const API_MAX_LIMIT: u32 = 200;
 
+/// Cookie remembering the timeline layout: `expanded` shows every description.
+const VIEW_COOKIE: &str = "gen_view";
+const VIEW_COOKIE_MAX_AGE: u32 = 365 * 24 * 60 * 60;
+
 /// Cookie holding a hash of the admin token once logged in.
 const ADMIN_COOKIE: &str = "gen_admin";
 const ADMIN_COOKIE_MAX_AGE: u32 = 30 * 24 * 60 * 60;
@@ -275,6 +279,7 @@ pub fn router(state: AppState) -> Router {
         .route("/notifications/test", post(notifications::test))
         .route("/login", get(login_form).post(login))
         .route("/logout", post(logout))
+        .route("/view", get(set_view))
         .route("/feed.xml", get(feed))
         .route("/api/items", get(api_items))
         .route("/health", get(health))
@@ -375,12 +380,19 @@ async fn index(
     State(st): State<AppState>,
     Query(params): Query<ListParams>,
     headers: HeaderMap,
+    uri: axum::http::Uri,
 ) -> Response {
-    let result = index_page(&st, params, st.is_admin(&headers)).await;
+    let view = view_context(&headers, &uri);
+    let result = index_page(&st, params, st.is_admin(&headers), view).await;
     st.respond(result)
 }
 
-async fn index_page(st: &AppState, params: ListParams, admin: bool) -> PageResult {
+async fn index_page(
+    st: &AppState,
+    params: ListParams,
+    admin: bool,
+    view: serde_json::Value,
+) -> PageResult {
     let filter = params.filter();
     let page = params.page();
     let (mut items, dups) = st
@@ -431,6 +443,7 @@ async fn index_page(st: &AppState, params: ListParams, admin: bool) -> PageResul
         json!({
             "nav": "latest",
             "admin": admin,
+            "view": view,
             "items": st.item_views(&items, &dups),
             "kind_tabs": kind_tabs,
             "engine_links": engine_links,
@@ -494,9 +507,11 @@ async fn engine(
     Path(id): Path<String>,
     Query(params): Query<ListParams>,
     headers: HeaderMap,
+    uri: axum::http::Uri,
 ) -> Response {
     let admin = st.is_admin(&headers);
-    let result = engine_page(&st, id, params, admin, None).await;
+    let view = view_context(&headers, &uri);
+    let result = engine_page(&st, id, params, admin, None, view).await;
     st.respond(result)
 }
 
@@ -507,6 +522,7 @@ async fn engine_page(
     params: ListParams,
     admin: bool,
     notice: Option<serde_json::Value>,
+    view: serde_json::Value,
 ) -> PageResult {
     let snapshot = st.registry.current();
     let Some(engine) = snapshot.config.engine(&id) else {
@@ -566,6 +582,7 @@ async fn engine_page(
             },
             "source_count": sources.len(),
             "notice": notice,
+            "view": view,
             "default_interval": st.settings.default_interval(),
             "max_interval": crate::config::MAX_INTERVAL_MINUTES,
             "groups": group_by_owner(&[(Owner::Engine(engine.id.clone()), &engine.name)], &sources),
@@ -751,6 +768,7 @@ fn suggestions_view(snapshot: &Snapshot) -> serde_json::Value {
 /// `/engine/{id}…`) with `notice` showing how it went.
 async fn page_with_notice(
     st: &AppState,
+    headers: &HeaderMap,
     next: Option<&str>,
     notice: serde_json::Value,
 ) -> PageResult {
@@ -773,7 +791,9 @@ async fn page_with_notice(
             page: query("page"),
             ..Default::default()
         };
-        return engine_page(st, id.to_string(), params, true, Some(notice)).await;
+        let uri: axum::http::Uri = next.parse().unwrap_or_default();
+        let view = view_context(headers, &uri);
+        return engine_page(st, id.to_string(), params, true, Some(notice), view).await;
     }
     let params = SourcesParams {
         sort: query("sort"),
@@ -926,6 +946,44 @@ fn secure_attr(st: &AppState) -> &'static str {
     } else {
         ""
     }
+}
+
+/// The timeline layout for templates: whether it's expanded, and links that switch it
+/// and come back to `uri`.
+fn view_context(headers: &HeaderMap, uri: &axum::http::Uri) -> serde_json::Value {
+    let expanded = cookie(headers, VIEW_COOKIE) == Some("expanded");
+    let here = uri.path_and_query().map_or("/", |p| p.as_str());
+    let link = |mode: &str| {
+        format!(
+            "/view{}",
+            query_string(&[("mode", Some(mode.into())), ("next", Some(here.into()))])
+        )
+    };
+    json!({"expanded": expanded, "compact_url": link("compact"), "expanded_url": link("expanded")})
+}
+
+#[derive(Deserialize)]
+struct ViewQuery {
+    mode: Option<String>,
+    next: Option<String>,
+}
+
+/// Remembers the timeline layout in a cookie and goes back to the page it was set on.
+async fn set_view(State(st): State<AppState>, Query(q): Query<ViewQuery>) -> Response {
+    let mode = if q.mode.as_deref() == Some("expanded") {
+        "expanded"
+    } else {
+        "compact"
+    };
+    let next = q
+        .next
+        .filter(|n| n.starts_with('/') && !n.starts_with("//") && !n.starts_with("/\\"))
+        .unwrap_or_else(|| "/".into());
+    let cookie = format!(
+        "{VIEW_COOKIE}={mode}; Path=/; Max-Age={VIEW_COOKIE_MAX_AGE}; SameSite=Lax{}",
+        secure_attr(&st)
+    );
+    ([(header::SET_COOKIE, cookie)], Redirect::to(&next)).into_response()
 }
 
 /// Reads one cookie from the request headers.

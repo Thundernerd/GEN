@@ -1097,3 +1097,51 @@ async fn admin_schedules_sources() {
     .await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
+
+#[tokio::test]
+async fn timeline_layout_is_remembered() {
+    let st = state();
+    let (_, _, body) = send(
+        &st,
+        Request::get("/?kind=release").body(Body::empty()).unwrap(),
+    )
+    .await;
+    assert!(
+        body.contains(r#"<div class="timeline">"#),
+        "compact by default"
+    );
+    assert!(
+        body.contains("view?mode=expanded&amp;next=%2F%3Fkind%3Drelease"),
+        "{body}"
+    );
+
+    let (status, headers, _) = send(
+        &st,
+        Request::get("/view?mode=expanded&next=%2F%3Fkind%3Drelease")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(headers[header::LOCATION], "/?kind=release");
+    let set_cookie = headers[header::SET_COOKIE].to_str().unwrap();
+    assert!(set_cookie.starts_with("gen_view=expanded;") && set_cookie.contains("Secure"));
+
+    for uri in ["/", "/engine/godot"] {
+        let req = Request::get(uri)
+            .header(header::COOKIE, "gen_view=expanded")
+            .body(Body::empty())
+            .unwrap();
+        let (_, _, body) = send(&st, req).await;
+        assert!(body.contains(r#"class="timeline is-expanded""#), "{uri}");
+        assert!(body.contains(r#"aria-current="true">Expanded<"#), "{uri}");
+    }
+    // Only same-site paths are followed.
+    for next in ["https%3A%2F%2Fevil.example", "%2F%2Fevil.example"] {
+        let req = Request::get(format!("/view?mode=compact&next={next}"))
+            .body(Body::empty())
+            .unwrap();
+        let (_, headers, _) = send(&st, req).await;
+        assert_eq!(headers[header::LOCATION], "/", "{next}");
+    }
+}

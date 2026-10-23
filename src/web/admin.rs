@@ -395,7 +395,7 @@ pub(super) async fn fetch_source(
                 },
             }
         };
-        page_with_notice(&st, form.next.as_deref(), notice).await
+        page_with_notice(&st, &headers, form.next.as_deref(), notice).await
     }
     .await;
     st.respond(result)
@@ -433,7 +433,7 @@ pub(super) async fn fetch_all(State(st): State<AppState>, headers: HeaderMap) ->
         if pending.is_empty() {
             let notice =
                 json!({"ok": false, "message": "Nothing to fetch: no enabled source is running."});
-            return page_with_notice(&st, Some("/sources"), notice).await;
+            return page_with_notice(&st, &headers, Some("/sources"), notice).await;
         }
         let deadline = tokio::time::Instant::now() + FETCH_ALL_WAIT;
         let (mut new_items, mut failed, mut running) = (0, Vec::new(), 0);
@@ -463,7 +463,7 @@ pub(super) async fn fetch_all(State(st): State<AppState>, headers: HeaderMap) ->
         }
         message.push('.');
         let notice = json!({"ok": failed.is_empty(), "message": message});
-        page_with_notice(&st, Some("/sources"), notice).await
+        page_with_notice(&st, &headers, Some("/sources"), notice).await
     }
     .await;
     st.respond(result)
@@ -510,6 +510,7 @@ pub(super) async fn set_interval(
             Err(AppError::Invalid(msg)) => {
                 let page = page_with_notice(
                     &st,
+                    &headers,
                     form.next.as_deref(),
                     json!({"ok": false, "message": msg}),
                 )
@@ -540,9 +541,13 @@ pub(super) async fn set_default_interval(
             Ok(Some(minutes)) => minutes,
             Ok(None) => st.config.polling.default_interval_minutes,
             Err(msg) => {
-                let page =
-                    page_with_notice(&st, Some("/sources"), json!({"ok": false, "message": msg}))
-                        .await?;
+                let page = page_with_notice(
+                    &st,
+                    &headers,
+                    Some("/sources"),
+                    json!({"ok": false, "message": msg}),
+                )
+                .await?;
                 return Ok((StatusCode::UNPROCESSABLE_ENTITY, page).into_response());
             }
         };

@@ -145,7 +145,9 @@ a:hover { color: var(--highlight); text-decoration-color: currentColor; }
 main.wrap { padding-top: 2.5rem; padding-bottom: 3rem; }
 
 .page-title { font-size: 2.5rem; font-weight: 700; letter-spacing: -0.035em; line-height: 1; margin: 0 0 1.25rem; }
-.page-intro .page-title { margin-bottom: 1.25rem; }
+.page-intro { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 0.75rem 1rem; margin-bottom: 1.25rem; }
+.page-intro .page-title { margin: 0; }
+.list-tools { display: flex; justify-content: flex-end; margin: 1.5rem 0 -0.75rem; }
 
 .site-footer {
   border-top: 1px solid var(--border);
@@ -251,9 +253,12 @@ main.wrap { padding-top: 2.5rem; padding-bottom: 3rem; }
 .item-title a:hover { color: var(--highlight); }
 .item-title a:visited { color: var(--muted); }
 
-/* Summaries stay out of the way until a row is hovered or focused (still read by screen readers). */
+/* Compact: summaries stay out of the way until a row is hovered or focused (still read by
+   screen readers). Expanded: they're always shown. */
 .item-summary { margin: 0.3rem 0 0; max-width: 40rem; color: var(--muted); font-size: 0.875rem; }
-.item:not(:hover):not(:focus-within) .item-summary { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.timeline:not(.is-expanded) .item:not(:hover):not(:focus-within) .item-summary { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+.timeline.is-expanded .item { padding-top: 0.8rem; padding-bottom: 0.8rem; }
+.timeline.is-expanded .item-summary { margin-top: 0.35rem; font-size: 0.9rem; line-height: 1.55; }
 
 .item-meta { display: flex; align-items: baseline; gap: 0.6rem; margin: 0; font-family: var(--mono); font-size: 0.75rem; color: var(--muted); white-space: nowrap; }
 .chip { color: var(--text); text-decoration: none; }

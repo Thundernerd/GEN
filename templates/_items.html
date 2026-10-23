@@ -1,6 +1,6 @@
 {#- Item timeline, grouped by day. Expects `items` (list of ItemView) and `pagination`. -#}
 {% if items %}
-<div class="timeline">
+<div class="timeline{% if view and view.expanded %} is-expanded{% endif %}">
   {%- for item in items %}
   {%- if loop.first or item.day != loop.previtem.day %}
   {%- if not loop.first %}

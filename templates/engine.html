@@ -27,6 +27,7 @@
 </details>
 {%- endif %}
 
+<div class="list-tools">{% include "_view_toggle.html" %}</div>
 <nav class="tabs" aria-label="Kind">
   {%- for t in tabs %}
   <a href="{{ t.url }}"{% if t.active %} aria-current="page"{% endif %}>{% if t.kind %}<i class="kind-dot kind-{{ t.kind }}" aria-hidden="true"></i>{% endif %}{{ t.label }}</a>

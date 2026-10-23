@@ -2,6 +2,7 @@
 {% block content %}
 <div class="page-intro">
   <h1 class="page-title">Latest</h1>
+  {% include "_view_toggle.html" %}
 </div>
 <nav class="tabs" aria-label="Kind">
   {%- for t in kind_tabs %}

@@ -1,0 +1,7 @@
+{#- Compact/expanded switch for the item timeline. Expects `view`. -#}
+{%- if view and view.compact_url %}
+<nav class="segmented view-toggle" aria-label="Layout">
+  <a href="{{ view.compact_url }}"{% if not view.expanded %} aria-current="true"{% endif %}>Compact</a>
+  <a href="{{ view.expanded_url }}"{% if view.expanded %} aria-current="true"{% endif %}>Expanded</a>
+</nav>
+{%- endif %}

@@ -268,11 +268,12 @@ gen notify-test --channel phone --sample all     # or: prerelease, news, outlet,
 
 | Route | Description |
 |---|---|
-| `/` | Latest items from all enabled sources. |
+| `/` | Latest items from all enabled sources, grouped by day. **Compact** shows one line per item (descriptions on hover); **Expanded** shows every description. The choice is remembered in a cookie and applies to engine pages too. |
 | `/engines` | Engine list with tier, C# support and recent activity. |
 | `/engine/{id}` | Items for one engine. |
 | `/sources` | Every source with its last fetch time and errors. Admins can switch sources on and off, add sources, engines and outlets (by hand or from the suggestions) and remove them here. |
 | `/notifications` | Admin only: notification channels, their rules and last deliveries. |
+| `/view?mode=compact\|expanded` | Sets the timeline layout and goes back to the page it came from. |
 | `/login`, `/logout` | Admin login with `server.admin_token`. |
 | `/feed.xml` | Combined Atom feed. |
 | `/api/items` | JSON API for items. |
