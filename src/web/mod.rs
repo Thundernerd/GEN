@@ -352,21 +352,46 @@ async fn index_page(st: &AppState, params: ListParams) -> PageResult {
     items.truncate(PAGE_SIZE as usize);
 
     let pairs = filter_pairs(&filter);
-    let engines: Vec<_> = st
-        .registry
-        .current()
-        .config
-        .enabled_engines()
-        .map(|e| json!({"id": e.id, "name": e.name, "tier": e.tier}))
+    // Filter links that change one filter and keep the others.
+    let link = |key: &str, value: Option<String>| {
+        let mut changed = pairs.clone();
+        if let Some(pair) = changed.iter_mut().find(|(k, _)| *k == key) {
+            pair.1 = value;
+        }
+        format!("/{}", query_string(&changed))
+    };
+    let kind_tabs: Vec<_> = std::iter::once(None)
+        .chain(ItemKind::ALL.into_iter().map(Some))
+        .map(|k| {
+            json!({
+                "kind": k.map(ItemKind::as_str),
+                "label": k.map_or("all", ItemKind::as_str),
+                "url": link("kind", k.map(|k| k.as_str().to_string())),
+                "active": k == filter.kind,
+            })
+        })
         .collect();
+    let snapshot = st.registry.current();
+    let engine_links: Vec<_> = std::iter::once(None)
+        .chain(snapshot.config.enabled_engines().map(Some))
+        .map(|e| {
+            json!({
+                "label": e.map_or("all engines", |e| e.name.as_str()),
+                "url": link("engine", e.map(|e| e.id.clone())),
+                "active": e.map(|e| &e.id) == filter.engine.as_ref(),
+            })
+        })
+        .collect();
+    let csharp_link = link("csharp", (!filter.csharp).then(|| "1".to_string()));
     let feed_pairs: Vec<_> = pairs[..2].to_vec();
     st.render(
         "index.html",
         json!({
             "nav": "latest",
             "items": st.item_views(&items, &dups),
-            "engines": engines,
-            "kinds": kind_names(),
+            "kind_tabs": kind_tabs,
+            "engine_links": engine_links,
+            "csharp_link": csharp_link,
             "filter": {
                 "engine": filter.engine,
                 "kind": filter.kind.map(ItemKind::as_str),
@@ -465,6 +490,7 @@ async fn engine_page(st: &AppState, id: String, params: ListParams, admin: bool)
         .chain(ItemKind::ALL.into_iter().map(Some))
         .map(|k| {
             json!({
+                "kind": k.map(ItemKind::as_str),
                 "label": k.map_or("all", ItemKind::as_str),
                 "url": format!("{base}{}", query_string(&[("kind", k.map(|k| k.as_str().to_string()))])),
                 "active": k == filter.kind,

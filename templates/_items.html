@@ -1,32 +1,42 @@
-{#- Item list. Expects `items` (list of ItemView) and `pagination`. -#}
+{#- Item timeline, grouped by day. Expects `items` (list of ItemView) and `pagination`. -#}
 {% if items %}
-<ol class="items">
+<div class="timeline">
   {%- for item in items %}
-  <li class="item" id="item-{{ item.id }}">
-    <div class="item-meta">
-      <span class="badge badge-{{ item.kind }}">{{ item.kind }}</span>
-      {%- for e in item.engines %}
-      <a class="chip" href="/engine/{{ e.id }}">{{ e.name }}</a>
-      {%- endfor %}
-    </div>
-    <h2 class="item-title">
-      {%- if item.url %}<a href="{{ item.url }}" rel="noopener">{{ item.title }}</a>{% else %}{{ item.title }}{% endif -%}
-    </h2>
-    <p class="item-byline">
-      <span class="source">{{ item.source }}</span>
-      <span aria-hidden="true">·</span>
-      <time datetime="{{ item.date.iso }}" title="{{ item.date.abs }}">{{ item.date.rel }}</time>
-      {%- if item.also_on %}
-      <span aria-hidden="true">·</span>
-      <span class="also-on">also on: {{ item.also_on | join(", ") }}</span>
-      {%- endif %}
-    </p>
-    {%- if item.summary %}
-    <p class="item-summary">{{ item.summary }}</p>
-    {%- endif %}
-  </li>
+  {%- if loop.first or item.day != loop.previtem.day %}
+  {%- if not loop.first %}
+    </ol>
+  </section>
+  {%- endif %}
+  <section class="day">
+    <h2 class="day-label">{{ item.day }}</h2>
+    <ol class="items">
+  {%- endif %}
+      <li class="item" id="item-{{ item.id }}">
+        <span class="item-kind kind-{{ item.kind }}"><i class="kind-dot kind-{{ item.kind }}" aria-hidden="true"></i>{{ item.kind }}</span>
+        <div class="item-main">
+          <h3 class="item-title">
+            {%- if item.url %}<a href="{{ item.url }}" rel="noopener">{{ item.title }}</a>{% else %}{{ item.title }}{% endif -%}
+          </h3>
+          {%- if item.summary %}
+          <p class="item-summary">{{ item.summary }}</p>
+          {%- endif %}
+        </div>
+        <p class="item-meta">
+          {%- for e in item.engines %}
+          <a class="chip" href="/engine/{{ e.id }}">{{ e.id }}</a>
+          {%- endfor %}
+          <span class="source">{{ item.source }}
+            {%- if item.also_on %} <span class="also-on" title="also on: {{ item.also_on | join(", ") }}">+{{ item.also_on | length }}<span class="visually-hidden"> also on: {{ item.also_on | join(", ") }}</span></span>{% endif -%}
+          </span>
+          <time datetime="{{ item.date.iso }}" title="{{ item.date.rel }}, {{ item.date.abs }}">{{ item.date.short }}</time>
+        </p>
+      </li>
+  {%- if loop.last %}
+    </ol>
+  </section>
+  {%- endif %}
   {%- endfor %}
-</ol>
+</div>
 {% if pagination.prev or pagination.next %}
 <nav class="pager" aria-label="Pagination">
   {% if pagination.prev %}<a href="{{ pagination.prev }}" rel="prev">← Newer</a>{% else %}<span></span>{% endif %}

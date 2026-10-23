@@ -14,14 +14,12 @@
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
     <div class="wrap header-inner">
-      <a class="brand" href="/">
-        <img src="/static/favicon.svg" alt="" width="28" height="28">
-        <span><strong>GEN</strong> <span class="brand-sub">— Game Engine News</span></span>
-      </a>
+      <a class="brand" href="/"><span class="brand-mark">GEN</span><span class="brand-sub">game engine news</span></a>
       <nav class="site-nav" aria-label="Main">
-        {%- for key, label, href in [("latest", "Latest", "/"), ("engines", "Engines", "/engines"), ("sources", "Sources", "/sources"), ("feed", "Feed", feed_url or "/feed.xml")] %}
+        {%- for key, label, href in [("latest", "Latest", "/"), ("engines", "Engines", "/engines"), ("sources", "Sources", "/sources")] %}
         <a href="{{ href }}"{% if nav == key %} aria-current="page"{% endif %}>{{ label }}</a>
         {%- endfor %}
+        <a class="feed-link" href="{{ feed_url or '/feed.xml' }}"{% if nav == "feed" %} aria-current="page"{% endif %}>RSS</a>
       </nav>
     </div>
   </header>

@@ -27,6 +27,8 @@ pub struct ItemView {
     pub source: String,
     pub engines: Vec<EngineChip>,
     pub date: DateView,
+    /// The day it belongs to in the timeline, e.g. "Today" or "Wednesday".
+    pub day: String,
     pub summary: Option<String>,
     pub also_on: Vec<String>,
 }
@@ -54,6 +56,7 @@ impl ItemView {
                 })
                 .collect(),
             date: DateView::new(item.date(), now),
+            day: day_label(item.date(), now),
             summary: item
                 .summary
                 .as_deref()
@@ -73,6 +76,8 @@ pub struct DateView {
     pub abs: String,
     /// Relative to now, e.g. "3 hours ago".
     pub rel: String,
+    /// Relative to now, compact, e.g. "3h".
+    pub short: String,
 }
 
 impl DateView {
@@ -81,25 +86,52 @@ impl DateView {
             iso: dt.to_rfc3339(),
             abs: dt.format("%Y-%m-%d %H:%M UTC").to_string(),
             rel: relative_time(dt, now),
+            short: short_relative_time(dt, now),
         }
     }
 }
 
 /// Human relative time such as "just now", "5 minutes ago" or "2 years ago".
 pub fn relative_time(dt: DateTime<Utc>, now: DateTime<Utc>) -> String {
-    let secs = (now - dt).num_seconds();
-    if secs < 60 {
-        return "just now".to_string();
+    match elapsed(dt, now) {
+        None => "just now".to_string(),
+        Some((n, unit, _)) => {
+            let plural = if n == 1 { "" } else { "s" };
+            format!("{n} {unit}{plural} ago")
+        }
     }
-    let (n, unit) = match secs {
-        s if s < 3_600 => (s / 60, "minute"),
-        s if s < 86_400 => (s / 3_600, "hour"),
-        s if s < 30 * 86_400 => (s / 86_400, "day"),
-        s if s < 365 * 86_400 => (s / (30 * 86_400), "month"),
-        s => (s / (365 * 86_400), "year"),
-    };
-    let plural = if n == 1 { "" } else { "s" };
-    format!("{n} {unit}{plural} ago")
+}
+
+/// Compact relative time such as "now", "5m", "3h", "2d", "4mo" or "1y".
+pub fn short_relative_time(dt: DateTime<Utc>, now: DateTime<Utc>) -> String {
+    match elapsed(dt, now) {
+        None => "now".to_string(),
+        Some((n, _, short)) => format!("{n}{short}"),
+    }
+}
+
+/// Time since `dt` in its largest whole unit (long and short name), or `None` under a minute.
+fn elapsed(dt: DateTime<Utc>, now: DateTime<Utc>) -> Option<(i64, &'static str, &'static str)> {
+    Some(match (now - dt).num_seconds() {
+        s if s < 60 => return None,
+        s if s < 3_600 => (s / 60, "minute", "m"),
+        s if s < 86_400 => (s / 3_600, "hour", "h"),
+        s if s < 30 * 86_400 => (s / 86_400, "day", "d"),
+        s if s < 365 * 86_400 => (s / (30 * 86_400), "month", "mo"),
+        s => (s / (365 * 86_400), "year", "y"),
+    })
+}
+
+/// The timeline day of `dt`: "Today", "Yesterday", a weekday within the last week, then a
+/// date such as "15 October 2026". Days are UTC, like the stored dates.
+pub fn day_label(dt: DateTime<Utc>, now: DateTime<Utc>) -> String {
+    let (day, today) = (dt.date_naive(), now.date_naive());
+    match (today - day).num_days() {
+        ..=0 => "Today".to_string(),
+        1 => "Yesterday".to_string(),
+        2..=6 => dt.format("%A").to_string(),
+        _ => dt.format("%-d %B %Y").to_string(),
+    }
 }
 
 /// Collapses whitespace and truncates to at most `max` characters at a word boundary.
@@ -148,6 +180,23 @@ mod tests {
         );
         assert_eq!(relative_time(now - Duration::hours(3), now), "3 hours ago");
         assert_eq!(relative_time(now - Duration::days(400), now), "1 year ago");
+        assert_eq!(short_relative_time(now, now), "now");
+        assert_eq!(short_relative_time(now - Duration::hours(3), now), "3h");
+        assert_eq!(short_relative_time(now - Duration::days(45), now), "1mo");
+    }
+
+    #[test]
+    fn labels_timeline_days() {
+        let now = DateTime::parse_from_rfc3339("2026-10-23T10:00:00Z")
+            .unwrap()
+            .to_utc();
+        let ago = |h| day_label(now - Duration::hours(h), now);
+        assert_eq!(ago(9), "Today");
+        assert_eq!(ago(11), "Yesterday");
+        assert_eq!(ago(2 * 24), "Wednesday");
+        assert_eq!(ago(8 * 24), "15 October 2026");
+        // A date slightly in the future still counts as today.
+        assert_eq!(day_label(now + Duration::hours(1), now), "Today");
     }
 
     #[test]
