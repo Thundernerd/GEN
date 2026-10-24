@@ -45,8 +45,8 @@
     </tr>
     {%- endif %}
     {%- for s in g.sources %}
-    <tr{% if not s.enabled %} class="is-disabled"{% endif %}>
-      <td class="center"><span class="badge status-{{ s.status }}">{{ s.status }}</span></td>
+    <tr{% if not s.enabled %} class="is-disabled"{% endif %}{% if admin %} data-source="{{ s.id }}" data-label="{{ g.owner }} {{ s.kind }}"{% endif %}>
+      <td class="center"><span data-status="{{ s.status }}" class="badge status-{{ s.status }}">{{ s.status }}</span></td>
       <td>
         <span class="source-kind">{{ s.kind }}</span>
         {% if s.target_url %}<a href="{{ s.target_url }}" rel="noopener">{{ s.target }}</a>{% else %}{{ s.target }}{% endif %}

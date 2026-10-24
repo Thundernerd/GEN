@@ -1090,6 +1090,28 @@ async fn admin_schedules_sources() {
     assert!(body.contains("isn&#x27;t running yet"), "{body}");
     let (_, _, body) = send(&st, post_form("/sources/fetch-all", "", Some(&cookie))).await;
     assert!(body.contains("Nothing to fetch"));
+
+    // Progress for the page: admin only.
+    let (status, _, _) = send(
+        &st,
+        Request::get("/sources/activity")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    st.fetches.start_batch(4).finished(None);
+    let (_, body) = get_as(&st, "/sources/activity", &cookie).await;
+    assert_eq!(body, r#"{"fetching":[],"queued":[],"batch":null}"#);
+    let (_, body) = get_as(&st, "/sources", &cookie).await;
+    assert!(body.contains("/static/fetch-progress.js"));
+    assert!(body.contains(r#"class="fetch-progress" hidden"#));
+    assert!(body.contains(&format!(
+        r#"data-source="{}""#,
+        GODOT_SRC.replace('/', "&#x2f;")
+    )));
+    let (_, _, body) = send(&st, Request::get("/sources").body(Body::empty()).unwrap()).await;
+    assert!(!body.contains("fetch-progress") && !body.contains("data-source="));
     let (status, _, _) = send(
         &st,
         post_form("/sources/fetch", "source_id=nope", Some(&cookie)),

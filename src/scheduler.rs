@@ -51,10 +51,68 @@ impl FetchReport {
 
 type FetchReply = oneshot::Sender<FetchReport>;
 
-/// "Fetch now" requests, routed to the poller of each running source.
+/// "Fetch now" requests, routed to the poller of each running source, and what the
+/// pollers are doing right now, for the progress shown on the Sources page.
 #[derive(Default)]
 pub struct FetchRequests {
     pollers: Mutex<HashMap<String, mpsc::Sender<FetchReply>>>,
+    activity: Mutex<Activity>,
+}
+
+#[derive(Default)]
+struct Activity {
+    /// Sources waiting for a fetch slot (`false`) or fetching (`true`).
+    sources: HashMap<String, bool>,
+    batch: Option<BatchProgress>,
+    next_batch: u64,
+}
+
+/// How far a "Fetch all now" has got.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
+pub struct BatchProgress {
+    pub total: usize,
+    pub done: usize,
+    pub new_items: usize,
+    pub failed: usize,
+    #[serde(skip)]
+    id: u64,
+}
+
+/// What the pollers are doing, as shown on the Sources page.
+#[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
+pub struct ActivitySnapshot {
+    pub fetching: Vec<String>,
+    pub queued: Vec<String>,
+    pub batch: Option<BatchProgress>,
+}
+
+/// Tracks a "Fetch all now" until dropped.
+pub struct Batch<'a> {
+    requests: &'a FetchRequests,
+    id: u64,
+}
+
+impl Batch<'_> {
+    /// Counts one finished fetch of the batch.
+    pub fn finished(&self, report: Option<&FetchReport>) {
+        let mut activity = self.requests.activity();
+        if let Some(b) = activity.batch.as_mut().filter(|b| b.id == self.id) {
+            b.done += 1;
+            match report {
+                Some(r) if r.error.is_none() => b.new_items += r.new_items,
+                _ => b.failed += 1,
+            }
+        }
+    }
+}
+
+impl Drop for Batch<'_> {
+    fn drop(&mut self) {
+        let mut activity = self.requests.activity();
+        if activity.batch.as_ref().is_some_and(|b| b.id == self.id) {
+            activity.batch = None;
+        }
+    }
 }
 
 impl FetchRequests {
@@ -70,6 +128,46 @@ impl FetchRequests {
 
     fn lock(&self) -> std::sync::MutexGuard<'_, HashMap<String, mpsc::Sender<FetchReply>>> {
         self.pollers.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    fn activity(&self) -> std::sync::MutexGuard<'_, Activity> {
+        self.activity.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Marks a source as waiting for a fetch slot, fetching, or (`None`) idle.
+    fn set_state(&self, source_id: &str, fetching: Option<bool>) {
+        let mut activity = self.activity();
+        match fetching {
+            Some(f) => activity.sources.insert(source_id.to_string(), f),
+            None => activity.sources.remove(source_id),
+        };
+    }
+
+    /// Starts counting a "Fetch all now" of `total` sources, replacing any earlier one.
+    pub fn start_batch(&self, total: usize) -> Batch<'_> {
+        let mut activity = self.activity();
+        activity.next_batch += 1;
+        let id = activity.next_batch;
+        activity.batch = Some(BatchProgress {
+            total,
+            id,
+            ..Default::default()
+        });
+        Batch { requests: self, id }
+    }
+
+    pub fn snapshot(&self) -> ActivitySnapshot {
+        let activity = self.activity();
+        let (mut fetching, mut queued): (Vec<_>, Vec<_>) =
+            activity.sources.iter().partition(|(_, f)| **f);
+        fetching.sort();
+        queued.sort();
+        let ids = |v: Vec<(&String, &bool)>| v.into_iter().map(|(id, _)| id.clone()).collect();
+        ActivitySnapshot {
+            fetching: ids(fetching),
+            queued: ids(queued),
+            batch: activity.batch.clone(),
+        }
     }
 
     /// Asks a source's poller to fetch now. The receiver gets the result once the fetch is
@@ -120,6 +218,7 @@ async fn supervise(poller: Poller) {
             if let Some((_, task)) = running.remove(&id) {
                 task.abort();
                 fetches.unregister(&id);
+                fetches.set_state(&id, None);
             }
         }
         for source in start {
@@ -231,19 +330,35 @@ impl Poller {
                     }
                 }
             }
-            let result = {
+            let requested = reply.is_some();
+            let fetches = &self.pipeline.fetches;
+            fetches.set_state(&source.id, Some(false));
+            let (result, took_ms) = {
                 let Ok(_permit) = self.permits.acquire().await else {
+                    fetches.set_state(&source.id, None);
                     return;
                 };
-                self.pipeline.poll(&source).await
+                fetches.set_state(&source.id, Some(true));
+                let started = Instant::now();
+                tracing::debug!(source = %source.id, requested, "fetching");
+                let result = self.pipeline.poll(&source).await;
+                fetches.set_state(&source.id, None);
+                (result, started.elapsed().as_millis() as u64)
             };
             last_poll = Some(Instant::now());
             let interval = interval();
             let (delay, report) = match result {
                 Ok(poll) => {
                     failures = 0;
+                    tracing::info!(
+                        source = %source.id,
+                        new = poll.new_items.len(),
+                        unchanged = poll.not_modified,
+                        requested,
+                        took_ms,
+                        "fetched"
+                    );
                     if !poll.new_items.is_empty() {
-                        tracing::info!(source = %source.id, new = poll.new_items.len(), "new items");
                         if poll.was_seeded {
                             self.wake.notify_one();
                         } else {
@@ -269,7 +384,7 @@ impl Poller {
                     let delay = retry_after
                         .map_or(backoff, |r| r.max(interval))
                         .min(MAX_BACKOFF);
-                    tracing::warn!(source = %source.id, failures, retry_in = ?delay, "poll failed: {err:#}");
+                    tracing::warn!(source = %source.id, failures, requested, took_ms, retry_in = ?delay, "poll failed: {err:#}");
                     (delay, FetchReport::failed(format!("{err:#}")))
                 }
             };
@@ -505,7 +620,56 @@ mod tests {
         let off = fetch().await;
         assert!(off.error.unwrap().contains("switched off"));
         assert!(pipeline.fetches.request("unknown").is_none());
+        assert_eq!(
+            pipeline.fetches.snapshot(),
+            ActivitySnapshot::default(),
+            "idle after fetching"
+        );
         task.abort();
+    }
+
+    /// The Sources page sees which sources are queued or fetching, and how far a "Fetch
+    /// all now" has got, until it ends.
+    #[test]
+    fn tracks_fetch_activity() {
+        let fetches = FetchRequests::default();
+        fetches.set_state("b", Some(true));
+        fetches.set_state("a", Some(false));
+        fetches.set_state("c", Some(true));
+        let snap = fetches.snapshot();
+        assert_eq!(snap.fetching, ["b", "c"]);
+        assert_eq!(snap.queued, ["a"]);
+        fetches.set_state("b", None);
+        assert_eq!(fetches.snapshot().fetching, ["c"]);
+
+        let old = fetches.start_batch(5);
+        let batch = fetches.start_batch(3);
+        batch.finished(Some(&FetchReport {
+            new_items: 2,
+            not_modified: false,
+            error: None,
+        }));
+        batch.finished(Some(&FetchReport::failed("HTTP 503")));
+        batch.finished(None);
+        old.finished(None);
+        let progress = fetches.snapshot().batch.unwrap();
+        assert_eq!(
+            (
+                progress.total,
+                progress.done,
+                progress.new_items,
+                progress.failed
+            ),
+            (3, 3, 2, 2),
+            "an older batch counts nothing"
+        );
+        drop(old);
+        assert!(
+            fetches.snapshot().batch.is_some(),
+            "only its own batch ends"
+        );
+        drop(batch);
+        assert!(fetches.snapshot().batch.is_none());
     }
 
     /// A channel stored in the database (as the website does) is delivered on the next

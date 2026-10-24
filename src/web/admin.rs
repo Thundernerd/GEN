@@ -6,6 +6,7 @@
 use axum::extract::{Form, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::{IntoResponse, Redirect, Response};
+use futures::stream::{FuturesUnordered, StreamExt};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -383,6 +384,7 @@ pub(super) async fn fetch_source(
             .find(|s| s.id == id)
             .ok_or_else(|| AppError::Invalid(format!("There is no source “{id}”.")))?;
         let label = source_label(&source);
+        tracing::info!(source = %id, "fetch requested");
         let notice = if !st.toggles.is_enabled(&source) {
             json!({"ok": false, "message": format!("{label} is switched off; enable it first.")})
         } else {
@@ -435,16 +437,33 @@ pub(super) async fn fetch_all(State(st): State<AppState>, headers: HeaderMap) ->
                 json!({"ok": false, "message": "Nothing to fetch: no enabled source is running."});
             return page_with_notice(&st, &headers, Some("/sources"), notice).await;
         }
-        let deadline = tokio::time::Instant::now() + FETCH_ALL_WAIT;
-        let (mut new_items, mut failed, mut running) = (0, Vec::new(), 0);
         let requested = pending.len();
-        for (source, rx) in pending {
-            match tokio::time::timeout_at(deadline, rx).await {
-                Ok(Ok(report)) if report.error.is_none() => new_items += report.new_items,
-                Ok(Ok(_)) | Ok(Err(_)) => failed.push(source.owner_name.clone()),
-                Err(_) => running += 1,
+        tracing::info!(sources = requested, "fetch all requested");
+        let batch = st.fetches.start_batch(requested);
+        let mut pending: FuturesUnordered<_> = pending
+            .into_iter()
+            .map(|(source, rx)| async move { (source, rx.await.ok()) })
+            .collect();
+        let deadline = tokio::time::Instant::now() + FETCH_ALL_WAIT;
+        let (mut new_items, mut failed) = (0, Vec::new());
+        while let Ok(Some((source, report))) =
+            tokio::time::timeout_at(deadline, pending.next()).await
+        {
+            batch.finished(report.as_ref());
+            match report {
+                Some(r) if r.error.is_none() => new_items += r.new_items,
+                _ => failed.push(source.owner_name.clone()),
             }
         }
+        let running = pending.len();
+        drop(batch);
+        tracing::info!(
+            fetched = requested - running,
+            new = new_items,
+            failed = failed.len(),
+            still_running = running,
+            "fetch all finished"
+        );
         let mut message = format!(
             "Fetched {} of {requested} sources: {new_items} new item{}",
             requested - running,
@@ -466,6 +485,13 @@ pub(super) async fn fetch_all(State(st): State<AppState>, headers: HeaderMap) ->
         page_with_notice(&st, &headers, Some("/sources"), notice).await
     }
     .await;
+    st.respond(result)
+}
+
+/// What the pollers are doing right now, polled by the Sources page to show progress.
+pub(super) async fn fetch_activity(State(st): State<AppState>, headers: HeaderMap) -> Response {
+    let result =
+        require_admin(&st, &headers).map(|()| axum::Json(st.fetches.snapshot()).into_response());
     st.respond(result)
 }
 

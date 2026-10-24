@@ -43,6 +43,10 @@
   <form method="post" action="/sources/fetch-all" data-inline="Fetched all sources.">
     <button type="submit" class="btn-small btn-quiet">Fetch all now</button>
   </form>
+  <div class="fetch-progress" hidden>
+    <progress max="1" value="0"></progress>
+    <p class="fetch-progress-text" aria-live="polite"></p>
+  </div>
 </div>
 {%- endif %}
 {%- if notice %}

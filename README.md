@@ -293,7 +293,7 @@ Each source (on `/sources` and on every engine page) gets an **Enable** / **Disa
 ### Fetching and polling intervals
 
 - **Fetch now** (next to Enable / Disable) fetches a source right away, waits for the result and shows it, e.g. "Fetched Godot feed …: 2 new items" or the error. New items are notified as usual.
-- **Fetch all now** (above the table) does that for every enabled source, within `concurrency`, and reports the totals. It waits up to 45 seconds; slower sources keep fetching in the background.
+- **Fetch all now** (above the table) does that for every enabled source, within `concurrency`, and reports the totals. It waits up to 45 seconds; slower sources keep fetching in the background. While it runs, a progress bar shows how many are done, and each row shows whether it's queued or fetching. Every fetch is logged at `info`, with its new items, whether the source was unchanged, and how long it took.
 - **every N min** under a source opens a small form for its own polling interval; leave it empty to use the default again. Saving fetches the source once right away.
 - **Change** next to the default interval sets it for every source without its own (1 minute to 1 week). It's stored in the database and overrides `default_interval_minutes` in `gen.toml`. Sources pick up the new default after their current wait, so they aren't all fetched at once.
 

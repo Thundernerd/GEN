@@ -262,6 +262,7 @@ pub fn router(state: AppState) -> Router {
         .route("/sources/remove", post(admin::remove_source))
         .route("/sources/fetch", post(admin::fetch_source))
         .route("/sources/fetch-all", post(admin::fetch_all))
+        .route("/sources/activity", get(admin::fetch_activity))
         .route("/sources/interval", post(admin::set_interval))
         .route(
             "/sources/default-interval",
