@@ -7,7 +7,6 @@
 
   const FAST = 1000;
   let timer = null;
-  let active = new Set();
 
   function schedule(delay) {
     clearTimeout(timer);
@@ -63,10 +62,6 @@
       return;
     }
     render(activity);
-    const now = new Set([...activity.fetching, ...activity.queued]);
-    for (const id of now) if (!active.has(id)) console.info("GEN: fetching", id);
-    for (const id of active) if (!now.has(id)) console.info("GEN: done", id);
-    active = now;
     const busy = activity.fetching.length || activity.queued.length || activity.batch
       || document.querySelector('form[aria-busy="true"][action^="/sources/fetch"], form[aria-busy="true"][action="/sources/interval"]');
     if (busy) schedule(FAST);
@@ -86,7 +81,6 @@
     rows.forEach((row) => mark(row, "queued"));
     // The last fetch's result would read as this one's.
     document.querySelectorAll(".notice[role=status]").forEach((n) => { n.hidden = true; });
-    console.info("GEN: fetch requested", id ?? "all sources");
     schedule(200);
   });
 
