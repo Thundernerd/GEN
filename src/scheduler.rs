@@ -13,7 +13,7 @@ use tokio::task::{AbortHandle, JoinSet};
 use tokio::time::Instant;
 
 use crate::config::{AppConfig, ChannelConfig, ChannelTarget, ResolvedSource};
-use crate::fetch::FetchError;
+use crate::fetch::{self, FetchError};
 use crate::model::Item;
 use crate::notify::discord::BotApi;
 use crate::notify::{self, NotifyContext};
@@ -471,10 +471,19 @@ impl Notifier {
         if pending.is_empty() {
             return Ok(false);
         }
-        let (matching, skipped): (Vec<Item>, Vec<Item>) = pending
+        let (mut matching, skipped): (Vec<Item>, Vec<Item>) = pending
             .into_iter()
             .partition(|i| notify::accepts(channel, i));
         self.mark(channel, &skipped).await?;
+        let style = match &channel.target {
+            ChannelTarget::Discord { style, .. } | ChannelTarget::DiscordBot { style, .. } => {
+                Some(*style)
+            }
+            _ => None,
+        };
+        if style.is_some_and(notify::discord::shows_images) {
+            self.find_images(&mut matching).await;
+        }
 
         let snapshot = self.pipeline.registry.current();
         let ctx = NotifyContext {
@@ -497,6 +506,36 @@ impl Notifier {
             tracing::info!(channel = %channel.name, items = batch.len(), "notified");
         }
         Ok(sent)
+    }
+
+    /// Looks up the `og:image` of items whose source gave no image, once per item: the
+    /// result (also none) is stored, so later runs and other channels reuse it.
+    async fn find_images(&self, items: &mut [Item]) {
+        for item in items.iter_mut() {
+            let Some(url) = item.url.clone() else {
+                continue;
+            };
+            if item.image_url.is_some() || item.image_checked || !worth_an_image_lookup(item, &url)
+            {
+                continue;
+            }
+            let image = fetch::og::og_image(&self.pipeline.http, &url).await;
+            tracing::info!(
+                item = item.id,
+                found = image.is_some(),
+                "looked up a preview image"
+            );
+            let (id, stored) = (item.id, image.clone());
+            let result = self
+                .pipeline
+                .with_store(move |s| s.set_item_image(id, stored.as_deref()))
+                .await;
+            if let Err(err) = result {
+                tracing::error!("storing a preview image failed: {err:#}");
+            }
+            item.image_url = image;
+            item.image_checked = true;
+        }
     }
 
     async fn mark(&self, channel: &ChannelConfig, items: &[Item]) -> anyhow::Result<()> {
@@ -523,6 +562,15 @@ fn spread(source_id: &str, max: Duration) -> Duration {
     source_id.hash(&mut hasher);
     std::time::SystemTime::now().hash(&mut hasher);
     Duration::from_millis(hasher.finish() % max.as_millis().max(1) as u64)
+}
+
+/// Pages that have no useful preview image: Hacker News threads, and GitHub releases
+/// and tags (GitHub's image is a generic repository card).
+fn worth_an_image_lookup(item: &Item, url: &str) -> bool {
+    !item.source_id.contains(":hn:")
+        && !url.starts_with("https://news.ycombinator.com/")
+        && !(url.starts_with("https://github.com/")
+            && (url.contains("/releases/") || url.contains("/tags")))
 }
 
 #[cfg(test)]
@@ -716,6 +764,7 @@ mod tests {
                 published: None,
                 story_key: "godot 4 8".into(),
                 notify: true,
+                image_url: None,
             }])
             .unwrap();
         let pipeline = Pipeline {
@@ -786,6 +835,7 @@ mod tests {
             published: None,
             story_key: guid.into(),
             notify: true,
+            image_url: None,
         };
         use crate::model::ItemKind::{News, Release};
         store
@@ -827,6 +877,115 @@ mod tests {
         );
         let channels = notify::load_channels(&pipeline.store.lock().unwrap()).unwrap();
         assert!(channels[0].last_ok.is_some() && channels[0].last_error.is_none());
+    }
+
+    /// Before posting with an image style, the notifier looks up the item page's
+    /// og:image once and stores it; the message carries it.
+    #[tokio::test]
+    async fn looks_up_preview_images_once() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let requests = Arc::new(Mutex::new(Vec::<String>::new()));
+        let seen = requests.clone();
+        tokio::spawn(async move {
+            loop {
+                let (mut conn, _) = listener.accept().await.unwrap();
+                let mut buf = vec![0u8; 32 * 1024];
+                let n = conn.read(&mut buf).await.unwrap();
+                let request = String::from_utf8_lossy(&buf[..n]).into_owned();
+                let body = if request.starts_with("GET /post") {
+                    r#"<head><meta property="og:image" content="/hero.png"></head>"#
+                } else {
+                    "{}"
+                };
+                seen.lock().unwrap().push(request);
+                let reply = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                conn.write_all(reply.as_bytes()).await.unwrap();
+            }
+        });
+
+        let mut store = crate::store::Store::open_in_memory().unwrap();
+        let registry = crate::registry::SourceRegistry::load(&store).unwrap();
+        let channel = format!(
+            r#"{{"name":"chat","kind":"discord","webhook_url":"http://{addr}/hook","style":"polished"}}"#
+        );
+        store.add_channel("chat", &channel).unwrap();
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        let stored = store
+            .insert_items(&[crate::model::NewItem {
+                source_id: "x:feed:https://example.org/feed".into(),
+                guid: "a".into(),
+                engines: vec!["godot".into()],
+                kind: crate::model::ItemKind::News,
+                title: "Godot news".into(),
+                url: Some(format!("http://{addr}/post")),
+                summary: None,
+                published: None,
+                story_key: "a".into(),
+                notify: true,
+                image_url: None,
+            }])
+            .unwrap();
+        let pipeline = Pipeline {
+            http: crate::fetch::Http::new("gen-test", None).unwrap(),
+            store: Arc::new(Mutex::new(store)),
+            registry: Arc::new(registry),
+            toggles: Arc::new(crate::toggles::SourceToggles::default()),
+            notify_wake: Arc::new(Notify::new()),
+            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
+            fetches: Arc::new(FetchRequests::default()),
+        };
+        let notifier = Notifier {
+            pipeline: pipeline.clone(),
+            bot: None,
+            app: Arc::new(AppConfig::default()),
+            wake: pipeline.notify_wake.clone(),
+        };
+        notifier.run_once().await;
+
+        let hero = format!("http://{addr}/hero.png");
+        let item = pipeline
+            .store
+            .lock()
+            .unwrap()
+            .item(stored[0].id)
+            .unwrap()
+            .unwrap();
+        assert_eq!(item.image_url.as_deref(), Some(hero.as_str()));
+        assert!(item.image_checked);
+        {
+            let requests = requests.lock().unwrap();
+            assert_eq!(requests.len(), 2, "{requests:?}");
+            assert!(requests[0].starts_with("GET /post "));
+            assert!(requests[1].starts_with("POST /hook?with_components=true "));
+            assert!(requests[1].contains(&hero), "{}", requests[1]);
+        }
+
+        // Looked up already: no second page fetch.
+        let mut again = vec![item];
+        again[0].image_url = None;
+        notifier.find_images(&mut again).await;
+        assert_eq!(requests.lock().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn skips_image_lookups_for_hacker_news_and_github_releases() {
+        let mut item = crate::notify::sample_item();
+        assert!(worth_an_image_lookup(
+            &item,
+            "https://godotengine.org/article/x"
+        ));
+        assert!(!worth_an_image_lookup(
+            &item,
+            "https://github.com/godotengine/godot/releases/tag/4.8-stable"
+        ));
+        item.source_id = "gfs:hn:godot".into();
+        assert!(!worth_an_image_lookup(&item, "https://example.org/"));
     }
 
     #[test]

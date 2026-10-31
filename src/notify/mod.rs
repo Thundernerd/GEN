@@ -146,10 +146,12 @@ pub async fn send(
         return Ok(());
     }
     match &channel.target {
-        ChannelTarget::Discord { webhook_url } => discord::send(ctx, webhook_url, items).await,
-        ChannelTarget::DiscordBot { channel_id, .. } => {
-            discord::send_bot(ctx, *channel_id, items).await
+        ChannelTarget::Discord { webhook_url, style } => {
+            discord::send(ctx, webhook_url, *style, items).await
         }
+        ChannelTarget::DiscordBot {
+            channel_id, style, ..
+        } => discord::send_bot(ctx, *channel_id, *style, items).await,
         ChannelTarget::Ntfy {
             server,
             topic,
@@ -273,6 +275,8 @@ pub fn samples() -> Vec<Sample> {
         first_seen: now,
         story_key: title.to_lowercase(),
         duplicate_of: None,
+        image_url: None,
+        image_checked: true,
     };
     let long_summary = "Two years in the making, this release reworks the renderer, adds a \
         new physics backend and brings C# hot reload to every platform. "
@@ -557,6 +561,7 @@ pub(crate) mod tests {
                 channel_name: String::new(),
                 subscriptions,
                 created_by_bot: false,
+                style: Default::default(),
             },
         };
         let unity_releases_godot_news = channel(
@@ -595,6 +600,7 @@ pub(crate) mod tests {
         let webhook = ChannelConfig {
             target: ChannelTarget::Discord {
                 webhook_url: "https://discord.com/api/webhooks/1/x".into(),
+                style: Default::default(),
             },
             ..unity_releases_godot_news.clone()
         };
@@ -648,15 +654,20 @@ pub(crate) mod tests {
         // The long one is cut short by every channel.
         let long = &samples.iter().find(|s| s.key == "long").unwrap().item;
         assert!(long.title.chars().count() > 256 && long.summary.as_ref().unwrap().len() > 4096);
-        let payload = &discord::build_payloads(&sources(), std::slice::from_ref(long))[0];
-        assert!(
-            payload["embeds"][0]["title"]
-                .as_str()
-                .unwrap()
-                .chars()
-                .count()
-                <= 256
-        );
+        for style in crate::config::MessageStyle::ALL {
+            let messages = discord::build_messages(
+                &sources(),
+                "https://gen.example.org/",
+                style,
+                std::slice::from_ref(long),
+            );
+            let payload = &messages[0].payload;
+            let text = payload.to_string();
+            assert!(text.chars().count() < 6000, "{style:?}");
+            if let Some(title) = payload["embeds"][0]["title"].as_str() {
+                assert!(title.chars().count() <= 256, "{style:?}");
+            }
+        }
     }
 
     #[test]

@@ -172,7 +172,11 @@ fn render(subject: String, sources: &SourcesConfig, base_url: &str, items: &[Ite
             escape_html(&meta)
         ));
         if let Some(s) = &summary {
-            html.push_str(&format!("<p>{}</p>\n", escape_html(s)));
+            // Summaries keep their paragraphs and list items on lines of their own.
+            html.push_str(&format!(
+                "<p>{}</p>\n",
+                escape_html(s).replace('\n', "<br>")
+            ));
         }
         html.push_str("</div>\n");
     }

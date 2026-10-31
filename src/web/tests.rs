@@ -66,6 +66,7 @@ fn item(source: &str, guid: &str, engines: &[&str], kind: ItemKind, title: &str)
         published: Some(Utc::now() - Duration::hours(3)),
         story_key: guid.into(),
         notify: false,
+        image_url: None,
     }
 }
 
@@ -828,7 +829,7 @@ async fn admin_manages_notification_channels() {
     assert_eq!(status, StatusCode::SEE_OTHER);
     let chat = &stored_channels(&st)[0];
     assert!(
-        matches!(&chat.target, crate::config::ChannelTarget::Discord { webhook_url } if webhook_url.ends_with("SUPERSECRET"))
+        matches!(&chat.target, crate::config::ChannelTarget::Discord { webhook_url, .. } if webhook_url.ends_with("SUPERSECRET"))
     );
     assert!(chat.rules.kinds.is_empty() && chat.rules.engines.is_empty());
     assert_eq!(chat.rules.keywords, ["4.8", "C#"]);
@@ -1225,4 +1226,119 @@ async fn notifications_page_without_the_bot() {
     let (_, body) = get_as(&st, "/notifications", &cookie).await;
     assert!(!body.contains("bot-card"));
     assert!(!body.contains("isn't running"));
+}
+
+fn style_of(c: &crate::config::ChannelConfig) -> Option<crate::config::MessageStyle> {
+    use crate::config::ChannelTarget;
+    match &c.target {
+        ChannelTarget::Discord { style, .. } | ChannelTarget::DiscordBot { style, .. } => {
+            Some(*style)
+        }
+        _ => None,
+    }
+}
+
+#[tokio::test]
+async fn sets_message_styles_one_by_one_and_in_bulk() {
+    use crate::config::MessageStyle;
+
+    let st = state();
+    let cookie = login(&st).await;
+    for form in [
+        format!("name=chat&kind=discord&webhook_url={HOOK}&kinds=news&enabled=1&style=compact"),
+        format!("name=chat-two&kind=discord&webhook_url={HOOK}&kinds=news&enabled=1"),
+        "name=phone&kind=ntfy&ntfy_topic=t&kinds=news&enabled=1".to_string(),
+    ] {
+        let (status, _, _) = send(&st, post_form("/notifications/add", &form, Some(&cookie))).await;
+        assert_eq!(status, StatusCode::SEE_OTHER, "{form}");
+    }
+    let row = r#"{"name":"discord-news","kind":"discordbot","guild_id":1,"channel_id":2,
+        "channel_name":"news","subscriptions":[{"engine":"godot","topic":"news"}]}"#;
+    st.with_store(move |s| s.add_channel("discord-news", row).map(|_| ()))
+        .await
+        .unwrap();
+    let styles = || {
+        stored_channels(&st)
+            .iter()
+            .map(style_of)
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        styles(),
+        [
+            Some(MessageStyle::Compact),
+            Some(MessageStyle::Card),
+            None,
+            Some(MessageStyle::Card)
+        ]
+    );
+
+    let (_, body) = get_as(&st, "/notifications", &cookie).await;
+    assert!(body.contains(r#"id="style-bar""#));
+    assert!(body.contains("Discord webhook · compact embed"), "{body}");
+    assert_eq!(
+        body.matches(r#"form="style-bar" name="name""#).count(),
+        3,
+        "not for ntfy"
+    );
+
+    // Edit forms keep and change the style, for webhook and bot channels.
+    let form = "original_name=chat&kind=discord&webhook_url=&kinds=news&enabled=1&style=image";
+    let (status, _, _) = send(&st, post_form("/notifications/edit", form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    let form = "original_name=discord-news&kind=discordbot&enabled=1&style=polished";
+    let (status, _, _) = send(&st, post_form("/notifications/edit", form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(styles()[0], Some(MessageStyle::Image));
+    assert_eq!(styles()[3], Some(MessageStyle::Polished));
+
+    // Ticked channels only; an ntfy channel among them is left alone.
+    let form = "style=compact&name=chat-two&name=phone";
+    let (status, _, body) = send(&st, post_form("/notifications/style", form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains("1 Discord channel now uses the compact embed style."),
+        "{body}"
+    );
+    assert_eq!(
+        styles(),
+        [
+            Some(MessageStyle::Image),
+            Some(MessageStyle::Compact),
+            None,
+            Some(MessageStyle::Polished)
+        ]
+    );
+
+    // Every Discord channel.
+    let (_, _, body) = send(
+        &st,
+        post_form("/notifications/style", "style=card&all=1", Some(&cookie)),
+    )
+    .await;
+    assert!(
+        body.contains("3 Discord channels now use the card style."),
+        "{body}"
+    );
+    assert!(styles().iter().flatten().all(|s| *s == MessageStyle::Card));
+
+    // Nothing picked, a bad style, and not logged in.
+    let (_, _, body) = send(
+        &st,
+        post_form("/notifications/style", "style=card", Some(&cookie)),
+    )
+    .await;
+    assert!(body.contains("Tick the channels to change"));
+    let (_, _, body) = send(
+        &st,
+        post_form("/notifications/style", "style=fancy&all=1", Some(&cookie)),
+    )
+    .await;
+    assert!(body.contains("Choose a message style."));
+    let (status, _, _) = send(
+        &st,
+        post_form("/notifications/style", "style=card&all=1", None),
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
 }

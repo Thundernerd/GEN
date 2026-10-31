@@ -73,6 +73,7 @@ fn to_item(r: Release) -> RawItem {
         summary: Some(format!("Unity {label} release")),
         published: r.release_date,
         prerelease: Some(prerelease),
+        image_url: None,
         guid: r.version,
     }
 }

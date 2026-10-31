@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 use super::queries::{self, ItemFilter};
 use super::view::{DateView, snippet};
 use super::{AppError, AppState, PageResult};
-use crate::config::{BotSubscription, ChannelConfig, ChannelTarget, NotifyRules};
+use crate::config::{BotSubscription, ChannelConfig, ChannelTarget, MessageStyle, NotifyRules};
 use crate::model::{Item, ItemKind};
 use crate::notify::{self, Channel, NotifyContext};
 
@@ -88,10 +88,12 @@ async fn render(st: &AppState, feedback: Option<Value>, notice: Option<Value>) -
                 }
                 _ => rules_summary(st, &c.config.rules),
             };
+            let style = style_of(&c.config.target);
             json!({
                 "name": c.config.name,
                 "kind": c.config.target.kind(),
                 "kind_label": kind_label(c.config.target.kind()),
+                "style": style.map(|s| s.label()),
                 "enabled": c.config.enabled,
                 "target": target_summary(&c.config.target),
                 "rules": rules,
@@ -123,6 +125,8 @@ async fn render(st: &AppState, feedback: Option<Value>, notice: Option<Value>) -
             "feedback": feedback,
             "notice": notice,
             "bot": bot_view(st),
+            "styles": MessageStyle::ALL.map(|s| json!({"key": s.key(), "label": s.label()})),
+            "has_discord": channels.iter().any(|c| style_of(&c.config.target).is_some()),
         }),
     )?;
     let status = if feedback.is_some() {
@@ -131,6 +135,16 @@ async fn render(st: &AppState, feedback: Option<Value>, notice: Option<Value>) -
         StatusCode::OK
     };
     Ok((status, page).into_response())
+}
+
+/// A Discord channel's message style; `None` for other kinds of channel.
+fn style_of(target: &ChannelTarget) -> Option<MessageStyle> {
+    match target {
+        ChannelTarget::Discord { style, .. } | ChannelTarget::DiscordBot { style, .. } => {
+            Some(*style)
+        }
+        _ => None,
+    }
 }
 
 /// The Discord bot card: whether it's set up and connected, and its invite link.
@@ -196,7 +210,7 @@ fn is_reference(value: &str) -> bool {
 /// Where a channel sends to, without secrets.
 fn target_summary(target: &ChannelTarget) -> String {
     match target {
-        ChannelTarget::Discord { webhook_url } if is_reference(webhook_url) => {
+        ChannelTarget::Discord { webhook_url, .. } if is_reference(webhook_url) => {
             format!("webhook {webhook_url}")
         }
         ChannelTarget::Discord { .. } => "Discord webhook".to_string(),
@@ -312,7 +326,9 @@ fn secret_hints(target: &ChannelTarget) -> Value {
         _ => json!({"set": false}),
     };
     match target {
-        ChannelTarget::Discord { webhook_url } => json!({"webhook_url": hint(Some(webhook_url))}),
+        ChannelTarget::Discord { webhook_url, .. } => {
+            json!({"webhook_url": hint(Some(webhook_url))})
+        }
         ChannelTarget::DiscordBot { .. } => json!({}),
         ChannelTarget::Ntfy { topic, token, .. } => {
             json!({"ntfy_topic": hint(Some(topic)), "ntfy_token": hint(token.as_ref())})
@@ -343,6 +359,7 @@ fn form_values(c: &ChannelConfig) -> Value {
         "include_untagged": c.rules.include_untagged,
         "ntfy_server": "https://ntfy.sh",
         "smtp_port": 587,
+        "style": style_of(&c.target).unwrap_or_default().key(),
     });
     match &c.target {
         ChannelTarget::Discord { .. } | ChannelTarget::DiscordBot { .. } => {}
@@ -419,6 +436,7 @@ impl Posted {
         for key in [
             "name",
             "kind",
+            "style",
             "keywords",
             "ntfy_server",
             "smtp_host",
@@ -453,10 +471,11 @@ impl Posted {
         let target = match self.get("kind").as_deref() {
             Some("discord") => ChannelTarget::Discord {
                 webhook_url: secret("webhook_url", |t| match t {
-                    ChannelTarget::Discord { webhook_url } => Some(webhook_url.clone()),
+                    ChannelTarget::Discord { webhook_url, .. } => Some(webhook_url.clone()),
                     _ => None,
                 })
                 .ok_or("Enter the Discord webhook URL.")?,
+                style: self.style()?,
             },
             Some("ntfy") => ChannelTarget::Ntfy {
                 server: self
@@ -569,8 +588,19 @@ impl Posted {
         let mut channel = existing.clone();
         channel.enabled = self.checked("enabled");
         channel.rules.keywords = split_list(self.get("keywords"));
+        if let ChannelTarget::DiscordBot { style, .. } = &mut channel.target {
+            *style = self.style()?;
+        }
         channel.check()?;
         Ok(channel)
+    }
+
+    /// The chosen message style; the default when the form has none.
+    fn style(&self) -> Result<MessageStyle, String> {
+        match self.get("style") {
+            None => Ok(MessageStyle::default()),
+            Some(key) => MessageStyle::parse(&key).ok_or_else(|| "Choose a message style.".into()),
+        }
     }
 }
 
@@ -697,6 +727,52 @@ pub(super) async fn remove(
             .await?;
         tracing::info!(channel = %name, "notify channel removed");
         Ok(Redirect::to("/notifications").into_response())
+    }
+    .await;
+    st.respond(result)
+}
+
+/// Sets the message style of the ticked Discord channels (`name`, repeated), or of every
+/// Discord channel (`all=1`).
+pub(super) async fn style(State(st): State<AppState>, headers: HeaderMap, body: Bytes) -> Response {
+    let result = async {
+        require_admin(&st, &headers)?;
+        let posted = Posted::parse(&body);
+        let style = match posted.style() {
+            Ok(style) => style,
+            Err(msg) => return render(&st, None, Some(json!({"ok": false, "message": msg}))).await,
+        };
+        let all = posted.checked("all");
+        let names = posted.all("name");
+        if !all && names.is_empty() {
+            let notice = json!({"ok": false,
+                "message": "Tick the channels to change, or choose all Discord channels."});
+            return render(&st, None, Some(notice)).await;
+        }
+        let channels = st.with_store(notify::load_channels).await?;
+        let mut changed = 0;
+        for mut channel in channels.into_iter().map(|c| c.config) {
+            if !all && !names.contains(&channel.name) {
+                continue;
+            }
+            let (ChannelTarget::Discord { style: current, .. }
+            | ChannelTarget::DiscordBot { style: current, .. }) = &mut channel.target
+            else {
+                continue;
+            };
+            if *current != style {
+                *current = style;
+                save(&st, &channel, false).await?;
+            }
+            changed += 1;
+        }
+        let plural = if changed == 1 { "" } else { "s" };
+        let message = format!(
+            "{changed} Discord channel{plural} now use{} the {} style.",
+            if changed == 1 { "s" } else { "" },
+            style.label().to_lowercase()
+        );
+        render(&st, None, Some(json!({"ok": true, "message": message}))).await
     }
     .await;
     st.respond(result)

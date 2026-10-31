@@ -84,6 +84,7 @@ pub fn parse(
                 summary: None,
                 published,
                 prerelease: None,
+                image_url: None,
             })
         })
         .collect();

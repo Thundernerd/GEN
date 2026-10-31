@@ -13,7 +13,7 @@ use chrono::{DateTime, Utc};
 use reqwest::header::{self, HeaderMap, HeaderValue};
 use serde::Deserialize;
 
-use super::{Conditional, FetchError, FetchOutcome, Http, feed, truncate};
+use super::{Conditional, FetchError, FetchOutcome, Http, feed, text_to_lines, truncate};
 use crate::config::GithubMode;
 use crate::model::{RawItem, SourceState};
 
@@ -114,10 +114,11 @@ fn parse_releases_json(
                 url: Some(r.html_url),
                 summary: r
                     .body
-                    .map(|b| truncate(&collapse_ws(&b), SUMMARY_MAX))
+                    .map(|b| truncate(&text_to_lines(&b), SUMMARY_MAX))
                     .filter(|s| !s.is_empty()),
                 published: r.published_at,
                 prerelease: Some(r.prerelease),
+                image_url: None,
                 guid: r.tag_name,
             }
         })
@@ -192,10 +193,6 @@ fn release_title(repo: &str, name: &str) -> String {
     } else {
         name.to_string()
     }
-}
-
-fn collapse_ws(s: &str) -> String {
-    s.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
 #[cfg(test)]
@@ -274,7 +271,7 @@ mod tests {
         );
         let summary = first.summary.as_deref().unwrap();
         assert!(summary.chars().count() <= SUMMARY_MAX + 1);
-        assert!(!summary.contains('\n'));
+        assert!(!summary.contains("\n\n") && !summary.contains('\r'));
     }
 
     #[test]
@@ -293,7 +290,7 @@ mod tests {
         assert_eq!(items[0].guid, "4.8-beta1");
         assert_eq!(items[0].title, "godot 4.8-beta1");
         assert_eq!(items[0].prerelease, Some(true));
-        assert_eq!(items[0].summary.as_deref(), Some("Beta * fixes"));
+        assert_eq!(items[0].summary.as_deref(), Some("Beta\n• fixes"));
         assert_eq!(items[1].summary, None);
 
         let filtered = parse_releases_json(body, "o/r", Some("launcher/")).unwrap();

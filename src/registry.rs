@@ -153,10 +153,13 @@ impl NewOwner {
         if let Some(url) = homepage {
             check_url(url)?;
         }
-        if let NewOwner::Engine(e) = self
-            && !(1..=3).contains(&e.tier)
-        {
-            return Err("The tier must be 1, 2 or 3.".into());
+        if let NewOwner::Engine(e) = self {
+            if !(1..=3).contains(&e.tier) {
+                return Err("The tier must be 1, 2 or 3.".into());
+            }
+            if let Some(icon) = &e.icon {
+                check_url(icon)?;
+            }
         }
         Ok(())
     }
@@ -213,6 +216,11 @@ pub enum SourceEdit {
     },
     /// Adds an engine or outlet with the sources it carries.
     AddOwner(NewOwner),
+    /// Sets an engine's icon URL.
+    SetEngineIcon {
+        engine_id: String,
+        icon: Option<String>,
+    },
     RemoveOwner(String),
 }
 
@@ -331,6 +339,21 @@ impl SourceRegistry {
                 stored.owners.push(owner);
                 self.commit(stored, || store.add_owner(&id, kind, &json, &rows))?;
                 tracing::info!(owner = %id, sources = rows.len(), "{kind} added");
+                Ok(Vec::new())
+            }
+            SourceEdit::SetEngineIcon { engine_id, icon } => {
+                let Some(NewOwner::Engine(engine)) =
+                    stored.owners.iter_mut().find(|o| o.id() == engine_id)
+                else {
+                    return Err(EditError::Invalid(format!(
+                        "There is no engine “{engine_id}”."
+                    )));
+                };
+                engine.icon = icon;
+                let owner = NewOwner::Engine(engine.clone());
+                owner.check().map_err(EditError::Invalid)?;
+                let json = owner.to_json().map_err(anyhow::Error::from)?;
+                self.commit(stored, || store.update_owner(&engine_id, &json))?;
                 Ok(Vec::new())
             }
             SourceEdit::RemoveOwner(id) => {
@@ -609,6 +632,7 @@ mod tests {
             tier: 1,
             csharp: "native".into(),
             homepage: None,
+            icon: None,
             enabled: true,
             aliases: vec!["stride".into()],
             exclude: Vec::new(),

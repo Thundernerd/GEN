@@ -86,6 +86,7 @@ fn to_item(hit: Hit) -> Option<RawItem> {
         summary: Some(summary),
         published: hit.created_at,
         prerelease: None,
+        image_url: None,
     })
 }
 

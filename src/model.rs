@@ -99,11 +99,14 @@ pub struct RawItem {
     pub guid: String,
     pub title: String,
     pub url: Option<String>,
-    /// Plain-text summary (fetchers strip HTML).
+    /// Plain-text summary (fetchers strip HTML). Paragraphs and list items are on lines
+    /// of their own.
     pub summary: Option<String>,
     pub published: Option<DateTime<Utc>>,
     /// Set when the source says explicitly whether this is a prerelease (e.g. GitHub REST).
     pub prerelease: Option<bool>,
+    /// A preview image the source gives (feed media, enclosure or an image in the entry).
+    pub image_url: Option<String>,
 }
 
 /// A classified item ready to be inserted into the store.
@@ -117,6 +120,7 @@ pub struct NewItem {
     pub url: Option<String>,
     pub summary: Option<String>,
     pub published: Option<DateTime<Utc>>,
+    pub image_url: Option<String>,
     /// Normalized key used for cross-source dedup (see `classify::story_key`).
     pub story_key: String,
     /// Whether this item should be notified (false for a source's first, backfill fetch).
@@ -139,6 +143,10 @@ pub struct Item {
     pub story_key: String,
     /// Set when the same story was already stored from another source.
     pub duplicate_of: Option<i64>,
+    /// A preview image, from the source or the linked page's `og:image`.
+    pub image_url: Option<String>,
+    /// The linked page was already looked at for an image (see `fetch::og`).
+    pub image_checked: bool,
 }
 
 impl Item {

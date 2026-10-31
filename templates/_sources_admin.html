@@ -123,6 +123,7 @@
           </select>
         </label>
         <label><span>C# support</span><input name="csharp" value="{{ e.csharp or "" }}" placeholder="none"></label>
+        <label><span>Icon URL (optional; PNG/JPEG/WebP, shown in Discord)</span><input type="url" name="icon" value="{{ e.icon or "" }}"></label>
       </div>
       <label><span>Aliases (comma-separated; tag outlet items with this engine. Lowercase matches any case, “Unity” only that case)</span><input name="aliases" value="{{ e.aliases or "" }}"></label>
       <label><span>Exclude (comma-separated phrases that veto an alias match)</span><input name="exclude" value="{{ e.exclude or "" }}"></label>

@@ -287,6 +287,7 @@ pub fn router(state: AppState) -> Router {
         .route("/notifications/toggle", post(notifications::toggle))
         .route("/notifications/remove", post(notifications::remove))
         .route("/notifications/test", post(notifications::test))
+        .route("/notifications/style", post(notifications::style))
         .route("/login", get(login_form).post(login))
         .route("/logout", post(logout))
         .route("/view", get(set_view))

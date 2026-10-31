@@ -13,6 +13,8 @@ pub const SEEDED: &[&str] = &["unity", "unreal", "godot"];
 
 /// `meta` key set once the defaults were seeded.
 const SEEDED_KEY: &str = "seeded";
+/// `meta` key set once the catalog's engine icons were copied into stored engines.
+const ICONS_KEY: &str = "catalog_icons_backfilled";
 
 static CATALOG: LazyLock<SourcesConfig> = LazyLock::new(|| {
     let catalog: SourcesConfig =
@@ -127,6 +129,29 @@ pub fn seed_once(registry: &SourceRegistry, store: &mut Store) -> anyhow::Result
     Ok(())
 }
 
+/// Once per database: gives engines added from the catalog before it had icons the
+/// catalog's icon. Engines that already have one keep it.
+pub fn backfill_icons_once(registry: &SourceRegistry, store: &mut Store) -> anyhow::Result<()> {
+    if store.meta(ICONS_KEY)?.is_some() {
+        return Ok(());
+    }
+    let snapshot = registry.current();
+    for engine in snapshot.config.engines.iter().filter(|e| e.icon.is_none()) {
+        let Some(icon) = CATALOG.engine(&engine.id).and_then(|e| e.icon.clone()) else {
+            continue;
+        };
+        let edit = SourceEdit::SetEngineIcon {
+            engine_id: engine.id.clone(),
+            icon: Some(icon),
+        };
+        registry
+            .apply(store, edit)
+            .map_err(|err| anyhow::anyhow!("setting the icon of {}: {err}", engine.id))?;
+    }
+    store.set_meta(ICONS_KEY, &chrono::Utc::now().to_rfc3339())?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -161,6 +186,7 @@ mod tests {
             published: None,
             story_key: format!("{source} t"),
             notify: false,
+            image_url: None,
         };
         let godot = "godot:github:godotengine/godot";
         store
@@ -190,5 +216,62 @@ mod tests {
         let suggested = suggestions(&reg.current());
         assert_eq!(suggested.sources.len(), 1);
         assert_eq!(suggested.sources[0].id, godot);
+    }
+
+    #[test]
+    fn backfills_engine_icons_once() {
+        let mut store = Store::open_in_memory().unwrap();
+        let reg = SourceRegistry::load(&store).unwrap();
+        // Godot as stored before the catalog had icons, plus an engine of the user's own.
+        let mut godot = CATALOG.engine("godot").cloned().unwrap();
+        godot.icon = None;
+        godot.sources.clear();
+        reg.apply(&mut store, SourceEdit::AddOwner(NewOwner::Engine(godot)))
+            .unwrap();
+        let mut own = CATALOG.engine("godot").cloned().unwrap();
+        own.id = "mine".into();
+        own.icon = None;
+        own.sources.clear();
+        reg.apply(&mut store, SourceEdit::AddOwner(NewOwner::Engine(own)))
+            .unwrap();
+
+        backfill_icons_once(&reg, &mut store).unwrap();
+        let icon =
+            |reg: &SourceRegistry, id: &str| reg.current().config.engine(id).unwrap().icon.clone();
+        assert_eq!(icon(&reg, "godot"), CATALOG.engine("godot").unwrap().icon);
+        assert!(icon(&reg, "godot").is_some());
+        assert_eq!(icon(&reg, "mine"), None, "not in the catalog");
+        // Stored, so it survives a restart.
+        let reloaded = SourceRegistry::load(&store).unwrap();
+        assert!(icon(&reloaded, "godot").is_some());
+
+        // Only once: an icon removed later stays removed.
+        reg.apply(
+            &mut store,
+            SourceEdit::SetEngineIcon {
+                engine_id: "godot".into(),
+                icon: None,
+            },
+        )
+        .unwrap();
+        backfill_icons_once(&reg, &mut store).unwrap();
+        assert_eq!(icon(&reg, "godot"), None);
+    }
+
+    #[test]
+    fn catalog_icons_are_web_images() {
+        for e in &CATALOG.engines {
+            if let Some(icon) = &e.icon {
+                assert!(icon.starts_with("https://"), "{}: {icon}", e.id);
+                assert!(
+                    !icon.ends_with(".svg") && !icon.ends_with(".ico"),
+                    "{}: {icon}",
+                    e.id
+                );
+            }
+        }
+        for id in SEEDED {
+            assert!(CATALOG.engine(id).unwrap().icon.is_some(), "{id}");
+        }
     }
 }

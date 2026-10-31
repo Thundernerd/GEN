@@ -12,6 +12,8 @@
 #        3 = notable without C#.
 # Sources with `enabled = false` are added switched off.
 # Aliases are matched case-insensitively as whole words against outlet articles.
+# `icon` is a PNG/JPEG/WebP logo for Discord messages: the engine's own icon, or its
+# GitHub organization's avatar (never a person's).
 #
 # All URLs below were verified with curl / the GitHub API on 2026-10-22.
 #
@@ -28,6 +30,7 @@ name = "Unity"
 tier = 1
 csharp = "native (C# scripting)"
 homepage = "https://unity.com"
+icon = "https://unity.com/apple-touch-icon.png"
 aliases = ["Unity", "UNITY", "unity3d", "unity engine", "unity 6", "unity technologies"]
 exclude = ["ubuntu unity", "unity desktop", "unity shell", "unitypoint"]
   [[engine.source]]
@@ -50,6 +53,7 @@ name = "Unreal Engine"
 tier = 1
 csharp = "plugins only (UnrealSharp)"
 homepage = "https://www.unrealengine.com"
+icon = "https://avatars.githubusercontent.com/u/6615685?s=128&v=4"
 aliases = ["unreal", "unreal engine", "ue5", "ue6", "uefn", "metahuman", "nanite", "unrealsharp"]
   [[engine.source]]
   kind = "feed"
@@ -63,6 +67,7 @@ name = "Godot"
 tier = 1
 csharp = "first-class (.NET build)"
 homepage = "https://godotengine.org"
+icon = "https://godotengine.org/assets/favicon.png"
 aliases = ["godot", "godot engine", "gdscript"]
   [[engine.source]]
   kind = "feed"
@@ -81,6 +86,7 @@ name = "Stride"
 tier = 1
 csharp = "native (engine written in C#)"
 homepage = "https://www.stride3d.net"
+icon = "https://www.stride3d.net/favicon.png"
 aliases = ["stride3d", "stride engine", "stride game engine", "xenko"]
   [[engine.source]]
   kind = "feed"
@@ -99,6 +105,7 @@ name = "Flax Engine"
 tier = 1
 csharp = "native (C# scripting, C++ core)"
 homepage = "https://flaxengine.com"
+icon = "https://flaxengine.com/wp-content/uploads/2020/12/cropped-Web_Logo_512-180x180.png"
 aliases = ["flax engine", "flaxengine"]
   [[engine.source]]
   kind = "feed"
@@ -118,6 +125,7 @@ name = "S&Box"
 tier = 1
 csharp = "native (C# on Source 2)"
 homepage = "https://sbox.game"
+icon = "https://sbox.game/apple-touch-icon.png"
 aliases = ["s&box", "sbox", "s and box"]
   [[engine.source]]
   kind = "feed"
@@ -141,6 +149,7 @@ name = "Prowl Engine"
 tier = 1
 csharp = "native (engine written in C#, .NET 8)"
 homepage = "https://github.com/ProwlEngine/Prowl"
+icon = "https://avatars.githubusercontent.com/u/163802774?s=128&v=4"
 aliases = ["prowl engine", "prowlengine"]
   [[engine.source]]
   kind = "github"
@@ -172,6 +181,7 @@ name = "OpenEngine"
 tier = 1
 csharp = "first-class (.NET 10 CoreCLR, hot reload)"
 homepage = "https://openengine.dev"
+icon = "https://openengine.dev/apple-touch-icon.png"
 aliases = ["openengine", "game crafters guild"]
   [[engine.source]]
   kind = "github"
@@ -190,6 +200,7 @@ name = "MonoGame"
 tier = 1
 csharp = "native (C# framework)"
 homepage = "https://monogame.net"
+icon = "https://monogame.net/favicon.png"
 aliases = ["monogame"]
   [[engine.source]]
   kind = "feed"
@@ -209,6 +220,7 @@ name = "FNA"
 tier = 1
 csharp = "native (XNA4 reimplementation in C#)"
 homepage = "https://fna-xna.github.io"
+icon = "https://fna-xna.github.io/assets/favicon.png"
 aliases = ["fna", "fna-xna"]
   [[engine.source]]
   kind = "feed"
@@ -229,6 +241,7 @@ name = "NeoAxis Engine"
 tier = 1
 csharp = "native (C# engine and scripting)"
 homepage = "https://www.neoaxis.com"
+icon = "https://www.neoaxis.com/images/favicon_180.png"
 aliases = ["neoaxis", "neoaxis engine"]
   [[engine.source]]
   kind = "feed"
@@ -251,6 +264,7 @@ name = "Evergine"
 tier = 1
 csharp = "native (C# engine)"
 homepage = "https://evergine.com"
+icon = "https://evergine.com/apple-touch-icon.png"
 aliases = ["evergine", "wave engine"]
   [[engine.source]]
   kind = "feed"
@@ -266,6 +280,7 @@ name = "UNIGINE"
 tier = 1
 csharp = "C# API"
 homepage = "https://unigine.com"
+icon = "https://unigine.com/assets/images/favicons/apple-touch-icon/apple-touch-icon-152x152.png"
 aliases = ["unigine"]
   [[engine.source]]
   kind = "feed"
@@ -280,6 +295,7 @@ name = "Silk.NET"
 tier = 1
 csharp = "bindings (OpenGL/Vulkan/DirectX/OpenAL/...)"
 homepage = "https://dotnet.github.io/Silk.NET"
+icon = "https://avatars.githubusercontent.com/u/9141961?s=128&v=4"
 aliases = ["silk.net", "silknet"]
   [[engine.source]]
   kind = "github"
@@ -302,6 +318,7 @@ name = "BRUTAL"
 tier = 1
 csharp = "native (C# framework over native libs, Vulkan)"
 homepage = "https://ahwoo.com/brutal"
+icon = "https://avatars.githubusercontent.com/u/189169933?s=128&v=4"
 aliases = ["BRUTAL C#", "brutal framework", "brutal game framework", "brutal c# framework", "ahwootech"]
   [[engine.source]]
   kind = "github"
@@ -328,6 +345,7 @@ name = "KNI"
 tier = 2
 csharp = "native (XNA-style C# framework)"
 homepage = "https://github.com/kniEngine/kni"
+icon = "https://avatars.githubusercontent.com/u/110910949?s=128&v=4"
 aliases = ["kni engine", "kniengine"]
   [[engine.source]]
   kind = "github"
@@ -356,6 +374,7 @@ name = "Raylib-cs"
 tier = 2
 csharp = "bindings (raylib for C#)"
 homepage = "https://github.com/raylib-cs/raylib-cs"
+icon = "https://avatars.githubusercontent.com/u/194473703?s=128&v=4"
 aliases = ["raylib-cs"]
   [[engine.source]]
   kind = "github"
@@ -368,6 +387,7 @@ name = "Foster"
 tier = 2
 csharp = "native (C# framework)"
 homepage = "https://github.com/FosterFramework/Foster"
+icon = "https://avatars.githubusercontent.com/u/155486525?s=128&v=4"
 aliases = ["foster framework", "fosterframework"]
   [[engine.source]]
   kind = "github"
@@ -381,6 +401,7 @@ name = "MoonWorks"
 tier = 2
 csharp = "native (C# framework)"
 homepage = "https://github.com/MoonsideGames/MoonWorks"
+icon = "https://avatars.githubusercontent.com/u/54976546?s=128&v=4"
 aliases = ["moonworks"]
   [[engine.source]]
   kind = "github"
@@ -395,6 +416,7 @@ name = "MonoGame.Extended"
 tier = 2
 csharp = "native (MonoGame library)"
 homepage = "https://github.com/MonoGame-Extended/Monogame-Extended"
+icon = "https://avatars.githubusercontent.com/u/222491076?s=128&v=4"
 aliases = ["monogame.extended", "monogame extended"]
   [[engine.source]]
   kind = "github"
@@ -423,6 +445,7 @@ name = "FlatRedBall"
 tier = 2
 csharp = "native (C# engine on MonoGame/FNA)"
 homepage = "https://www.flatredball.com"
+icon = "https://flatredball.com/wp-content/uploads/2016/02/cropped-logo-1024-180x180.png"
 aliases = ["flatredball", "flat red ball"]
   [[engine.source]]
   kind = "github"
@@ -447,6 +470,7 @@ name = "Myra"
 tier = 2
 csharp = "native (C# UI library)"
 homepage = "https://github.com/MyraUI/Myra"
+icon = "https://avatars.githubusercontent.com/u/290012421?s=128&v=4"
 aliases = ["myra ui"]
   [[engine.source]]
   kind = "github"
@@ -471,6 +495,7 @@ name = "osu!framework"
 tier = 2
 csharp = "native (C# framework)"
 homepage = "https://github.com/ppy/osu-framework"
+icon = "https://avatars.githubusercontent.com/u/995763?s=128&v=4"
 aliases = ["osu!framework", "osu-framework", "osu framework"]
   [[engine.source]]
   kind = "github"
@@ -496,6 +521,7 @@ name = "rbfx (Rebel Fork Framework)"
 tier = 2
 csharp = "C# bindings (Urho3D fork)"
 homepage = "https://rebelfork.io"
+icon = "https://avatars.githubusercontent.com/u/56016730?s=128&v=4"
 aliases = ["rbfx", "rebel fork framework"]
   [[engine.source]]
   kind = "github"
@@ -535,6 +561,7 @@ name = "BEPUphysics v2"
 tier = 2
 csharp = "native (C# physics library)"
 homepage = "https://github.com/bepu/bepuphysics2"
+icon = "https://avatars.githubusercontent.com/u/28586344?s=128&v=4"
 aliases = ["bepu", "bepuphysics"]
   [[engine.source]]
   kind = "github"
@@ -583,6 +610,7 @@ name = "MoonSharp"
 tier = 2
 csharp = "native (Lua interpreter in C#)"
 homepage = "https://www.moonsharp.org"
+icon = "https://avatars.githubusercontent.com/u/54413747?s=128&v=4"
 aliases = ["moonsharp"]
   [[engine.source]]
   kind = "github"
@@ -597,6 +625,7 @@ name = "Blazium"
 tier = 2
 csharp = "first-class (.NET build, Godot fork)"
 homepage = "https://blazium.app"
+icon = "https://avatars.githubusercontent.com/u/184553414?s=128&v=4"
 aliases = ["blazium", "blazium engine"]
   [[engine.source]]
   kind = "github"
@@ -613,6 +642,7 @@ name = "Bevy"
 tier = 3
 csharp = "none (Rust)"
 homepage = "https://bevy.org"
+icon = "https://bevy.org/assets/favicon.png"
 aliases = ["bevy", "bevy engine"]
   [[engine.source]]
   kind = "feed"
@@ -630,6 +660,7 @@ name = "Fyrox"
 tier = 3
 csharp = "none (Rust)"
 homepage = "https://fyrox.rs"
+icon = "https://fyrox.rs/assets/favicon/apple-touch-icon.png"
 aliases = ["fyrox"]
   [[engine.source]]
   kind = "feed"
@@ -647,6 +678,7 @@ name = "Defold"
 tier = 3
 csharp = "none (Lua)"
 homepage = "https://defold.com"
+icon = "https://avatars.githubusercontent.com/u/1090871?s=128&v=4"
 aliases = ["defold"]
   [[engine.source]]
   kind = "feed"
@@ -664,6 +696,7 @@ name = "O3DE"
 tier = 3
 csharp = "none (C++/Lua; community C# gem only)"
 homepage = "https://o3de.org"
+icon = "https://o3de.org/wp-content/uploads/2023/06/URL-Logo.png"
 aliases = ["o3de", "open 3d engine"]
   [[engine.source]]
   kind = "feed"
@@ -682,6 +715,7 @@ name = "CRYENGINE"
 tier = 3
 csharp = "legacy C# support"
 homepage = "https://www.cryengine.com"
+icon = "https://www.cryengine.com/icon-apple-touch-icon.png"
 aliases = ["cryengine"]
   [[engine.source]]
   kind = "feed"
@@ -695,6 +729,7 @@ name = "GameMaker"
 tier = 3
 csharp = "none (GML)"
 homepage = "https://gamemaker.io"
+icon = "https://gamemaker.io/next/images/icons/apple-touch-icon.png"
 aliases = ["gamemaker", "game maker studio"]
   [[engine.source]]
   kind = "feed"
@@ -708,6 +743,7 @@ name = "Cocos"
 tier = 3
 csharp = "none (TypeScript)"
 homepage = "https://www.cocos.com"
+icon = "https://avatars.githubusercontent.com/u/6937061?s=128&v=4"
 aliases = ["cocos creator", "cocos2d", "cocos engine"]
   [[engine.source]]
   kind = "github"
@@ -732,6 +768,7 @@ name = "Babylon.js"
 tier = 3
 csharp = "none (TypeScript)"
 homepage = "https://www.babylonjs.com"
+icon = "https://avatars.githubusercontent.com/u/4855800?s=128&v=4"
 aliases = ["babylon.js", "babylonjs"]
   [[engine.source]]
   kind = "feed"
@@ -750,6 +787,7 @@ name = "PlayCanvas"
 tier = 3
 csharp = "none (JavaScript)"
 homepage = "https://playcanvas.com"
+icon = "https://playcanvas.com/assets/images/icons/favicon.png"
 aliases = ["playcanvas"]
   [[engine.source]]
   kind = "feed"
@@ -767,6 +805,7 @@ name = "Phaser"
 tier = 3
 csharp = "none (JavaScript)"
 homepage = "https://phaser.io"
+icon = "https://avatars.githubusercontent.com/u/54856938?s=128&v=4"
 aliases = ["phaser.js", "phaserjs", "phaser 4", "phaser framework"]
   [[engine.source]]
   kind = "feed"
@@ -784,6 +823,7 @@ name = "libGDX"
 tier = 3
 csharp = "none (Java)"
 homepage = "https://libgdx.com"
+icon = "https://libgdx.com/assets/icons/apple-touch-icon.png"
 aliases = ["libgdx"]
   [[engine.source]]
   kind = "feed"
@@ -801,6 +841,7 @@ name = "GDevelop"
 tier = 3
 csharp = "none (visual events / JavaScript)"
 homepage = "https://gdevelop.io"
+icon = "https://gdevelop.io/favicons/apple-touch-icon.png"
 aliases = ["gdevelop"]
   [[engine.source]]
   kind = "github"
@@ -813,6 +854,7 @@ name = "Solar2D"
 tier = 3
 csharp = "none (Lua)"
 homepage = "https://solar2d.com"
+icon = "https://solar2d.com/images/icon-180x180.png"
 aliases = ["solar2d", "corona sdk"]
   [[engine.source]]
   kind = "github"
@@ -825,6 +867,7 @@ name = "Wicked Engine"
 tier = 3
 csharp = "none (C++/Lua)"
 homepage = "https://wickedengine.net"
+icon = "https://wickedengine.net/favicon.png"
 aliases = ["wicked engine", "wickedengine"]
   [[engine.source]]
   kind = "github"
@@ -837,6 +880,7 @@ name = "ezEngine"
 tier = 3
 csharp = "none (C++/AngelScript; C# editor only)"
 homepage = "https://ezengine.net"
+icon = "https://avatars.githubusercontent.com/u/7082461?s=128&v=4"
 aliases = ["ezengine", "ez engine"]
   [[engine.source]]
   kind = "github"
@@ -849,6 +893,7 @@ name = "Armory3D"
 tier = 3
 csharp = "none (Haxe)"
 homepage = "https://armory3d.org"
+icon = "https://avatars.githubusercontent.com/u/20436620?s=128&v=4"
 aliases = ["armory3d", "armory engine"]
   [[engine.source]]
   kind = "github"
@@ -861,6 +906,7 @@ name = "Excalibur.js"
 tier = 3
 csharp = "none (TypeScript)"
 homepage = "https://excaliburjs.com"
+icon = "https://avatars.githubusercontent.com/u/6165683?s=128&v=4"
 aliases = ["excalibur.js", "excaliburjs"]
   [[engine.source]]
   kind = "feed"

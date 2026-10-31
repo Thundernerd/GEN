@@ -994,6 +994,7 @@ dependencies = [
  "bytes",
  "chrono",
  "clap",
+ "ego-tree",
  "feed-rs",
  "futures",
  "http-body-util",

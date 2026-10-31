@@ -513,7 +513,7 @@ table.sources td.actions { vertical-align: middle; }
 .login-page { max-width: 26rem; padding: 1rem 0 2rem; }
 .login-form, .stack-form { display: flex; flex-direction: column; gap: 0.9rem; }
 .login-form label, .stack-form label { display: flex; flex-direction: column; gap: 0.3rem; font-size: 0.9rem; color: var(--muted); }
-.login-form input, .stack-form input:not([type="checkbox"]), .stack-form select {
+.login-form input, .stack-form input:not([type="checkbox"]), .stack-form select, .style-bar select {
   font: inherit;
   color: var(--text);
   background: var(--surface-2);
@@ -562,7 +562,7 @@ details.panel .form-error { margin-top: 0; }
 .stack-form fieldset { border: 1px solid var(--border); border-radius: 8px; margin: 0; padding: 0.6rem 0.85rem 0.85rem; display: flex; flex-direction: column; gap: 0.7rem; }
 .stack-form legend { font-weight: 600; font-size: 0.85rem; padding: 0 0.3rem; }
 .stack-form label.check { flex-direction: row; align-items: center; gap: 0.45rem; }
-.stack-form input[type="checkbox"] { width: 1.05rem; height: 1.05rem; accent-color: var(--accent); }
+.stack-form input[type="checkbox"], .style-bar input[type="checkbox"], .style-pick { width: 1.05rem; height: 1.05rem; accent-color: var(--accent); }
 .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); gap: 0.7rem; }
 .form-hint { color: var(--muted); font-size: 0.85rem; margin: 0; }
 /* Show only the fieldset for the chosen kind of source. Browsers without :has()
@@ -600,6 +600,10 @@ details.panel .form-error { margin-top: 0; }
 .channel-actions form { margin: 0; }
 .bot-card { border: 1px solid var(--border); border-radius: 8px; padding: 0.85rem 1rem; margin: 0 0 1.25rem; max-width: var(--measure); }
 .bot-card .form-hint { margin: 0.5rem 0 0; }
+.style-bar { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.6rem 1rem; margin: 0 0 1rem; }
+.style-bar label:not(.check) { display: flex; flex-direction: column; gap: 0.2rem; font-size: 0.8125rem; color: var(--muted); }
+.style-bar .check { min-height: 2rem; display: flex; align-items: center; gap: 0.35rem; }
+.style-pick { margin: 0 0.15rem 0 0; vertical-align: -0.1em; }
 .empty-state { color: var(--muted); padding: 2rem 0; border-top: 1px solid var(--border); }
 .test-dialog { width: min(36rem, calc(100vw - 2rem)); }
 .test-dialog fieldset { gap: 0.15rem; }

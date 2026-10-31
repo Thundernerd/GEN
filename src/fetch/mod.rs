@@ -6,6 +6,7 @@ pub mod feed;
 pub mod github;
 pub mod hn;
 pub mod html;
+pub mod og;
 pub mod unity;
 
 use std::time::Duration;
@@ -216,6 +217,140 @@ pub fn html_to_text(html: &str) -> String {
     text.split_whitespace().collect::<Vec<_>>().join(" ")
 }
 
+/// Plain text from HTML that keeps its structure: paragraphs, headings and line breaks
+/// start a new line and list items become "• " lines. Other whitespace collapses.
+pub fn html_to_lines(html: &str) -> String {
+    let fragment = scraper::Html::parse_fragment(html);
+    let mut lines = Lines::default();
+    for child in fragment.root_element().children() {
+        walk_html(child, &mut lines);
+    }
+    lines.finish()
+}
+
+fn walk_html(node: ego_tree::NodeRef<'_, scraper::Node>, lines: &mut Lines) {
+    match node.value() {
+        scraper::Node::Text(text) => lines.text(text),
+        scraper::Node::Element(element) => {
+            let name = element.name();
+            if matches!(name, "script" | "style" | "template") {
+                return;
+            }
+            let block = matches!(
+                name,
+                "p" | "div"
+                    | "br"
+                    | "h1"
+                    | "h2"
+                    | "h3"
+                    | "h4"
+                    | "h5"
+                    | "h6"
+                    | "ul"
+                    | "ol"
+                    | "li"
+                    | "blockquote"
+                    | "pre"
+                    | "tr"
+                    | "table"
+                    | "section"
+                    | "article"
+                    | "header"
+                    | "footer"
+                    | "hr"
+                    | "figure"
+                    | "dl"
+                    | "dt"
+                    | "dd"
+            );
+            if name == "li" {
+                lines.bullet();
+            } else if block {
+                lines.break_line();
+            }
+            for child in node.children() {
+                walk_html(child, lines);
+            }
+            if block {
+                lines.break_line();
+            }
+        }
+        _ => {
+            for child in node.children() {
+                walk_html(child, lines);
+            }
+        }
+    }
+}
+
+/// Plain text (or Markdown, as in GitHub release notes) tidied the same way: one line per
+/// paragraph or list item, list markers as "• ", headings and emphasis markers dropped,
+/// `[text](url)` links reduced to their text.
+pub fn text_to_lines(text: &str) -> String {
+    let link = regex::Regex::new(r"!?\[([^\]]*)\]\([^)]*\)").expect("valid regex");
+    let mut lines = Lines::default();
+    for raw in text.lines() {
+        let line = link.replace_all(raw.trim(), "$1");
+        let line = line.trim_start_matches('#').trim();
+        let line = line.replace("**", "").replace("__", "");
+        if line.is_empty() {
+            lines.break_line();
+        } else if let Some(item) = ["- ", "* ", "+ ", "• "]
+            .iter()
+            .find_map(|m| line.strip_prefix(m))
+        {
+            lines.bullet();
+            lines.text(item);
+        } else {
+            lines.break_line();
+            lines.text(&line);
+        }
+    }
+    lines.finish()
+}
+
+/// Builds text line by line, collapsing whitespace within a line.
+#[derive(Default)]
+struct Lines {
+    done: Vec<String>,
+    current: String,
+    /// Whitespace came before the next word (possibly in an earlier text node).
+    space: bool,
+}
+
+impl Lines {
+    fn text(&mut self, text: &str) {
+        self.space |= text.starts_with(char::is_whitespace);
+        for (i, word) in text.split_whitespace().enumerate() {
+            if (i > 0 || self.space) && !self.current.is_empty() && !self.current.ends_with(' ') {
+                self.current.push(' ');
+            }
+            self.current.push_str(word);
+            self.space = false;
+        }
+        self.space |= text.ends_with(char::is_whitespace);
+    }
+
+    fn break_line(&mut self) {
+        self.space = false;
+        let line = std::mem::take(&mut self.current);
+        let line = line.trim();
+        if !line.is_empty() && line != "•" {
+            self.done.push(line.to_string());
+        }
+    }
+
+    fn bullet(&mut self) {
+        self.break_line();
+        self.current.push_str("• ");
+    }
+
+    fn finish(mut self) -> String {
+        self.break_line();
+        self.done.join("\n")
+    }
+}
+
 /// Truncates to at most `max` chars on a char boundary, appending "…" when cut.
 pub fn truncate(s: &str, max: usize) -> String {
     match s.char_indices().nth(max) {
@@ -235,6 +370,25 @@ mod tests {
             "Hello world again"
         );
         assert_eq!(html_to_text("&lt;p&gt;escaped"), "<p>escaped");
+    }
+
+    #[test]
+    fn keeps_lines_and_bullets() {
+        assert_eq!(
+            html_to_lines(
+                "<p>Godot 4.8 is <b>out</b>.</p>\n<h2>Highlights</h2><ul><li>Jolt physics</li>\
+                 <li>.NET 9</li></ul>Thanks!<br>The team<script>x()</script>"
+            ),
+            "Godot 4.8 is out.\nHighlights\n• Jolt physics\n• .NET 9\nThanks!\nThe team"
+        );
+        assert_eq!(html_to_lines("a<b>b</b> c"), "ab c");
+        assert_eq!(html_to_lines("<p>  </p><li></li>"), "");
+        assert_eq!(
+            text_to_lines(
+                "## What's new\r\n\r\n* **C#** hot   reload\n- [Docs](https://x.org) updated\n\nFull   changelog"
+            ),
+            "What's new\n• C# hot reload\n• Docs updated\nFull changelog"
+        );
     }
 
     #[test]

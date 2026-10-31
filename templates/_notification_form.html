@@ -12,7 +12,17 @@
 </label>
 {%- endmacro %}
 
-{%- macro channel_dialog(id, title, action, f, engines, kinds, feedback, secrets=none, edit=false) %}
+{%- macro style_select(f, styles, bot) %}
+<label><span>Message style</span>
+  <select name="style">
+    {%- for s in styles %}
+    <option value="{{ s.key }}"{% if s.key == (f.style or "card") %} selected{% endif %}>{{ s.label }}{% if s.key == "card" and not bot %} (bot channels; webhooks get the polished embed if refused){% endif %}</option>
+    {%- endfor %}
+  </select>
+</label>
+{%- endmacro %}
+
+{%- macro channel_dialog(id, title, action, f, engines, kinds, feedback, secrets=none, edit=false, styles=[]) %}
 {%- set failed = feedback and feedback.dialog == id %}
 <dialog id="{{ id }}" class="form-dialog" aria-labelledby="{{ id }}-title"{% if failed %} open data-reopen{% endif %}>
   <h2 id="{{ id }}-title">{{ title }}</h2>
@@ -45,6 +55,7 @@
     <fieldset>
       <legend>Subscriptions</legend>
       <p class="form-hint">{{ (f.subscriptions or []) | join(", ") }}</p>
+      {{ style_select(f, styles, true) }}
       <p class="form-hint">Change these in Discord with <code>/gen subscribe</code>, <code>/gen unsubscribe</code> and <code>/gen remove</code>.</p>
       <label><span>Keywords (optional, comma-separated: only items mentioning one)</span><input name="keywords" value="{{ f.keywords or "" }}"></label>
     </fieldset>
@@ -54,6 +65,7 @@
     <fieldset data-kind="discord">
       <legend>Discord</legend>
       {{ secret_input("webhook_url", "Webhook URL", secrets) }}
+      {{ style_select(f, styles, false) }}
     </fieldset>
     <fieldset data-kind="ntfy">
       <legend>ntfy</legend>

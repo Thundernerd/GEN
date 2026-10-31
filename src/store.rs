@@ -123,6 +123,12 @@ ALTER TABLE notify_channels ADD COLUMN last_ok TEXT;
 ALTER TABLE notify_channels ADD COLUMN last_error TEXT;
 ALTER TABLE notify_channels ADD COLUMN last_error_at TEXT;
 "#,
+    r#"
+-- A preview image per item: from the source, or the linked page's og:image, which is
+-- looked up once when notifying (image_checked).
+ALTER TABLE items ADD COLUMN image_url TEXT;
+ALTER TABLE items ADD COLUMN image_checked INTEGER NOT NULL DEFAULT 0;
+"#,
 ];
 
 /// A configured notification channel with its last delivery result.
@@ -301,6 +307,15 @@ impl Store {
         Ok(())
     }
 
+    /// Replaces an engine's or outlet's settings (not its sources).
+    pub fn update_owner(&self, id: &str, config: &str) -> anyhow::Result<()> {
+        self.conn.execute(
+            "UPDATE owners SET config = ?2 WHERE id = ?1",
+            params![id, config],
+        )?;
+        Ok(())
+    }
+
     pub fn add_source(&self, id: &str, owner_id: &str, config: &str) -> anyhow::Result<()> {
         insert_source(&self.conn, id, owner_id, config)?;
         Ok(())
@@ -372,6 +387,12 @@ impl Store {
             .optional()?)
     }
 
+    pub fn delete_meta(&self, key: &str) -> anyhow::Result<()> {
+        self.conn
+            .execute("DELETE FROM meta WHERE key = ?1", [key])?;
+        Ok(())
+    }
+
     pub fn set_meta(&self, key: &str, value: &str) -> anyhow::Result<()> {
         self.conn.execute(
             "INSERT INTO meta (key, value) VALUES (?1, ?2)
@@ -409,8 +430,9 @@ impl Store {
             };
             let changed = tx.execute(
                 "INSERT INTO items (source_id, guid, kind, title, url, summary, published,
-                                    first_seen, sort_date, story_key, duplicate_of, notify)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12)
+                                    first_seen, sort_date, story_key, duplicate_of, notify,
+                                    image_url)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
                  ON CONFLICT (source_id, guid) DO NOTHING",
                 params![
                     it.source_id,
@@ -425,6 +447,7 @@ impl Store {
                     it.story_key,
                     duplicate_of,
                     it.notify,
+                    it.image_url,
                 ],
             )?;
             if changed == 0 {
@@ -450,6 +473,8 @@ impl Store {
                 first_seen: now,
                 story_key: it.story_key.clone(),
                 duplicate_of,
+                image_url: it.image_url.clone(),
+                image_checked: false,
             });
         }
         tx.commit()?;
@@ -627,6 +652,17 @@ impl Store {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
+    /// Records the image found on an item's page (or that there is none), so the page
+    /// isn't fetched again.
+    pub fn set_item_image(&self, item_id: i64, image_url: Option<&str>) -> anyhow::Result<()> {
+        self.conn.execute(
+            "UPDATE items SET image_url = COALESCE(?2, image_url), image_checked = 1
+             WHERE id = ?1",
+            params![item_id, image_url],
+        )?;
+        Ok(())
+    }
+
     /// Marks an item as handled for a channel (sent, or skipped by the channel's rules).
     /// Returns false if it was already marked.
     pub fn mark_notified(&self, item_id: i64, channel: &str) -> anyhow::Result<bool> {
@@ -640,7 +676,8 @@ impl Store {
 
 const ITEM_SELECT: &str = "SELECT i.id, i.source_id, i.guid, i.kind, i.title, i.url, i.summary,
         i.published, i.first_seen, i.story_key, i.duplicate_of,
-        (SELECT group_concat(engine_id, ',') FROM item_engines e WHERE e.item_id = i.id)
+        (SELECT group_concat(engine_id, ',') FROM item_engines e WHERE e.item_id = i.id),
+        i.image_url, i.image_checked
     FROM items i";
 
 fn insert_source(
@@ -691,6 +728,8 @@ fn item_from_row(r: &Row) -> rusqlite::Result<Item> {
         engines: engines
             .map(|s| s.split(',').map(str::to_string).collect())
             .unwrap_or_default(),
+        image_url: r.get(12)?,
+        image_checked: r.get(13)?,
     })
 }
 
@@ -720,7 +759,42 @@ mod tests {
             published: Some(Utc::now()),
             story_key: story.into(),
             notify: false,
+            image_url: None,
         }
+    }
+
+    #[test]
+    fn stores_item_images_and_lookups() {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut with_image = new_item("a", "1", "one");
+        with_image.image_url = Some("https://example.org/1.png".into());
+        let stored = store
+            .insert_items(&[with_image, new_item("a", "2", "two")])
+            .unwrap();
+        let read = |id| store.item(id).unwrap().unwrap();
+        let first = read(stored[0].id);
+        assert_eq!(
+            first.image_url.as_deref(),
+            Some("https://example.org/1.png")
+        );
+        assert!(!first.image_checked);
+        store
+            .set_item_image(stored[1].id, Some("https://example.org/og.png"))
+            .unwrap();
+        let second = read(stored[1].id);
+        assert_eq!(
+            second.image_url.as_deref(),
+            Some("https://example.org/og.png")
+        );
+        assert!(second.image_checked);
+        // Finding nothing keeps a known image and still marks the item looked at.
+        store.set_item_image(stored[0].id, None).unwrap();
+        let first = read(stored[0].id);
+        assert_eq!(
+            first.image_url.as_deref(),
+            Some("https://example.org/1.png")
+        );
+        assert!(first.image_checked);
     }
 
     #[test]

@@ -12,6 +12,7 @@ blake3 = "1.8.7"
 bytes = "1.12.1"
 chrono = { version = "0.4.45", features = ["serde"] }
 clap = { version = "4.6.7", features = ["derive", "env"] }
+ego-tree = "0.11.1"
 feed-rs = "3.0.0"
 futures = "0.3.34"
 lettre = { version = "0.11.23", default-features = false, features = ["builder", "hostname", "smtp-transport", "pool", "tokio1", "tokio1-rustls", "aws-lc-rs", "rustls-native-certs"] }

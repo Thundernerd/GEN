@@ -25,13 +25,28 @@
 <p class="notice{% if not notice.ok %} form-error{% endif %}" role="status">{{ notice.message }}</p>
 {%- endif %}
 
+{%- if has_discord %}
+<form method="post" action="/notifications/style" id="style-bar" class="style-bar" data-inline="Message style changed.">
+  <label><span>Message style for Discord channels</span>
+    <select name="style">
+      {%- for s in styles %}
+      <option value="{{ s.key }}">{{ s.label }}</option>
+      {%- endfor %}
+    </select>
+  </label>
+  <label class="check"><input type="checkbox" name="all" value="1"> All Discord channels</label>
+  <button type="submit" class="btn-small">Apply</button>
+  <span class="form-hint">or tick channels below</span>
+</form>
+{%- endif %}
+
 {%- if channels %}
 <ul class="channel-list">
   {%- for c in channels %}
   <li class="channel{% if not c.enabled %} is-disabled{% endif %}">
     <div class="channel-main">
-      <h2 class="channel-name">{{ c.name }} <span class="channel-kind">{{ c.kind_label }}</span>{% if not c.enabled %} <span class="channel-kind">off</span>{% endif %}</h2>
-      <p class="channel-target">{{ c.target }}</p>
+      <h2 class="channel-name">{% if c.style %}<input type="checkbox" form="style-bar" name="name" value="{{ c.name }}" class="style-pick" aria-label="Pick {{ c.name }} to change its message style"> {% endif %}{{ c.name }} <span class="channel-kind">{{ c.kind_label }}</span>{% if not c.enabled %} <span class="channel-kind">off</span>{% endif %}</h2>
+      <p class="channel-target">{{ c.target }}{% if c.style %} · {{ c.style | lower }}{% endif %}</p>
       <p class="channel-rules">{{ c.rules }}</p>
       <p class="channel-status">
         {%- if c.last_error %}
@@ -74,9 +89,9 @@
 </div>
 {%- endif %}
 
-{{ channel_dialog("add-channel", "Add a channel", "/notifications/add", add_form, engines, kinds, feedback) }}
+{{ channel_dialog("add-channel", "Add a channel", "/notifications/add", add_form, engines, kinds, feedback, styles=styles) }}
 {%- for c in channels %}
-{{ channel_dialog(c.dialog, "Edit " ~ c.name, "/notifications/edit", c.form, engines, kinds, feedback, c.secrets, true) }}
+{{ channel_dialog(c.dialog, "Edit " ~ c.name, "/notifications/edit", c.form, engines, kinds, feedback, c.secrets, true, styles) }}
 <dialog id="test-{{ c.name }}" class="form-dialog test-dialog" aria-labelledby="test-{{ c.name }}-title">
   <h2 id="test-{{ c.name }}-title">Send a test to {{ c.name }}</h2>
   <p class="form-hint">Pick what to send to see how it looks there. Test sends ignore the channel's rules.</p>

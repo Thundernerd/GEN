@@ -18,7 +18,7 @@ use serenity::all::{
 use super::Handler;
 use super::layout::{self, Layout};
 use super::subs::{self, DiscordChannel};
-use crate::config::BotSubscription;
+use crate::config::{BotSubscription, MessageStyle};
 use crate::model::Topic;
 
 /// Discord allows 25 options in a select menu (and as autocomplete suggestions).
@@ -50,6 +50,7 @@ struct SetupPanel {
     fixed_engine: bool,
     topics: Vec<Topic>,
     layout: Layout,
+    style: MessageStyle,
 }
 
 impl Panels {
@@ -118,6 +119,14 @@ fn command() -> CreateCommand {
     let sub = |name: &str, description: &str| {
         CreateCommandOption::new(CommandOptionType::SubCommand, name, description)
     };
+    let style = MessageStyle::ALL.into_iter().fold(
+        CreateCommandOption::new(CommandOptionType::String, "style", "How messages look")
+            .required(true),
+        |o, s| o.add_string_choice(s.label(), s.key()),
+    );
+    let flag = |name: &str, description: &str| {
+        CreateCommandOption::new(CommandOptionType::Boolean, name, description)
+    };
     CreateCommand::new("gen")
         .description("Game engine news from GEN")
         .default_member_permissions(Permissions::MANAGE_CHANNELS)
@@ -142,6 +151,34 @@ fn command() -> CreateCommand {
                 .add_sub_option(channel()),
         )
         .add_option(sub("list", "Show what is posted where on this server"))
+        .add_option(
+            sub("style", "Change how GEN's messages look")
+                .add_sub_option(style)
+                .add_sub_option(
+                    CreateCommandOption::new(
+                        CommandOptionType::Channel,
+                        "channel",
+                        "Channel to change (default: this one)",
+                    )
+                    .channel_types(vec![ChannelType::Text, ChannelType::News]),
+                )
+                .add_sub_option(
+                    CreateCommandOption::new(
+                        CommandOptionType::String,
+                        "engine",
+                        "Change every channel that gets this engine",
+                    )
+                    .set_autocomplete(true),
+                )
+                .add_sub_option(flag(
+                    "everywhere",
+                    "Change every GEN channel on this server",
+                ))
+                .add_sub_option(flag(
+                    "default",
+                    "Also use it for channels set up from now on",
+                )),
+        )
         .add_option(
             sub(
                 "remove",
@@ -229,6 +266,22 @@ async fn say(
     .await
 }
 
+fn bool_option(options: &[ResolvedOption], name: &str) -> bool {
+    options
+        .iter()
+        .any(|o| o.name == name && matches!(o.value, ResolvedValue::Boolean(true)))
+}
+
+/// The channel picked in a `channel` option.
+fn channel_option(options: &[ResolvedOption]) -> Option<(ChannelId, String)> {
+    options.iter().find_map(|o| match &o.value {
+        ResolvedValue::Channel(c) if o.name == "channel" => {
+            Some((c.id, c.name.clone().unwrap_or_default()))
+        }
+        _ => None,
+    })
+}
+
 fn string_option<'a>(options: &'a [ResolvedOption], name: &str) -> Option<&'a str> {
     options
         .iter()
@@ -283,18 +336,10 @@ async fn run_command(
                     topic,
                 })
                 .collect();
-            let (channel_id, channel_name) = options
-                .iter()
-                .find_map(|o| match &o.value {
-                    ResolvedValue::Channel(c) if o.name == "channel" => {
-                        Some((c.id, c.name.clone().unwrap_or_default()))
-                    }
-                    _ => None,
-                })
-                .unwrap_or_else(|| {
-                    let name = cmd.channel.as_ref().and_then(|c| c.name.clone());
-                    (cmd.channel_id, name.unwrap_or_default())
-                });
+            let (channel_id, channel_name) = channel_option(options).unwrap_or_else(|| {
+                let name = cmd.channel.as_ref().and_then(|c| c.name.clone());
+                (cmd.channel_id, name.unwrap_or_default())
+            });
             if *name == "subscribe" {
                 subscribe(
                     handler,
@@ -311,6 +356,7 @@ async fn run_command(
             }
         }
         "list" => list(handler, ctx, cmd, guild_id).await,
+        "style" => set_style(handler, ctx, cmd, guild_id, options, engine).await,
         "remove" => remove(handler, ctx, cmd, guild_id, engine.unwrap_or_default()).await,
         _ => say(ctx, cmd, "Unknown subcommand.").await,
     }
@@ -357,7 +403,7 @@ async fn subscribe(
     };
     let result = handler
         .change("subscribing", move |s| {
-            subs::subscribe(s, &channel, &wanted)
+            subs::subscribe(s, &channel, &wanted, None)
         })
         .await;
     let text = match result {
@@ -412,26 +458,105 @@ async fn list(
     cmd: &CommandInteraction,
     guild_id: u64,
 ) -> anyhow::Result<()> {
-    let channels = handler
+    let (channels, default) = handler
         .pipeline
-        .with_store(move |s| subs::in_guild(s, guild_id))
+        .with_store(move |s| {
+            Ok((
+                subs::in_guild(s, guild_id)?,
+                subs::default_style(s, guild_id)?,
+            ))
+        })
         .await?;
     let text = if channels.is_empty() {
         "Nothing is posted on this server yet. Use `/gen setup` or `/gen subscribe`.".to_string()
     } else {
-        channels
+        let lines: Vec<String> = channels
             .iter()
             .map(|c| {
                 format!(
-                    "<#{}>: {}",
+                    "<#{}> ({}): {}",
                     c.channel_id,
+                    c.style.label().to_lowercase(),
                     describe_all(handler, &c.subscriptions)
                 )
             })
-            .collect::<Vec<_>>()
-            .join("\n")
+            .collect();
+        format!(
+            "{}\n\nNew channels get the {} style.",
+            lines.join("\n"),
+            default.label().to_lowercase()
+        )
     };
     say(ctx, cmd, truncate_message(&text)).await
+}
+
+/// Which bot channels `/gen style` changes.
+enum StyleScope {
+    Channel(u64),
+    Engine(String),
+    Everywhere,
+}
+
+async fn set_style(
+    handler: &Handler,
+    ctx: &Context,
+    cmd: &CommandInteraction,
+    guild_id: u64,
+    options: &[ResolvedOption<'_>],
+    engine: Option<&str>,
+) -> anyhow::Result<()> {
+    let Some(style) = string_option(options, "style").and_then(MessageStyle::parse) else {
+        return say(ctx, cmd, "Choose a style.").await;
+    };
+    let channel = channel_option(options).map(|(id, _)| id);
+    let everywhere = bool_option(options, "everywhere");
+    let make_default = bool_option(options, "default");
+    let scopes = [channel.is_some(), engine.is_some(), everywhere];
+    if scopes.iter().filter(|s| **s).count() > 1 {
+        return say(ctx, cmd, "Pick one of `channel`, `engine` or `everywhere`.").await;
+    }
+    let scope = match (engine, everywhere) {
+        (Some(id), _) => StyleScope::Engine(id.to_string()),
+        (_, true) => StyleScope::Everywhere,
+        _ => StyleScope::Channel(channel.unwrap_or(cmd.channel_id).get()),
+    };
+    let label = style.label().to_lowercase();
+    let what = match &scope {
+        StyleScope::Channel(id) => format!("<#{id}>"),
+        StyleScope::Engine(id) => format!("{} channels", engine_name(handler, id)),
+        StyleScope::Everywhere => "GEN channels on this server".to_string(),
+    };
+    let result = handler
+        .change("changing the style", move |s| {
+            let count = subs::set_style(
+                s,
+                guild_id,
+                |c| match &scope {
+                    StyleScope::Channel(id) => c.channel_id == *id,
+                    StyleScope::Engine(id) => c.subscriptions.iter().any(|s| s.engine == *id),
+                    StyleScope::Everywhere => true,
+                },
+                style,
+            )?;
+            if make_default {
+                subs::set_default_style(s, guild_id, style)?;
+            }
+            Ok(count)
+        })
+        .await;
+    let mut text = match result {
+        Ok(0) if what.starts_with("<#") => {
+            format!("{what} doesn't get anything from GEN yet; use `/gen subscribe` first.")
+        }
+        Ok(0) => format!("There are no {what} yet."),
+        Ok(1) if what.starts_with("<#") => format!("{what} now uses the {label} style."),
+        Ok(n) => format!("{n} {what} now use the {label} style."),
+        Err(_) => return say(ctx, cmd, "Saving the change failed; see GEN's log.").await,
+    };
+    if make_default {
+        text.push_str(" Channels set up from now on get it too.");
+    }
+    say(ctx, cmd, text).await
 }
 
 /// Discord messages hold at most 2000 characters.
@@ -527,12 +652,17 @@ async fn setup(
         )
         .await;
     }
+    let style = handler
+        .pipeline
+        .with_store(move |s| subs::default_style(s, guild_id))
+        .await?;
     let panel = SetupPanel {
         guild_id,
         engines: engine.map(str::to_string).into_iter().collect(),
         fixed_engine: engine.is_some(),
         topics: Topic::ALL.to_vec(),
         layout: Layout::CategoryPerEngine,
+        style,
     };
     let panel_id = cmd.id.get();
     let message = setup_message(handler, panel_id, &panel);
@@ -621,6 +751,21 @@ fn setup_message(
         .min_values(1)
         .max_values(1),
     ));
+    let styles = MessageStyle::ALL
+        .into_iter()
+        .map(|s| {
+            CreateSelectMenuOption::new(format!("Messages: {}", s.label()), s.key())
+                .default_selection(s == panel.style)
+        })
+        .collect();
+    rows.push(CreateActionRow::SelectMenu(
+        CreateSelectMenu::new(
+            id("style"),
+            CreateSelectMenuKind::String { options: styles },
+        )
+        .min_values(1)
+        .max_values(1),
+    ));
     rows.push(CreateActionRow::Buttons(vec![
         CreateButton::new(id("create"))
             .style(ButtonStyle::Primary)
@@ -660,10 +805,16 @@ async fn run_component(
         _ => Vec::new(),
     };
     match (panel, action) {
-        (Panel::Setup(mut setup), "engines" | "topics" | "layout") => {
+        (Panel::Setup(mut setup), "engines" | "topics" | "layout" | "style") => {
             match action {
                 "engines" => setup.engines = values,
                 "topics" => setup.topics = values.iter().filter_map(|v| Topic::parse(v)).collect(),
+                "style" => {
+                    setup.style = values
+                        .first()
+                        .and_then(|v| MessageStyle::parse(v))
+                        .unwrap_or(setup.style)
+                }
                 _ => {
                     setup.layout = values
                         .first()
@@ -815,9 +966,10 @@ async fn create_channels(
             created_by_bot: r.created,
         };
         let wanted = r.subscriptions.clone();
+        let style = setup.style;
         handler
             .change("subscribing", move |s| {
-                subs::subscribe(s, &channel, &wanted)
+                subs::subscribe(s, &channel, &wanted, Some(style))
             })
             .await?;
         lines.push(format!(

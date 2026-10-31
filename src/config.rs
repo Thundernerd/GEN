@@ -31,6 +31,10 @@ pub struct EngineConfig {
     /// Human description of C# support, e.g. "native", "first-class (.NET build)", "none".
     pub csharp: String,
     pub homepage: Option<String>,
+    /// Logo shown next to the engine's name in Discord messages: a PNG, JPEG or WebP URL
+    /// (Discord shows no SVG or ICO).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub icon: Option<String>,
     #[serde(default = "default_true")]
     pub enabled: bool,
     /// Whole-word phrases that tag outlet items with this engine. All-lowercase aliases match
@@ -484,6 +488,52 @@ pub struct ChannelConfig {
     pub target: ChannelTarget,
 }
 
+/// How a Discord channel's messages look.
+#[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum MessageStyle {
+    /// A card built from Discord's layout components.
+    #[default]
+    Card,
+    /// A full embed: engine, summary, fields and a thumbnail.
+    Polished,
+    /// A short embed for busy channels.
+    Compact,
+    /// An embed led by a large preview image.
+    Image,
+}
+
+impl MessageStyle {
+    pub const ALL: [MessageStyle; 4] = [
+        MessageStyle::Card,
+        MessageStyle::Polished,
+        MessageStyle::Compact,
+        MessageStyle::Image,
+    ];
+
+    pub fn key(self) -> &'static str {
+        match self {
+            MessageStyle::Card => "card",
+            MessageStyle::Polished => "polished",
+            MessageStyle::Compact => "compact",
+            MessageStyle::Image => "image",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            MessageStyle::Card => "Card",
+            MessageStyle::Polished => "Polished embed",
+            MessageStyle::Compact => "Compact embed",
+            MessageStyle::Image => "Big image",
+        }
+    }
+
+    pub fn parse(key: &str) -> Option<MessageStyle> {
+        MessageStyle::ALL.into_iter().find(|s| s.key() == key)
+    }
+}
+
 /// One engine's topic, as subscribed to by a Discord bot channel.
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
 pub struct BotSubscription {
@@ -514,6 +564,8 @@ pub struct NotifyRules {
 pub enum ChannelTarget {
     Discord {
         webhook_url: String,
+        #[serde(default)]
+        style: MessageStyle,
     },
     /// A Discord channel the bot posts to, set up with its slash commands. It is sent the
     /// items of its subscriptions (and the channel's rules still apply on top).
@@ -530,6 +582,8 @@ pub enum ChannelTarget {
         /// The bot created the channel, so `/gen remove` may delete it again.
         #[serde(default)]
         created_by_bot: bool,
+        #[serde(default)]
+        style: MessageStyle,
     },
     Ntfy {
         #[serde(default = "default_ntfy_server")]
@@ -579,7 +633,7 @@ impl ChannelTarget {
     /// Every string of the target, mutably, for `${VAR}` expansion.
     fn strings_mut(&mut self) -> Vec<&mut String> {
         match self {
-            ChannelTarget::Discord { webhook_url } => vec![webhook_url],
+            ChannelTarget::Discord { webhook_url, .. } => vec![webhook_url],
             ChannelTarget::DiscordBot { .. } => Vec::new(),
             ChannelTarget::Ntfy {
                 server,
@@ -634,7 +688,7 @@ impl ChannelConfig {
         // A `${VAR}` reference is checked when sending, once it's expanded.
         let literal = |s: &str| !s.contains("${");
         match &self.target {
-            ChannelTarget::Discord { webhook_url } => {
+            ChannelTarget::Discord { webhook_url, .. } => {
                 if literal(webhook_url)
                     && !webhook_url.starts_with("https://discord.com/api/webhooks/")
                     && !webhook_url.starts_with("https://discordapp.com/api/webhooks/")
@@ -1054,6 +1108,29 @@ mod tests {
         assert_eq!(subscriptions[1].topic, Topic::Releases);
         assert!(!created_by_bot);
         assert_eq!(c.target.kind(), "discordbot");
+        assert!(
+            matches!(
+                c.target,
+                ChannelTarget::DiscordBot {
+                    style: MessageStyle::Card,
+                    ..
+                }
+            ),
+            "rows stored before styles existed get the card"
+        );
+        let hook: ChannelConfig = serde_json::from_str(
+            r#"{"name":"chat","kind":"discord","webhook_url":"https://discord.com/api/webhooks/1/x",
+                "style":"compact"}"#,
+        )
+        .unwrap();
+        assert!(matches!(
+            hook.target,
+            ChannelTarget::Discord {
+                style: MessageStyle::Compact,
+                ..
+            }
+        ));
+        assert_eq!(MessageStyle::parse("image"), Some(MessageStyle::Image));
         assert_eq!(c.check(), Ok(()));
         let again: ChannelConfig =
             serde_json::from_str(&serde_json::to_string(&c).unwrap()).unwrap();

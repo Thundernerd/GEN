@@ -108,6 +108,7 @@ impl Classifier {
             url: raw.url.filter(|u| is_http_url(u)),
             summary: raw.summary,
             published: raw.published,
+            image_url: raw.image_url.filter(|u| is_http_url(u)),
             notify: false,
         })
     }

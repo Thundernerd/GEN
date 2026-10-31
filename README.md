@@ -158,6 +158,7 @@ name = "Stride"
 tier = 1                         # 1 = major C#, 2 = niche C#, 3 = notable without C#
 csharp = "native"                # free text, shown in the UI
 homepage = "https://www.stride3d.net"
+icon = "https://www.stride3d.net/favicon.png"  # optional PNG/JPEG/WebP logo for Discord messages
 enabled = true                   # default true
 aliases = ["stride", "stride3d", "stride engine"]   # case-insensitive whole words
 exclude = ["stride length"]      # phrases that veto an alias match
@@ -236,6 +237,27 @@ Each channel shows its last delivery or error. **Send test** sends it something 
 
 Secrets (the webhook URL, the ntfy topic and token, the SMTP password, the Apprise key, URLs and password) are never shown back on the page; leave a secret field empty when editing to keep it. Instead of the secret itself, you can enter an environment variable reference such as `${GEN_DISCORD_WEBHOOK}`: it's expanded when sending, so the secret stays out of the database. A reference is shown on the page as written.
 
+### Discord message styles
+
+Each Discord channel, webhook or bot, has a **message style**:
+
+| Style | What it looks like |
+|---|---|
+| **Card** (default) | A card built from Discord's layout components: a coloured accent bar, the engine and kind, a large linked title, the summary, the version and type of releases, the source with a relative time, and link buttons, with the item's image or the engine's logo beside the text. |
+| **Polished embed** | A full embed: the engine with its logo, the linked title, the summary with its bullet points, fields for version, type and source, a thumbnail, and link buttons. |
+| **Compact embed** | A short embed for busy channels: the engine, the title, two lines of summary and the source. Up to ten items share a message. |
+| **Big image** | An embed led by the item's large preview image. An item without an image is shown as a polished embed. |
+
+The link buttons are **Release notes**, **Read article**, **Watch video** or **Open discussion**, plus **View on GEN** when `base_url` isn't a local address.
+
+Discord only takes buttons and cards from a webhook when the request asks for them with `?with_components=true`, which GEN adds. If Discord still refuses them, GEN sends the polished embed without buttons instead and logs a warning.
+
+Change a style in a channel's **Edit** dialog. To change several at once, use the **Message style** bar above the channel list: tick the channels (or choose **All Discord channels**), pick a style and click **Apply**. Bot channels can also be changed from Discord with `/gen style` (see "Discord bot").
+
+**Images:** feed items keep the image their feed gives (a Media RSS thumbnail or image, an image enclosure, or the first real `<img>` in the entry). For other items, GEN reads the `og:image` of the item's page, once, right before posting it to a channel whose style shows images (all but compact), and stores the result. Hacker News threads and GitHub release pages are skipped. Each engine can also have an `icon` (see the catalog format), shown next to its name and as the thumbnail of items without an image. The catalog engines come with icons, and databases from before icons existed get them once on the next start.
+
+The **Send test** examples have no images, so the big image style shows them as polished embeds; send a recent item to see an image.
+
 ### Channels from gen.toml
 
 Channels still configured as `[[notify.channel]]` in `gen.toml` are copied into the database on the first start after upgrading, keeping their `${VAR}` references and their delivery history. After that, `gen.toml` channels are ignored (GEN logs a line saying so), and you can remove them from the file. The format, for reference:
@@ -293,10 +315,11 @@ Every command needs the **Manage Channels** permission by default (server admins
 
 | Command | What it does |
 |---|---|
-| `/gen setup [engine]` | Opens a panel for picking engines, topics and a layout, with a **Create channels** button. Layouts: a category per engine with a channel per topic (Unity › `#unity-releases`, `#unity-news`, …), one channel per engine (`#unity`), or one channel per topic for all engines (`#releases`). The last two go in a "Game Engine News" category. Channels and categories that already exist with the same names are reused, so running setup again only adds what is missing. Discord menus hold 25 engines; for others, pass `engine:`. |
+| `/gen setup [engine]` | Opens a panel for picking engines, topics, a layout and a message style, with a **Create channels** button. The style applies to every channel the setup creates or reuses. Layouts: a category per engine with a channel per topic (Unity › `#unity-releases`, `#unity-news`, …), one channel per engine (`#unity`), or one channel per topic for all engines (`#releases`). The last two go in a "Game Engine News" category. Channels and categories that already exist with the same names are reused, so running setup again only adds what is missing. Discord menus hold 25 engines; for others, pass `engine:`. |
 | `/gen subscribe engine topic [channel]` | Posts an engine's topic in an existing channel (default: the current one). Topic `Everything` subscribes to all four. |
 | `/gen unsubscribe engine topic [channel]` | Stops that again. |
-| `/gen list` | Shows every channel on the server with what it gets. |
+| `/gen list` | Shows every channel on the server with what it gets and its message style. |
+| `/gen style style [channel \| engine \| everywhere] [default]` | Sets the message style (see "Discord message styles") of the current channel, another `channel`, every channel that gets an `engine`, or `everywhere` on the server. With `default:true` it also becomes the style new channels on this server get, and the one `/gen setup` preselects. |
 | `/gen remove engine` | Stops posting the engine anywhere on the server. If that leaves channels the bot created without anything to post, it offers to delete them, and any category left empty. |
 
 There are four topics:
@@ -317,7 +340,7 @@ Each subscribed Discord channel is listed as a **Discord bot** channel named aft
 - it can be switched off or removed
 - it only gets items that arrive after it was subscribed
 
-Its subscriptions are changed in Discord. On the website you can add keywords and switch it on or off. Deleting the channel in Discord, or removing the bot from the server, removes it here too.
+Its subscriptions are changed in Discord. On the website you can add keywords, change its message style and switch it on or off. Deleting the channel in Discord, or removing the bot from the server, removes it here too.
 
 ## Web routes
 
