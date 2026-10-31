@@ -27,6 +27,10 @@
       {%- else %}
       <label><span>Name (lowercase, e.g. <code>discord-releases</code>)</span><input name="name" value="{{ f.name or "" }}" pattern="[a-z0-9][a-z0-9\-]{0,39}" required autofocus></label>
       {%- endif %}
+      {%- if f.kind == "discordbot" %}
+      <input type="hidden" name="kind" value="discordbot">
+      <label><span>Send to</span><input value="Discord bot" disabled></label>
+      {%- else %}
       <label>
         <span>Send to</span>
         <select name="kind" required>
@@ -35,7 +39,16 @@
           {%- endfor %}
         </select>
       </label>
+      {%- endif %}
     </div>
+    {%- if f.kind == "discordbot" %}
+    <fieldset>
+      <legend>Subscriptions</legend>
+      <p class="form-hint">{{ (f.subscriptions or []) | join(", ") }}</p>
+      <p class="form-hint">Change these in Discord with <code>/gen subscribe</code>, <code>/gen unsubscribe</code> and <code>/gen remove</code>.</p>
+      <label><span>Keywords (optional, comma-separated: only items mentioning one)</span><input name="keywords" value="{{ f.keywords or "" }}"></label>
+    </fieldset>
+    {%- else %}
     <p class="form-hint">Secrets can be written as <code>${VARIABLE}</code> to read them from GEN's environment instead of storing them.</p>
 
     <fieldset data-kind="discord">
@@ -98,6 +111,7 @@
       <label class="check"><input type="checkbox" name="include_untagged" value="1"{% if f.include_untagged %} checked{% endif %}> Also news-outlet items that mention no engine</label>
       <label><span>Keywords (optional, comma-separated: only items mentioning one)</span><input name="keywords" value="{{ f.keywords or "" }}"></label>
     </fieldset>
+    {%- endif %}
 
     <label class="check"><input type="checkbox" name="enabled" value="1"{% if f.enabled %} checked{% endif %}> Enabled</label>
     <div class="dialog-actions">

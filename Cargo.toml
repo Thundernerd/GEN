@@ -23,6 +23,7 @@ rusqlite = { version = "0.40.2", features = ["bundled", "chrono"] }
 scraper = "0.29.0"
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
+serenity = { version = "0.12.5", default-features = false, features = ["builder", "client", "gateway", "model", "http", "rustls_backend", "chrono"] }
 thiserror = "2.0.21"
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "time", "sync", "signal", "net"] }
 toml = "1.1.8"

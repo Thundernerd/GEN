@@ -87,6 +87,8 @@ pub struct NotifyContext<'a> {
     pub sources: &'a SourcesConfig,
     /// Public base URL of the GEN site, for "view on GEN" links.
     pub base_url: &'a str,
+    /// Set when the Discord bot is configured, for bot channels.
+    pub discord_bot: Option<&'a discord::BotApi>,
 }
 
 /// Whether `item` should be sent to a channel with these rules.
@@ -120,7 +122,21 @@ pub fn matches(rules: &NotifyRules, item: &Item) -> bool {
         .any(|k| haystack.contains(&k.to_lowercase()))
 }
 
-/// Sends `items` (already filtered by `matches`) to one channel.
+/// Whether `item` should be sent to `channel`: its rules match and, for a Discord bot
+/// channel, one of its subscriptions does.
+pub fn accepts(channel: &ChannelConfig, item: &Item) -> bool {
+    if !matches(&channel.rules, item) {
+        return false;
+    }
+    match &channel.target {
+        ChannelTarget::DiscordBot { subscriptions, .. } => subscriptions
+            .iter()
+            .any(|s| item.engines.contains(&s.engine) && s.topic.kinds().contains(&item.kind)),
+        _ => true,
+    }
+}
+
+/// Sends `items` (already filtered by `accepts`) to one channel.
 pub async fn send(
     ctx: &NotifyContext<'_>,
     channel: &ChannelConfig,
@@ -131,6 +147,9 @@ pub async fn send(
     }
     match &channel.target {
         ChannelTarget::Discord { webhook_url } => discord::send(ctx, webhook_url, items).await,
+        ChannelTarget::DiscordBot { channel_id, .. } => {
+            discord::send_bot(ctx, *channel_id, items).await
+        }
         ChannelTarget::Ntfy {
             server,
             topic,
@@ -518,6 +537,70 @@ pub(crate) mod tests {
         }
     }
 
+    #[test]
+    fn bot_channels_get_their_subscriptions() {
+        use crate::config::BotSubscription;
+        use crate::model::Topic;
+        use ItemKind::*;
+        let sub = |engine: &str, topic| BotSubscription {
+            engine: engine.into(),
+            topic,
+        };
+        let channel = |subscriptions, rules| ChannelConfig {
+            name: "discord-x".into(),
+            enabled: true,
+            rules,
+            target: ChannelTarget::DiscordBot {
+                guild_id: 1,
+                channel_id: 2,
+                guild_name: String::new(),
+                channel_name: String::new(),
+                subscriptions,
+                created_by_bot: false,
+            },
+        };
+        let unity_releases_godot_news = channel(
+            vec![sub("unity", Topic::Releases), sub("godot", Topic::News)],
+            NotifyRules::default(),
+        );
+        let cases = [
+            (item(&["unity"], Release, "Unity 6.1", None), true),
+            (item(&["unity"], Prerelease, "Unity 6.2b1", None), true),
+            (item(&["unity"], News, "Unity roadmap", None), false),
+            (item(&["godot"], News, "Godot showcase", None), true),
+            (item(&["godot"], Release, "Godot 4.8", None), false),
+            (item(&["godot", "unity"], Release, "Both", None), true),
+            (item(&[], News, "Untagged", None), false),
+            (item(&["bevy"], News, "Bevy 0.17", None), false),
+        ];
+        for (item, expected) in &cases {
+            assert_eq!(
+                accepts(&unity_releases_godot_news, item),
+                *expected,
+                "{}",
+                item.title
+            );
+        }
+        // The channel's rules still apply on top.
+        let with_keywords = channel(
+            vec![sub("unity", Topic::Releases)],
+            rules(&[], &[], &[], &["lts"], false),
+        );
+        assert!(!accepts(&with_keywords, &cases[0].0));
+        assert!(accepts(
+            &with_keywords,
+            &item(&["unity"], Release, "Unity 6 LTS", None)
+        ));
+        // Other channels go by their rules only.
+        let webhook = ChannelConfig {
+            target: ChannelTarget::Discord {
+                webhook_url: "https://discord.com/api/webhooks/1/x".into(),
+            },
+            ..unity_releases_godot_news.clone()
+        };
+        assert!(accepts(&webhook, &cases[2].0));
+    }
+
     #[tokio::test]
     async fn send_errors_leave_out_the_url() {
         let http = Http::new("gen-test", None).unwrap();
@@ -525,6 +608,7 @@ pub(crate) mod tests {
             http: &http,
             sources: &sources(),
             base_url: "https://gen.example.org/",
+            discord_bot: None,
         };
         // Nothing listens on port 9 (discard) here, so the request fails.
         let channel: ChannelConfig = toml::from_str(

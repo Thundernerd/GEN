@@ -8,6 +8,19 @@
 </div>
 <p class="page-lede">Channels are sent new items as they arrive, filtered by what each one wants. Items from a source's first fetch are never sent.</p>
 
+{%- if bot.running %}
+<section class="bot-card" aria-labelledby="bot-title">
+  <h2 id="bot-title" class="channel-name">Discord bot {% if bot.connected %}<span class="badge status-ok">connected</span>{% else %}<span class="badge status-failing">not connected</span>{% endif %}</h2>
+  <p class="channel-target">{% if bot.user %}Logged in as {{ bot.user }} · on {{ bot.guilds }} server{{ "" if bot.guilds == 1 else "s" }}{% elif bot.last_error %}Couldn't connect; retrying.{% else %}Connecting to Discord…{% endif %}</p>
+  {%- if bot.last_error %}
+  <p class="channel-status"><span class="error-text">{{ bot.last_error }}</span></p>
+  {%- endif %}
+  <p class="form-hint">In a server, <code>/gen setup</code> creates channels per engine and topic, and <code>/gen subscribe</code> posts an engine's news in an existing channel. The channels show up below.{% if bot.invite_url %} <a href="{{ bot.invite_url }}" target="_blank" rel="noopener">Add the bot to a server</a>.{% endif %}</p>
+</section>
+{%- elif bot.configured %}
+<p class="form-hint">The Discord bot is set up in gen.toml but isn't running.</p>
+{%- endif %}
+
 {%- if notice %}
 <p class="notice{% if not notice.ok %} form-error{% endif %}" role="status">{{ notice.message }}</p>
 {%- endif %}
@@ -74,7 +87,7 @@
       {%- for s in samples %}
       <label class="check test-choice"><input type="radio" name="sample" value="{{ s.key }}"{% if loop.first %} checked{% endif %}><span><i class="kind-dot kind-{{ s.kind }}" aria-hidden="true"></i>{{ s.label }}<span class="test-title">{{ s.title }}</span></span></label>
       {%- endfor %}
-      <label class="check test-choice"><input type="radio" name="sample" value="all"><span>All examples at once<span class="test-title">{% if c.kind == "email" %}one digest mail, or one mail each when digests are off{% elif c.kind == "discord" %}one message with an embed each{% else %}one notification each{% endif %}</span></span></label>
+      <label class="check test-choice"><input type="radio" name="sample" value="all"><span>All examples at once<span class="test-title">{% if c.kind == "email" %}one digest mail, or one mail each when digests are off{% elif c.kind in ["discord", "discordbot"] %}one message with an embed each{% else %}one notification each{% endif %}</span></span></label>
     </fieldset>
     {%- if recent %}
     <fieldset>

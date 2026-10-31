@@ -1,13 +1,13 @@
-//! Discord webhook notifications.
+//! Discord notifications, through a webhook or as the GEN bot.
 
 use std::time::Duration;
 
 use reqwest::StatusCode;
-use reqwest::header::RETRY_AFTER;
+use reqwest::header::{AUTHORIZATION, RETRY_AFTER};
 use serde_json::{Value, json};
 
 use super::{NotifyContext, NotifyError, engine_names, kind_color, kind_emoji, kind_label};
-use crate::config::SourcesConfig;
+use crate::config::{AppConfig, SourcesConfig};
 use crate::fetch::truncate;
 use crate::model::Item;
 
@@ -20,21 +20,70 @@ const MAX_DESCRIPTION: usize = 300;
 /// Longest we wait on a 429 before the single retry.
 const MAX_RETRY_WAIT: Duration = Duration::from_secs(30);
 
+/// Discord's REST API, as used by the bot.
+pub const API_BASE: &str = "https://discord.com/api/v10";
+
+/// What the bot needs to post messages: its token and the API to post to.
+#[derive(Debug, Clone)]
+pub struct BotApi {
+    pub token: String,
+    pub api_base: String,
+}
+
+impl BotApi {
+    /// The bot's API access, when gen.toml has a `[discord]` section with a token.
+    pub fn from_config(app: &AppConfig) -> Option<BotApi> {
+        let discord = app.discord.as_ref().filter(|d| !d.token.is_empty())?;
+        Some(BotApi {
+            token: discord.token.clone(),
+            api_base: API_BASE.to_string(),
+        })
+    }
+}
+
 pub async fn send(
     ctx: &NotifyContext<'_>,
     webhook_url: &str,
     items: &[Item],
 ) -> Result<(), NotifyError> {
     for payload in build_payloads(ctx.sources, items) {
-        post(ctx, webhook_url, &payload).await?;
+        post(ctx, webhook_url, None, &payload).await?;
+    }
+    Ok(())
+}
+
+/// Posts the items to a channel as the bot.
+pub async fn send_bot(
+    ctx: &NotifyContext<'_>,
+    channel_id: u64,
+    items: &[Item],
+) -> Result<(), NotifyError> {
+    let bot = ctx.discord_bot.ok_or_else(|| {
+        NotifyError::Other(
+            "the Discord bot is not set up: add a [discord] section to gen.toml".into(),
+        )
+    })?;
+    let url = format!("{}/channels/{channel_id}/messages", bot.api_base);
+    let auth = format!("Bot {}", bot.token);
+    for payload in build_payloads(ctx.sources, items) {
+        post(ctx, &url, Some(&auth), &payload).await?;
     }
     Ok(())
 }
 
 /// POSTs one payload, retrying once after a 429.
-async fn post(ctx: &NotifyContext<'_>, url: &str, payload: &Value) -> Result<(), NotifyError> {
+async fn post(
+    ctx: &NotifyContext<'_>,
+    url: &str,
+    auth: Option<&str>,
+    payload: &Value,
+) -> Result<(), NotifyError> {
     for attempt in 0..2 {
-        let resp = ctx.http.client.post(url).json(payload).send().await?;
+        let mut req = ctx.http.client.post(url).json(payload);
+        if let Some(auth) = auth {
+            req = req.header(AUTHORIZATION, auth);
+        }
+        let resp = req.send().await?;
         let status = resp.status();
         if status.is_success() {
             return Ok(());
@@ -52,13 +101,11 @@ async fn post(ctx: &NotifyContext<'_>, url: &str, payload: &Value) -> Result<(),
             continue;
         }
         return Err(NotifyError::Other(format!(
-            "discord webhook returned {status}: {}",
+            "discord returned {status}: {}",
             truncate(body.trim(), 500)
         )));
     }
-    Err(NotifyError::Other(
-        "discord webhook still rate limited".into(),
-    ))
+    Err(NotifyError::Other("discord still rate limited".into()))
 }
 
 /// Wait time from a 429: `retry_after` (seconds) in the JSON body, else the header, capped.
@@ -205,6 +252,64 @@ mod tests {
             .chain(e["footer"]["text"].as_str())
             .map(|s| s.chars().count())
             .sum()
+    }
+
+    #[tokio::test]
+    async fn posts_as_the_bot() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let sink = tokio::spawn(async move {
+            let (mut conn, _) = listener.accept().await.unwrap();
+            let mut buf = vec![0u8; 16 * 1024];
+            let n = conn.read(&mut buf).await.unwrap();
+            conn.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\n{}")
+                .await
+                .unwrap();
+            String::from_utf8_lossy(&buf[..n]).into_owned()
+        });
+        let http = crate::fetch::Http::new("gen-test", None).unwrap();
+        let bot = BotApi {
+            token: "bot-token".into(),
+            api_base: format!("http://{addr}/api/v10"),
+        };
+        let ctx = NotifyContext {
+            http: &http,
+            sources: &sources(),
+            base_url: "https://gen.example.org/",
+            discord_bot: Some(&bot),
+        };
+        let i = item(&["godot"], ItemKind::Release, "Godot 4.8", None);
+        send_bot(&ctx, 42, &[i]).await.unwrap();
+
+        let request = sink.await.unwrap();
+        assert!(
+            request.starts_with("POST /api/v10/channels/42/messages "),
+            "{request}"
+        );
+        assert!(
+            request
+                .to_lowercase()
+                .contains("authorization: bot bot-token"),
+            "{request}"
+        );
+        assert!(request.contains(r#""embeds":[{"#), "{request}");
+        assert!(request.contains("Godot 4.8"), "{request}");
+    }
+
+    #[tokio::test]
+    async fn bot_channels_need_the_bot() {
+        let http = crate::fetch::Http::new("gen-test", None).unwrap();
+        let ctx = NotifyContext {
+            http: &http,
+            sources: &sources(),
+            base_url: "https://gen.example.org/",
+            discord_bot: None,
+        };
+        let i = item(&["godot"], ItemKind::Release, "Godot 4.8", None);
+        let err = send_bot(&ctx, 42, &[i]).await.unwrap_err().to_string();
+        assert!(err.contains("[discord]"), "{err}");
     }
 
     #[test]

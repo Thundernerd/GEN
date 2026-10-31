@@ -23,3 +23,7 @@ concurrency = 8
 # Notification channels are managed on the website (/notifications, after
 # logging in with the admin token). Their secrets can be entered as
 # ${GEN_DISCORD_WEBHOOK} and the like, read from .env when sending.
+
+# The Discord bot, for managing Discord channels with /gen slash commands.
+# [discord]
+# token = "${GEN_DISCORD_TOKEN}"

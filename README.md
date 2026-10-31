@@ -14,6 +14,7 @@ GEN is a single Rust binary. It contains a web server and a background poller, a
 - Removes cross-source duplicates, for example the same release announced on GitHub, the engine blog and GameFromScratch.
 - Provides a web UI by engine and by source, a combined Atom feed and a JSON API.
 - Sends notifications to Discord, ntfy, email and Apprise API (which reaches Telegram, Slack, Matrix, Pushover and many more), with per-channel filter rules. Email can be sent as a digest.
+- Runs an optional Discord bot. Server admins subscribe channels to engine topics with `/gen` slash commands, and `/gen setup` creates the channels, e.g. a Unity category with `#unity-releases` and `#unity-news`.
 - Uses conditional requests (ETag / Last-Modified) and per-source intervals. The first fetch of a new source fills the database without notifying, so adding a source never floods your channels.
 
 ### How it works
@@ -131,6 +132,10 @@ concurrency = 8                    # max sources fetched at the same time
 # github_token = "${GITHUB_TOKEN}" # optional; the GITHUB_TOKEN env var is used automatically
 
 # [[notify.channel]]               # imported once, then managed on the website; see "Notifications"
+
+# [discord]                        # runs the Discord bot; see "Discord bot"
+# token = "${GEN_DISCORD_TOKEN}"
+# dev_guild_id = 123456789012345678 # optional: register commands on this server only (instant)
 ```
 
 Relative paths resolve against the working directory. A GitHub token is optional, but without one the GitHub API allows only 60 requests per hour.
@@ -264,6 +269,56 @@ gen notify-test --channel phone                  # the release example
 gen notify-test --channel phone --sample all     # or: prerelease, news, outlet, untagged, long
 ```
 
+## Discord bot
+
+Besides webhooks, GEN can run a Discord bot. Server admins then manage what is posted where from Discord itself, and the bot can create the channels.
+
+### Setting it up
+
+1. In the [Discord Developer Portal](https://discord.com/developers/applications), create an application, open **Bot**, and copy (or reset) the token. The bot needs no privileged intents.
+2. Put the token in the environment and add a `[discord]` section to `gen.toml`:
+
+   ```toml
+   [discord]
+   token = "${GEN_DISCORD_TOKEN}"
+   ```
+
+3. Restart GEN. The Notifications page shows whether the bot is connected and has an **Add the bot to a server** link. The link asks for the View Channels, Send Messages, Embed Links and Manage Channels permissions; Manage Channels is only needed for `/gen setup`.
+
+Slash commands are registered globally on startup, which can take a while to show up in Discord. While developing, set `dev_guild_id` to a server's id to register them on that server only, where they update right away. The bot connects to Discord over an outgoing websocket, so GEN doesn't need to be reachable from the internet. If the connection drops, it reconnects by itself.
+
+### Commands
+
+Every command needs the **Manage Channels** permission by default (server admins can change that under Integrations), and only the person who runs it sees the replies.
+
+| Command | What it does |
+|---|---|
+| `/gen setup [engine]` | Opens a panel for picking engines, topics and a layout, with a **Create channels** button. Layouts: a category per engine with a channel per topic (Unity › `#unity-releases`, `#unity-news`, …), one channel per engine (`#unity`), or one channel per topic for all engines (`#releases`). The last two go in a "Game Engine News" category. Channels and categories that already exist with the same names are reused, so running setup again only adds what is missing. Discord menus hold 25 engines; for others, pass `engine:`. |
+| `/gen subscribe engine topic [channel]` | Posts an engine's topic in an existing channel (default: the current one). Topic `Everything` subscribes to all four. |
+| `/gen unsubscribe engine topic [channel]` | Stops that again. |
+| `/gen list` | Shows every channel on the server with what it gets. |
+| `/gen remove engine` | Stops posting the engine anywhere on the server. If that leaves channels the bot created without anything to post, it offers to delete them, and any category left empty. |
+
+There are four topics:
+
+- **releases:** releases and prereleases
+- **news**
+- **videos**
+- **community**
+
+A channel can be subscribed to several engines and topics, and an item that matches more than one of them is still posted once.
+
+### On the Notifications page
+
+Each subscribed Discord channel is listed as a **Discord bot** channel named after it (e.g. `discord-unity-news`). It works like other channels:
+
+- it shows its last delivery or error
+- it has **Send test**
+- it can be switched off or removed
+- it only gets items that arrive after it was subscribed
+
+Its subscriptions are changed in Discord. On the website you can add keywords and switch it on or off. Deleting the channel in Discord, or removing the bot from the server, removes it here too.
+
 ## Web routes
 
 | Route | Description |
@@ -323,14 +378,15 @@ Layout of `src/`:
 |---|---|
 | `main.rs` | CLI (`serve`, `fetch`, `check-config`, `notify-test`) and wiring. |
 | `config.rs` | `gen.toml` and engine/outlet/source schema, validation and `${ENV}` expansion. |
-| `model.rs` | Shared types: `ItemKind`, `RawItem`, `NewItem`, `Item`, `SourceState`. |
+| `model.rs` | Shared types: `ItemKind`, `Topic`, `RawItem`, `NewItem`, `Item`, `SourceState`. |
 | `fetch/` | HTTP client and one fetcher per source kind: `feed`, `github`, `unity`, `hn`, `html`. |
 | `classify.rs` | Item kind detection, engine tagging by alias and story keys for deduplication. |
 | `store.rs` | SQLite storage: items, source state, engines/outlets/sources and queries for the web UI. |
 | `catalog.rs` | The built-in catalog (`catalog.toml`): seeding a new database and the suggestions. |
 | `registry.rs` | The live set of sources stored in the database, published to the web UI, pipeline and scheduler. |
 | `pipeline.rs` | Polls a source: fetch, classify, dedupe and store. |
-| `notify/` | Rule matching and delivery: `discord`, `ntfy`, `email`. |
+| `notify/` | Rule matching and delivery: `discord` (webhooks and bot channels), `ntfy`, `email`, `apprise`. |
+| `discord_bot/` | The Discord bot: gateway connection, `/gen` commands, channel layout for `/gen setup`, and subscriptions stored as notification channels. |
 | `web/` | axum router: HTML pages (minijinja templates), Atom feed, JSON API. |
 
 Runtime assets are in `templates/` (minijinja) and `static/` (CSS and other static files). Deployment files are in `deploy/`, `Dockerfile` and `docker-compose.yml`.

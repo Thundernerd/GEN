@@ -40,6 +40,58 @@ impl ItemKind {
     }
 }
 
+/// What a Discord bot channel subscribes to per engine: a group of item kinds.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum Topic {
+    Releases,
+    News,
+    Videos,
+    Community,
+}
+
+impl Topic {
+    pub const ALL: [Topic; 4] = [
+        Topic::Releases,
+        Topic::News,
+        Topic::Videos,
+        Topic::Community,
+    ];
+
+    /// Lowercase name, also used in channel names (e.g. `unity-releases`).
+    pub fn slug(self) -> &'static str {
+        match self {
+            Topic::Releases => "releases",
+            Topic::News => "news",
+            Topic::Videos => "videos",
+            Topic::Community => "community",
+        }
+    }
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Topic::Releases => "Releases",
+            Topic::News => "News",
+            Topic::Videos => "Videos",
+            Topic::Community => "Community",
+        }
+    }
+
+    pub fn parse(s: &str) -> Option<Topic> {
+        Topic::ALL.into_iter().find(|t| t.slug() == s)
+    }
+
+    /// The item kinds this topic covers.
+    pub fn kinds(self) -> &'static [ItemKind] {
+        match self {
+            Topic::Releases => &[ItemKind::Release, ItemKind::Prerelease],
+            Topic::News => &[ItemKind::News],
+            Topic::Videos => &[ItemKind::Video],
+            Topic::Community => &[ItemKind::Community],
+        }
+    }
+}
+
 /// An entry as produced by a fetcher, before classification.
 #[derive(Debug, Clone, Default)]
 pub struct RawItem {
@@ -111,5 +163,24 @@ impl SourceState {
     /// Items from the first successful fetch are stored without notifying.
     pub fn is_seeded(&self) -> bool {
         self.last_ok.is_some()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn every_kind_belongs_to_exactly_one_topic() {
+        for kind in ItemKind::ALL {
+            let topics: Vec<_> = Topic::ALL
+                .into_iter()
+                .filter(|t| t.kinds().contains(&kind))
+                .collect();
+            assert_eq!(topics.len(), 1, "{kind:?} is in {topics:?}");
+        }
+        for topic in Topic::ALL {
+            assert_eq!(Topic::parse(topic.slug()), Some(topic));
+        }
     }
 }

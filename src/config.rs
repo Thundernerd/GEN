@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 use anyhow::{Context, bail};
 use serde::{Deserialize, Serialize};
 
-use crate::model::{EngineId, ItemKind};
+use crate::model::{EngineId, ItemKind, Topic};
 
 // ---------------------------------------------------------------------------
 // Engines, outlets and sources
@@ -379,6 +379,18 @@ pub struct AppConfig {
     pub polling: PollingConfig,
     #[serde(default)]
     pub notify: NotifyConfig,
+    /// The Discord bot. Without this section the bot doesn't run.
+    pub discord: Option<DiscordConfig>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct DiscordConfig {
+    /// Bot token from the Discord Developer Portal, e.g. `${GEN_DISCORD_TOKEN}`.
+    pub token: String,
+    /// Registers the slash commands on this server only, where they update instantly
+    /// (handy while developing). Unset: commands are registered for every server.
+    pub dev_guild_id: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -472,6 +484,13 @@ pub struct ChannelConfig {
     pub target: ChannelTarget,
 }
 
+/// One engine's topic, as subscribed to by a Discord bot channel.
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub struct BotSubscription {
+    pub engine: EngineId,
+    pub topic: Topic,
+}
+
 /// Which items a channel is notified about. Empty lists mean "no restriction".
 #[derive(Debug, Clone, Deserialize, Serialize, Default, PartialEq)]
 #[serde(deny_unknown_fields)]
@@ -495,6 +514,22 @@ pub struct NotifyRules {
 pub enum ChannelTarget {
     Discord {
         webhook_url: String,
+    },
+    /// A Discord channel the bot posts to, set up with its slash commands. It is sent the
+    /// items of its subscriptions (and the channel's rules still apply on top).
+    DiscordBot {
+        guild_id: u64,
+        channel_id: u64,
+        /// Server and channel names when subscribed, for display.
+        #[serde(default)]
+        guild_name: String,
+        #[serde(default)]
+        channel_name: String,
+        #[serde(default)]
+        subscriptions: Vec<BotSubscription>,
+        /// The bot created the channel, so `/gen remove` may delete it again.
+        #[serde(default)]
+        created_by_bot: bool,
     },
     Ntfy {
         #[serde(default = "default_ntfy_server")]
@@ -534,6 +569,7 @@ impl ChannelTarget {
     pub fn kind(&self) -> &'static str {
         match self {
             ChannelTarget::Discord { .. } => "discord",
+            ChannelTarget::DiscordBot { .. } => "discordbot",
             ChannelTarget::Ntfy { .. } => "ntfy",
             ChannelTarget::Email { .. } => "email",
             ChannelTarget::Apprise { .. } => "apprise",
@@ -544,6 +580,7 @@ impl ChannelTarget {
     fn strings_mut(&mut self) -> Vec<&mut String> {
         match self {
             ChannelTarget::Discord { webhook_url } => vec![webhook_url],
+            ChannelTarget::DiscordBot { .. } => Vec::new(),
             ChannelTarget::Ntfy {
                 server,
                 topic,
@@ -607,6 +644,18 @@ impl ChannelConfig {
                                 (or be a ${VARIABLE})."
                             .into(),
                     );
+                }
+            }
+            ChannelTarget::DiscordBot {
+                channel_id,
+                subscriptions,
+                ..
+            } => {
+                if *channel_id == 0 {
+                    return Err("The Discord channel is missing.".into());
+                }
+                if subscriptions.is_empty() {
+                    return Err("The channel isn't subscribed to anything.".into());
                 }
             }
             ChannelTarget::Ntfy { server, topic, .. } => {
@@ -984,5 +1033,50 @@ mod tests {
                 .contains("not both")
         );
         assert!(apprise("key = \"a/b\"").unwrap_err().contains("letters"));
+    }
+
+    #[test]
+    fn stores_discord_bot_channels() {
+        let json = r#"{"name":"discord-unity-news","kind":"discordbot","guild_id":1,
+            "channel_id":12345678901234567890,"channel_name":"unity-news",
+            "subscriptions":[{"engine":"unity","topic":"news"},{"engine":"unity","topic":"releases"}]}"#;
+        let c: ChannelConfig = serde_json::from_str(json).unwrap();
+        let ChannelTarget::DiscordBot {
+            channel_id,
+            subscriptions,
+            created_by_bot,
+            ..
+        } = &c.target
+        else {
+            panic!("{c:?}");
+        };
+        assert_eq!(*channel_id, 12345678901234567890);
+        assert_eq!(subscriptions[1].topic, Topic::Releases);
+        assert!(!created_by_bot);
+        assert_eq!(c.target.kind(), "discordbot");
+        assert_eq!(c.check(), Ok(()));
+        let again: ChannelConfig =
+            serde_json::from_str(&serde_json::to_string(&c).unwrap()).unwrap();
+        assert_eq!(again, c);
+        assert_eq!(c.resolved().unwrap(), c, "nothing to expand");
+
+        let mut empty = c.clone();
+        if let ChannelTarget::DiscordBot { subscriptions, .. } = &mut empty.target {
+            subscriptions.clear();
+        }
+        assert!(empty.check().unwrap_err().contains("isn't subscribed"));
+    }
+
+    #[test]
+    fn discord_section_is_optional() {
+        let cfg: AppConfig = toml::from_str("").unwrap();
+        assert!(cfg.discord.is_none());
+        let cfg: AppConfig =
+            toml::from_str("[discord]\ntoken = \"abc\"\ndev_guild_id = 42").unwrap();
+        let discord = cfg.discord.unwrap();
+        assert_eq!(
+            (discord.token.as_str(), discord.dev_guild_id),
+            ("abc", Some(42))
+        );
     }
 }

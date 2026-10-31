@@ -1167,3 +1167,62 @@ async fn timeline_layout_is_remembered() {
         assert_eq!(headers[header::LOCATION], "/", "{next}");
     }
 }
+
+#[tokio::test]
+async fn shows_discord_bot_channels_and_keeps_their_subscriptions() {
+    use crate::config::ChannelTarget;
+    use crate::discord_bot::{BotStatus, BotStatusHandle};
+
+    let mut st = state();
+    let cookie = login(&st).await;
+    let row = r#"{"name":"discord-godot-news","kind":"discordbot","guild_id":1,"channel_id":2,
+        "guild_name":"Game Dev","channel_name":"godot-news",
+        "subscriptions":[{"engine":"godot","topic":"news"},{"engine":"bevy","topic":"releases"}],
+        "created_by_bot":true}"#;
+    st.with_store(move |s| s.add_channel("discord-godot-news", row).map(|_| ()))
+        .await
+        .unwrap();
+    st.bot = Some(BotStatusHandle::new(std::sync::RwLock::new(BotStatus {
+        connected: true,
+        user: Some("GEN".into()),
+        application_id: Some(42),
+        guilds: 1,
+        last_error: None,
+    })));
+
+    let (status, body) = get_as(&st, "/notifications", &cookie).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("Discord bot"), "{body}");
+    assert!(body.contains("#godot-news on Game Dev"));
+    assert!(body.contains("Godot news, Bevy releases"));
+    assert!(body.contains("Logged in as GEN · on 1 server"));
+    assert!(body.contains("client_id=42"));
+    assert!(body.contains(r#"<input type="hidden" name="kind" value="discordbot">"#));
+
+    // Editing changes keywords and the switch; the subscriptions stay as they are.
+    let form = "original_name=discord-godot-news&kind=discordbot&keywords=4.8";
+    let (status, _, _) = send(&st, post_form("/notifications/edit", form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    let channel = &stored_channels(&st)[0];
+    assert!(!channel.enabled);
+    assert_eq!(channel.rules.keywords, ["4.8"]);
+    assert!(
+        matches!(&channel.target, ChannelTarget::DiscordBot { subscriptions, created_by_bot: true, .. } if subscriptions.len() == 2)
+    );
+
+    // Bot channels can't be added on the website, nor can another channel become one.
+    let form = "name=sneaky&kind=discordbot&kinds=news&enabled=1";
+    let (status, _, body) = send(&st, post_form("/notifications/add", form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(body.contains("set up in Discord"));
+    assert_eq!(stored_channels(&st).len(), 1);
+}
+
+#[tokio::test]
+async fn notifications_page_without_the_bot() {
+    let st = state();
+    let cookie = login(&st).await;
+    let (_, body) = get_as(&st, "/notifications", &cookie).await;
+    assert!(!body.contains("bot-card"));
+    assert!(!body.contains("isn't running"));
+}

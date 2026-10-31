@@ -161,6 +161,7 @@ mod tests {
             http: &http,
             sources: &sources(),
             base_url: "https://gen.example.org/",
+            discord_bot: None,
         };
         let target = Target {
             server: &server,
@@ -193,6 +194,7 @@ mod tests {
             http: &http,
             sources: &sources(),
             base_url: "https://gen.example.org/",
+            discord_bot: None,
         };
         let target = Target {
             server: &server,

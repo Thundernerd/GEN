@@ -30,8 +30,10 @@ use tower_http::services::ServeDir;
 
 use crate::catalog;
 use crate::config::{AppConfig, Owner, SourceSpec};
+use crate::discord_bot::BotStatusHandle;
 use crate::fetch::Http;
 use crate::model::{Item, ItemKind, SourceState};
+use crate::notify::discord::BotApi;
 use crate::pipeline::{Pipeline, PollSettings};
 use crate::registry::{NewOwner, Snapshot, SourceRegistry};
 use crate::scheduler::FetchRequests;
@@ -75,6 +77,10 @@ pub struct AppState {
     pub notify_wake: Arc<tokio::sync::Notify>,
     pub settings: Arc<PollSettings>,
     pub fetches: Arc<FetchRequests>,
+    /// For sending to Discord bot channels.
+    pub bot_api: Option<BotApi>,
+    /// The running Discord bot's status, when it runs.
+    pub bot: Option<BotStatusHandle>,
     templates: Arc<Environment<'static>>,
 }
 
@@ -87,6 +93,7 @@ impl AppState {
         // Fail at startup rather than on the first request when the directory is wrong.
         env.get_template("base.html")
             .with_context(|| format!("loading templates from {}", dir.display()))?;
+        let bot_api = BotApi::from_config(&config);
         Ok(AppState {
             store: pipeline.store.clone(),
             registry: pipeline.registry.clone(),
@@ -96,6 +103,8 @@ impl AppState {
             notify_wake: pipeline.notify_wake.clone(),
             settings: pipeline.settings.clone(),
             fetches: pipeline.fetches.clone(),
+            bot_api,
+            bot: None,
             templates: Arc::new(env),
         })
     }

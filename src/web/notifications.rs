@@ -15,7 +15,7 @@ use serde_json::{Value, json};
 use super::queries::{self, ItemFilter};
 use super::view::{DateView, snippet};
 use super::{AppError, AppState, PageResult};
-use crate::config::{ChannelConfig, ChannelTarget, NotifyRules};
+use crate::config::{BotSubscription, ChannelConfig, ChannelTarget, NotifyRules};
 use crate::model::{Item, ItemKind};
 use crate::notify::{self, Channel, NotifyContext};
 
@@ -72,9 +72,21 @@ async fn render(st: &AppState, feedback: Option<Value>, notice: Option<Value>) -
         .iter()
         .map(|c| {
             let dialog = format!("edit-{}", c.config.name);
-            let form = match &feedback {
+            let mut form = match &feedback {
                 Some(f) if failed == Some(dialog.as_str()) => f["form"].clone(),
                 _ => form_values(&c.config),
+            };
+            let rules = match &c.config.target {
+                ChannelTarget::DiscordBot { subscriptions, .. } => {
+                    let subscribed = subscriptions_summary(st, subscriptions);
+                    form["subscriptions"] = json!(subscribed);
+                    let mut parts = vec![subscribed.join(", ")];
+                    if !c.config.rules.keywords.is_empty() {
+                        parts.push(format!("keywords: {}", c.config.rules.keywords.join(", ")));
+                    }
+                    parts.join(" · ")
+                }
+                _ => rules_summary(st, &c.config.rules),
             };
             json!({
                 "name": c.config.name,
@@ -82,7 +94,7 @@ async fn render(st: &AppState, feedback: Option<Value>, notice: Option<Value>) -
                 "kind_label": kind_label(c.config.target.kind()),
                 "enabled": c.config.enabled,
                 "target": target_summary(&c.config.target),
-                "rules": rules_summary(st, &c.config.rules),
+                "rules": rules,
                 "last_ok": c.last_ok.map(|d| DateView::new(d, now)),
                 "last_error": c.last_error,
                 "last_error_at": c.last_error_at.map(|d| DateView::new(d, now)),
@@ -110,6 +122,7 @@ async fn render(st: &AppState, feedback: Option<Value>, notice: Option<Value>) -
             "recent": recent,
             "feedback": feedback,
             "notice": notice,
+            "bot": bot_view(st),
         }),
     )?;
     let status = if feedback.is_some() {
@@ -118,6 +131,35 @@ async fn render(st: &AppState, feedback: Option<Value>, notice: Option<Value>) -
         StatusCode::OK
     };
     Ok((status, page).into_response())
+}
+
+/// The Discord bot card: whether it's set up and connected, and its invite link.
+fn bot_view(st: &AppState) -> Value {
+    let Some(status) = st
+        .bot
+        .as_ref()
+        .and_then(|b| b.read().ok().map(|s| s.clone()))
+    else {
+        return json!({"configured": st.bot_api.is_some()});
+    };
+    json!({
+        "configured": true,
+        "running": true,
+        "connected": status.connected,
+        "user": status.user,
+        "guilds": status.guilds,
+        "invite_url": status.invite_url(),
+        "last_error": status.last_error,
+    })
+}
+
+/// A bot channel's subscriptions, e.g. "Unity releases".
+fn subscriptions_summary(st: &AppState, subscriptions: &[BotSubscription]) -> Vec<String> {
+    let lookup = &st.registry.current().lookup;
+    subscriptions
+        .iter()
+        .map(|s| format!("{} {}", lookup.engine_name(&s.engine), s.topic.slug()))
+        .collect()
 }
 
 /// Enabled engines, plus engines named in a channel's rules that no longer exist.
@@ -139,6 +181,7 @@ fn engine_choices(st: &AppState, channels: &[Channel]) -> Vec<Value> {
 fn kind_label(kind: &str) -> &'static str {
     match kind {
         "discord" => "Discord",
+        "discordbot" => "Discord bot",
         "ntfy" => "ntfy",
         "apprise" => "Apprise",
         _ => "Email",
@@ -157,6 +200,18 @@ fn target_summary(target: &ChannelTarget) -> String {
             format!("webhook {webhook_url}")
         }
         ChannelTarget::Discord { .. } => "Discord webhook".to_string(),
+        ChannelTarget::DiscordBot {
+            guild_name,
+            channel_name,
+            ..
+        } => {
+            let server = if guild_name.is_empty() {
+                String::new()
+            } else {
+                format!(" on {guild_name}")
+            };
+            format!("#{channel_name}{server}")
+        }
         ChannelTarget::Ntfy { server, topic, .. } => {
             let host = url::Url::parse(server)
                 .ok()
@@ -258,6 +313,7 @@ fn secret_hints(target: &ChannelTarget) -> Value {
     };
     match target {
         ChannelTarget::Discord { webhook_url } => json!({"webhook_url": hint(Some(webhook_url))}),
+        ChannelTarget::DiscordBot { .. } => json!({}),
         ChannelTarget::Ntfy { topic, token, .. } => {
             json!({"ntfy_topic": hint(Some(topic)), "ntfy_token": hint(token.as_ref())})
         }
@@ -289,7 +345,7 @@ fn form_values(c: &ChannelConfig) -> Value {
         "smtp_port": 587,
     });
     match &c.target {
-        ChannelTarget::Discord { .. } => {}
+        ChannelTarget::Discord { .. } | ChannelTarget::DiscordBot { .. } => {}
         ChannelTarget::Ntfy { server, .. } => form["ntfy_server"] = json!(server),
         ChannelTarget::Email {
             smtp_host,
@@ -382,6 +438,9 @@ impl Posted {
     /// Builds a channel from the form. Secret fields left empty keep their value from
     /// `existing` (when editing a channel of the same kind).
     fn to_channel(&self, existing: Option<&ChannelConfig>) -> Result<ChannelConfig, String> {
+        if self.get("kind").as_deref() == Some("discordbot") {
+            return self.to_bot_channel(existing);
+        }
         let name = match existing {
             Some(c) => c.name.clone(),
             None => self.get("name").ok_or("Enter a name.")?,
@@ -491,6 +550,25 @@ impl Posted {
             rules,
             target,
         };
+        channel.check()?;
+        Ok(channel)
+    }
+}
+
+impl Posted {
+    /// A Discord bot channel's subscriptions are managed in Discord; on the website only
+    /// its keywords and whether it's on can change.
+    fn to_bot_channel(&self, existing: Option<&ChannelConfig>) -> Result<ChannelConfig, String> {
+        let Some(existing) =
+            existing.filter(|c| matches!(c.target, ChannelTarget::DiscordBot { .. }))
+        else {
+            return Err(
+                "Discord bot channels are set up in Discord, with the /gen command.".into(),
+            );
+        };
+        let mut channel = existing.clone();
+        channel.enabled = self.checked("enabled");
+        channel.rules.keywords = split_list(self.get("keywords"));
         channel.check()?;
         Ok(channel)
     }
@@ -689,6 +767,7 @@ pub(super) async fn test(State(st): State<AppState>, headers: HeaderMap, body: B
             http: &st.http,
             sources: &snapshot.config,
             base_url: &st.config.server.base_url,
+            discord_bot: st.bot_api.as_ref(),
         };
         let sent = match channel.resolved() {
             Ok(resolved) => notify::send(&ctx, &resolved, &items)

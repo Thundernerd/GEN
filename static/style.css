@@ -598,6 +598,8 @@ details.panel .form-error { margin-top: 0; }
 .channel-status .error-text { max-width: none; }
 .channel-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .channel-actions form { margin: 0; }
+.bot-card { border: 1px solid var(--border); border-radius: 8px; padding: 0.85rem 1rem; margin: 0 0 1.25rem; max-width: var(--measure); }
+.bot-card .form-hint { margin: 0.5rem 0 0; }
 .empty-state { color: var(--muted); padding: 2rem 0; border-top: 1px solid var(--border); }
 .test-dialog { width: min(36rem, calc(100vw - 2rem)); }
 .test-dialog fieldset { gap: 0.15rem; }

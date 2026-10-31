@@ -15,6 +15,7 @@ use tokio::time::Instant;
 use crate::config::{AppConfig, ChannelConfig, ChannelTarget, ResolvedSource};
 use crate::fetch::FetchError;
 use crate::model::Item;
+use crate::notify::discord::BotApi;
 use crate::notify::{self, NotifyContext};
 use crate::pipeline::Pipeline;
 
@@ -194,6 +195,7 @@ pub fn spawn(pipeline: Pipeline, app: Arc<AppConfig>) -> JoinSet<()> {
     };
     let notifier = Notifier {
         pipeline,
+        bot: BotApi::from_config(&app),
         app,
         wake,
     };
@@ -398,6 +400,8 @@ impl Poller {
 
 struct Notifier {
     pipeline: Pipeline,
+    /// For Discord bot channels.
+    bot: Option<BotApi>,
     app: Arc<AppConfig>,
     wake: Arc<Notify>,
 }
@@ -469,7 +473,7 @@ impl Notifier {
         }
         let (matching, skipped): (Vec<Item>, Vec<Item>) = pending
             .into_iter()
-            .partition(|i| notify::matches(&channel.rules, i));
+            .partition(|i| notify::accepts(channel, i));
         self.mark(channel, &skipped).await?;
 
         let snapshot = self.pipeline.registry.current();
@@ -477,6 +481,7 @@ impl Notifier {
             http: &self.pipeline.http,
             sources: &snapshot.config,
             base_url: &self.app.server.base_url,
+            discord_bot: self.bot.as_ref(),
         };
         let digest = matches!(channel.target, ChannelTarget::Email { digest: true, .. });
         let batches: Vec<&[Item]> = if digest {
@@ -724,6 +729,7 @@ mod tests {
         };
         let notifier = Notifier {
             pipeline: pipeline.clone(),
+            bot: None,
             app: Arc::new(AppConfig::default()),
             wake: pipeline.notify_wake.clone(),
         };
@@ -732,6 +738,93 @@ mod tests {
         let request = sink.await.unwrap();
         assert!(request.starts_with("POST /gen-test "), "{request}");
         assert!(request.contains("Godot 4.8"), "{request}");
+        let channels = notify::load_channels(&pipeline.store.lock().unwrap()).unwrap();
+        assert!(channels[0].last_ok.is_some() && channels[0].last_error.is_none());
+    }
+
+    /// A Discord bot channel is posted only the items of its subscriptions, each once even
+    /// when several subscriptions match, with the bot's token.
+    #[tokio::test]
+    async fn delivers_subscribed_items_to_bot_channels() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        // An HTTP sink that records every request until the test ends.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let requests = Arc::new(Mutex::new(Vec::<String>::new()));
+        let seen = requests.clone();
+        tokio::spawn(async move {
+            loop {
+                let (mut conn, _) = listener.accept().await.unwrap();
+                let mut buf = vec![0u8; 16 * 1024];
+                let n = conn.read(&mut buf).await.unwrap();
+                seen.lock()
+                    .unwrap()
+                    .push(String::from_utf8_lossy(&buf[..n]).into_owned());
+                conn.write_all(
+                    b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\n{}",
+                )
+                .await
+                .unwrap();
+            }
+        });
+
+        let mut store = crate::store::Store::open_in_memory().unwrap();
+        let registry = crate::registry::SourceRegistry::load(&store).unwrap();
+        let channel = r#"{"name":"discord-godot","kind":"discordbot","guild_id":1,"channel_id":42,
+            "subscriptions":[{"engine":"godot","topic":"releases"},{"engine":"unity","topic":"releases"}]}"#;
+        store.add_channel("discord-godot", channel).unwrap();
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        let item = |guid: &str, engines: &[&str], kind, title: &str| crate::model::NewItem {
+            source_id: format!("x:feed:{guid}"),
+            guid: guid.into(),
+            engines: engines.iter().map(|e| e.to_string()).collect(),
+            kind,
+            title: title.into(),
+            url: None,
+            summary: None,
+            published: None,
+            story_key: guid.into(),
+            notify: true,
+        };
+        use crate::model::ItemKind::{News, Release};
+        store
+            .insert_items(&[
+                item("a", &["godot", "unity"], Release, "Godot and Unity ship"),
+                item("b", &["godot"], News, "Godot news, not subscribed"),
+                item("c", &["bevy"], Release, "Bevy release, not subscribed"),
+            ])
+            .unwrap();
+        let pipeline = Pipeline {
+            http: crate::fetch::Http::new("gen-test", None).unwrap(),
+            store: Arc::new(Mutex::new(store)),
+            registry: Arc::new(registry),
+            toggles: Arc::new(crate::toggles::SourceToggles::default()),
+            notify_wake: Arc::new(Notify::new()),
+            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
+            fetches: Arc::new(FetchRequests::default()),
+        };
+        let notifier = Notifier {
+            pipeline: pipeline.clone(),
+            bot: Some(BotApi {
+                token: "t0ken".into(),
+                api_base: format!("http://{addr}"),
+            }),
+            app: Arc::new(AppConfig::default()),
+            wake: pipeline.notify_wake.clone(),
+        };
+        notifier.run_once().await;
+        notifier.run_once().await;
+
+        let requests = requests.lock().unwrap().clone();
+        assert_eq!(requests.len(), 1, "{requests:?}");
+        assert!(requests[0].starts_with("POST /channels/42/messages "));
+        assert!(requests[0].contains("Godot and Unity ship"));
+        assert!(
+            requests[0]
+                .to_lowercase()
+                .contains("authorization: bot t0ken")
+        );
         let channels = notify::load_channels(&pipeline.store.lock().unwrap()).unwrap();
         assert!(channels[0].last_ok.is_some() && channels[0].last_error.is_none());
     }

@@ -1,6 +1,7 @@
 mod catalog;
 mod classify;
 mod config;
+mod discord_bot;
 mod fetch;
 mod model;
 mod notify;
@@ -199,10 +200,12 @@ async fn notify_test(app: &AppConfig, channel: &str, sample: &str) -> anyhow::Re
         );
     };
     let snapshot = pipeline.registry.current();
+    let bot = notify::discord::BotApi::from_config(app);
     let ctx = notify::NotifyContext {
         http: &pipeline.http,
         sources: &snapshot.config,
         base_url: &app.server.base_url,
+        discord_bot: bot.as_ref(),
     };
     notify::send(&ctx, &cfg.resolved()?, &items)
         .await
@@ -213,7 +216,14 @@ async fn notify_test(app: &AppConfig, channel: &str, sample: &str) -> anyhow::Re
 
 async fn serve(app: AppConfig) -> anyhow::Result<()> {
     let pipeline = build_pipeline(&app)?;
-    let state = web::AppState::new(&pipeline, app)?;
+    let mut state = web::AppState::new(&pipeline, app)?;
+    let bot_status = discord_bot::BotStatusHandle::default();
+    // Like the scheduler, the bot stops when `serve` returns.
+    let bot = discord_bot::spawn(pipeline.clone(), &state.config, bot_status.clone())
+        .map(|task| AbortOnDrop(task.abort_handle()));
+    if bot.is_some() {
+        state.bot = Some(bot_status);
+    }
     let listener = tokio::net::TcpListener::bind(&state.config.server.bind)
         .await
         .with_context(|| format!("binding {}", state.config.server.bind))?;
@@ -225,6 +235,15 @@ async fn serve(app: AppConfig) -> anyhow::Result<()> {
         .await?;
     tracing::info!("shut down");
     Ok(())
+}
+
+/// Aborts a task when dropped.
+struct AbortOnDrop(tokio::task::AbortHandle);
+
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
 }
 
 /// Resolves on Ctrl-C, or on SIGTERM (sent by `docker stop` and `systemctl stop`).

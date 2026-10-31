@@ -39,3 +39,8 @@ concurrency = 8
 # from = "GEN <gen@example.com>"
 # to = ["you@example.com"]
 # digest = true
+
+# The Discord bot: manage Discord channels with /gen slash commands.
+# [discord]
+# token = "${GEN_DISCORD_TOKEN}"
+# dev_guild_id = 123456789012345678   # optional: register commands on one server only
