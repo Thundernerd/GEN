@@ -108,6 +108,37 @@ journalctl -u gen -f
 
 `config/gen.toml` binds to `127.0.0.1:8080` by default. Change `bind` to `0.0.0.0:8080` to reach GEN from other machines, or put a reverse proxy (Caddy, nginx) in front of it, and set `base_url` to the public URL. To update, replace the binary or the files in `/opt/gen`, then run `sudo systemctl restart gen`.
 
+## Proxmox VE container
+
+`deploy/proxmox/gen.sh` works like the [community-scripts.org](https://community-scripts.org) helper scripts. Run it as root on a Proxmox VE node. It creates an unprivileged Debian LXC container (Debian 13, or 12 when 13 isn't offered) and builds GEN from source inside it. Then it installs GEN as the systemd service from "Home server with systemd". GEN listens on port 8080, so it is reachable on the container's IP right away.
+
+The script builds from a GEN checkout on the node or from a git repository:
+
+```sh
+# From a checkout: copy this repository to the node and run the script in it.
+rsync -a --exclude target --exclude data --exclude .env ./ root@pve:/root/GEN/
+ssh root@pve bash /root/GEN/deploy/proxmox/gen.sh
+
+# From git, e.g. as a one-liner once the script is hosted somewhere:
+GEN_REPO=https://github.com/you/GEN.git bash -c "$(curl -fsSL https://raw.githubusercontent.com/you/GEN/main/deploy/proxmox/gen.sh)"
+```
+
+**Default** uses 2 cores, 2 GiB RAM, an 8 GiB disk and DHCP on `vmbr0`. Compiling needs about 2 GiB of RAM; the Rust toolchain and build cache take about 4 GiB of disk. **Advanced** asks for each of these, and also for:
+- a static IP and VLAN
+- a root password
+- the port
+- the public URL
+- a GitHub token
+- a Discord bot token
+
+Every setting can also be preset in the environment, e.g. `CT_ID=120 CT_IP=192.168.1.50/24 CT_GW=192.168.1.1`; the top of the script lists them.
+
+The first build takes several minutes. At the end, the script prints GEN's URL and a generated admin token. In the container:
+- `/opt/gen/config/gen.toml` holds the settings, and `/etc/gen/gen.env` the secrets.
+- The database is `/var/lib/gen/gen.db`.
+
+To update, run `update` inside the container when GEN was installed from git. When it was installed from a checkout, update the checkout and run `bash deploy/proxmox/gen.sh update <CTID>` on the node. Either way, GEN is rebuilt, the database is backed up to `gen.db.bak`, and the settings are kept.
+
 ## Configuration
 
 ### gen.toml
