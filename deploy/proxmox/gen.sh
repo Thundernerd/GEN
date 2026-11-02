@@ -4,6 +4,7 @@
 # installs GEN in it as a systemd service.
 #
 # On a Proxmox VE node, as root:
+#   bash -c "$(curl -fsSL https://raw.githubusercontent.com/Thundernerd/GEN/main/deploy/proxmox/gen.sh)"
 #   bash gen.sh                 create a container and install GEN in it
 #   bash gen.sh update [CTID]   rebuild GEN in an existing container
 # Inside the container:
@@ -12,6 +13,7 @@
 # GEN is built from source in the container. The source is either a git
 # repository (GEN_REPO, optionally GEN_REF for a branch or tag) or a checkout
 # on the node: the one this script sits in, the current directory, or GEN_SRC.
+# Without a checkout, it is DEFAULT_REPO.
 #
 # Every setting below can be preset in the environment, e.g.
 #   CT_ID=120 CT_IP=192.168.1.50/24 CT_GW=192.168.1.1 bash gen.sh
@@ -42,6 +44,7 @@ GEN_SRC="${GEN_SRC:-}"
 GEN_GITHUB_TOKEN="${GEN_GITHUB_TOKEN:-}"
 GEN_DISCORD_TOKEN="${GEN_DISCORD_TOKEN:-}"
 
+DEFAULT_REPO=https://github.com/Thundernerd/GEN.git
 BACKTITLE="GEN · Proxmox VE installer"
 # Where the setup script and the build source live in the container.
 SETUP=/usr/local/sbin/gen-setup
@@ -415,15 +418,12 @@ find_checkout() {
   fi
 }
 
-# Finds the source: GEN_REPO, else a checkout (see find_checkout), else asks
-# for a git URL.
+# Finds the source: GEN_REPO, else a checkout (see find_checkout), else
+# DEFAULT_REPO.
 find_source() {
   [ -n "$GEN_REPO" ] && return 0
   find_checkout && return 0
-  GEN_REPO=$(ask "GEN source" \
-    "No GEN checkout was found next to this script. Git URL to build GEN from (for a private repository, include a token: https://<token>@github.com/...):" "") ||
-    cancelled
-  [ -n "$GEN_REPO" ] || cancelled
+  GEN_REPO=$DEFAULT_REPO
 }
 
 source_label() {
@@ -477,6 +477,11 @@ advanced_settings() {
     whiptail --backtitle "$BACKTITLE" --msgbox "ID $value is invalid or already in use." 8 50
   done
   CT_HOSTNAME=$(ask "Hostname" "Hostname:" "$CT_HOSTNAME") || cancelled
+  if [ -n "$GEN_REPO" ]; then
+    GEN_REPO=$(ask "GEN source" "Git repository to build GEN from:" "$GEN_REPO") || cancelled
+    GEN_REF=$(ask "GEN source" "Branch or tag (empty for the default branch):" "$GEN_REF") || cancelled
+    [ -n "$GEN_REPO" ] || GEN_REPO=$DEFAULT_REPO
+  fi
   ask_number CT_CORES "CPU" "CPU cores:"
   ask_number CT_RAM "RAM" "RAM in MiB (building GEN needs about 2048):"
   ask_number CT_DISK "Disk" "Disk size in GiB (at least 8 recommended):"
