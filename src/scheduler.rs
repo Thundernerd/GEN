@@ -945,7 +945,9 @@ mod tests {
         };
         notifier.run_once().await;
 
-        let request = sink.requests().remove(0);
+        let requests = sink.requests();
+        assert_eq!(requests.len(), 1, "{requests:?}");
+        let request = &requests[0];
         assert!(request.starts_with("POST /gen-test "), "{request}");
         assert!(request.contains("Godot 4.8"), "{request}");
         let channels = notify::load_channels(&pipeline.store.lock().unwrap()).unwrap();
@@ -1080,7 +1082,7 @@ mod tests {
     /// og:image once and stores it; the message carries it.
     #[tokio::test]
     async fn looks_up_preview_images_once() {
-        let sink = serve(|request| {
+        let server = serve(|request| {
             if request.starts_with("GET /post") {
                 ok(r#"<head><meta property="og:image" content="/hero.png"></head>"#)
             } else {
@@ -1088,7 +1090,7 @@ mod tests {
             }
         })
         .await;
-        let addr = sink.addr;
+        let addr = server.addr;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
         let registry = crate::registry::SourceRegistry::load(&store).unwrap();
@@ -1132,7 +1134,7 @@ mod tests {
         assert_eq!(item.image_url.as_deref(), Some(hero.as_str()));
         assert!(item.image_checked);
         {
-            let requests = sink.requests();
+            let requests = server.requests();
             assert_eq!(requests.len(), 2, "{requests:?}");
             assert!(requests[0].starts_with("GET /post "));
             assert!(requests[1].starts_with("POST /hook?with_components=true "));
@@ -1143,7 +1145,7 @@ mod tests {
         let mut again = vec![item];
         again[0].image_url = None;
         notifier.find_images(&mut again).await;
-        assert_eq!(sink.requests().len(), 2);
+        assert_eq!(server.requests().len(), 2);
     }
 
     #[test]
