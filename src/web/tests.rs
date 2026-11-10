@@ -1347,6 +1347,65 @@ async fn sets_message_styles_one_by_one_and_in_bulk() {
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
+/// Godot fetches fine but its newest item is over a year old; Bevy keeps failing; the
+/// outlet is fine.
+fn state_with_unhealthy_sources() -> AppState {
+    let st = state();
+    {
+        let store = st.store.lock().unwrap();
+        store.record_fetch_ok(GODOT_SRC, None, None).unwrap();
+        store.record_fetch_ok(GFS_SRC, None, None).unwrap();
+        store
+            .conn()
+            .execute(
+                "UPDATE items SET sort_date = ?1 WHERE source_id = ?2",
+                rusqlite::params![Utc::now() - Duration::days(400), GODOT_SRC],
+            )
+            .unwrap();
+    }
+    st
+}
+
+#[tokio::test]
+async fn sources_page_flags_failing_and_stale_sources() {
+    let st = state_with_unhealthy_sources();
+    let (_, _, body) = send(&st, Request::get("/sources").body(Body::empty()).unwrap()).await;
+    assert!(body.contains(r#"data-status="stale""#));
+    assert!(body.contains(r#"data-status="failing""#));
+    assert!(body.contains(r#"newest item <time"#) && body.contains(">1 year ago</time>"));
+    assert!(body.contains(r#"<span class="badge status-stale">1 stale</span>"#));
+    assert!(body.contains(r#"<span class="badge status-failing">1 failing</span>"#));
+    // Everyone gets the filter; only admins get the call-out in the page header.
+    assert!(body.contains(r#"href="&#x2f;sources?health=unhealthy">Show only unhealthy (2)<"#));
+    assert!(!body.contains("need attention"));
+
+    let cookie = login(&st).await;
+    let (_, body) = get_as(&st, "/sources", &cookie).await;
+    assert!(body.contains("2 sources need attention"));
+}
+
+#[tokio::test]
+async fn sources_page_filters_unhealthy_sources() {
+    let st = state_with_unhealthy_sources();
+    let (_, _, body) = send(
+        &st,
+        Request::get("/sources?health=unhealthy&sort=owner")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert!(body.contains("godotengine&#x2f;godot"));
+    assert!(body.contains("bevyengine.org&#x2f;news&#x2f;rss.xml"));
+    assert!(!body.contains("gamefromscratch.com&#x2f;feed"));
+    // Owners without unhealthy sources are left out.
+    assert_eq!(body.matches(r#"class="group-head""#).count(), 2);
+    // The order links keep the filter, and there is a way back to all sources.
+    assert!(
+        body.contains(r#"href="&#x2f;sources?sort=owner&amp;dir=desc&amp;health=unhealthy">Z–A<"#)
+    );
+    assert!(body.contains(r#"href="&#x2f;sources?sort=owner">Show all sources<"#));
+}
+
 fn api_titles(body: &str) -> Vec<String> {
     let json: serde_json::Value = serde_json::from_str(body).unwrap();
     json["items"]

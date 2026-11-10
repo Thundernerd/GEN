@@ -3,12 +3,14 @@ mod classify;
 mod config;
 mod discord_bot;
 mod fetch;
+mod health;
 mod model;
 mod notify;
 mod pipeline;
 mod registry;
 mod scheduler;
 mod store;
+mod time_ago;
 mod toggles;
 mod web;
 
@@ -89,12 +91,15 @@ fn check_config(app: &AppConfig) -> anyhow::Result<()> {
     let pipeline = build_pipeline(app)?;
     let snapshot = pipeline.registry.current();
     let sources = &snapshot.config;
-    let channels = {
+    let (channels, history) = {
         let store = pipeline
             .store
             .lock()
             .map_err(|_| anyhow::anyhow!("store mutex poisoned"))?;
-        notify::load_channels(&store)?
+        (
+            notify::load_channels(&store)?,
+            health::FetchHistory::load(&store)?,
+        )
     };
     let all = sources.all_sources();
     let enabled = sources.enabled_sources();
@@ -109,6 +114,28 @@ fn check_config(app: &AppConfig) -> anyhow::Result<()> {
     );
     for s in &enabled {
         println!("  {}", s.id);
+    }
+
+    let now = chrono::Utc::now();
+    let unhealthy: Vec<_> = sources
+        .manageable_sources()
+        .into_iter()
+        .filter_map(|s| {
+            let history = history.source(&s.id);
+            let interval = s
+                .interval_minutes
+                .unwrap_or_else(|| pipeline.settings.default_interval());
+            let health = history.health(pipeline.toggles.is_enabled(&s), interval, now);
+            health
+                .is_unhealthy()
+                .then(|| (s.id, health, history.reason(health, now)))
+        })
+        .collect();
+    if !unhealthy.is_empty() {
+        println!("{} unhealthy sources:", unhealthy.len());
+        for (id, health, reason) in &unhealthy {
+            println!("  {:<8} {id}  ({reason})", health.as_str());
+        }
     }
     if let Some(warning) = github_token_warning(app, &pipeline) {
         println!("\nwarning: {warning}");

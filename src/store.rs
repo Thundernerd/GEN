@@ -161,6 +161,11 @@ CREATE TABLE pruned_items (
     PRIMARY KEY (source_id, guid)
 ) WITHOUT ROWID;
 "#,
+    r#"
+-- The pruned item's date, so a source's newest item date (for its health) survives
+-- retention. NULL for items pruned before this column existed.
+ALTER TABLE pruned_items ADD COLUMN sort_date TEXT;
+"#,
 ];
 
 /// A configured notification channel with its last delivery result.
@@ -246,6 +251,19 @@ impl Store {
         let rows = stmt.query_map([], |r| {
             Ok((r.get::<_, String>(5)?, source_state_from_row(r)?))
         })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// The date of each source's newest item, duplicates and pruned items included.
+    pub fn latest_item_dates(&self) -> anyhow::Result<HashMap<String, DateTime<Utc>>> {
+        let mut stmt = self.conn.prepare(
+            "SELECT source_id, MAX(sort_date) FROM (
+                 SELECT source_id, sort_date FROM items
+                 UNION ALL
+                 SELECT source_id, sort_date FROM pruned_items WHERE sort_date IS NOT NULL
+             ) GROUP BY source_id",
+        )?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
@@ -541,8 +559,8 @@ impl Store {
             OR duplicate_of IN (SELECT id FROM items WHERE sort_date < ?1 AND first_seen < ?1)";
         tx.execute(
             &format!(
-                "INSERT OR IGNORE INTO pruned_items (source_id, guid)
-                 SELECT source_id, guid FROM items WHERE {EXPIRED}"
+                "INSERT OR IGNORE INTO pruned_items (source_id, guid, sort_date)
+                 SELECT source_id, guid, sort_date FROM items WHERE {EXPIRED}"
             ),
             [cutoff],
         )?;
@@ -887,6 +905,34 @@ mod tests {
             Some("https://example.org/1.png")
         );
         assert!(first.image_checked);
+    }
+
+    #[test]
+    fn reports_each_sources_newest_item_date() {
+        let mut store = Store::open_in_memory().unwrap();
+        let at = |days: i64| Utc::now() - Duration::days(days);
+        let dated = |source: &str, guid: &str, days: i64| NewItem {
+            published: Some(at(days)),
+            ..new_item(source, guid, guid)
+        };
+        store
+            .insert_items(&[
+                dated("a", "1", 300),
+                dated("a", "2", 10),
+                dated("b", "3", 200),
+            ])
+            .unwrap();
+        // A duplicate still counts: the source did publish it.
+        store
+            .insert_items(&[NewItem {
+                published: Some(at(1)),
+                ..new_item("b", "4", "2")
+            }])
+            .unwrap();
+        let latest = store.latest_item_dates().unwrap();
+        assert_eq!(latest.len(), 2);
+        assert_eq!(latest["a"].date_naive(), at(10).date_naive());
+        assert_eq!(latest["b"].date_naive(), at(1).date_naive());
     }
 
     #[test]
@@ -1298,6 +1344,21 @@ mod tests {
         assert!(store.insert_items(&[again]).unwrap().is_empty());
         // Pruning doesn't make the source look new either.
         assert!(store.source_state("a").unwrap().is_seeded());
+    }
+
+    #[test]
+    fn pruning_keeps_each_sources_newest_item_date() {
+        let mut store = Store::open_in_memory().unwrap();
+        insert_ago(&mut store, &[aged("a", "old", "", 60)], 60);
+        insert_ago(&mut store, &[aged("a", "older", "", 90)], 90);
+        insert_ago(&mut store, &[aged("b", "kept", "", 90)], 90);
+        insert_ago(&mut store, &[aged("b", "recent", "", 5)], 5);
+        store.prune_items(Utc::now() - Duration::days(30)).unwrap();
+        // All of a's items are gone, but it did publish 60 days ago: not "no items".
+        let latest = store.latest_item_dates().unwrap();
+        let days_ago = |id: &str| (Utc::now() - latest[id]).num_days();
+        assert_eq!(days_ago("a"), 60);
+        assert_eq!(days_ago("b"), 5);
     }
 
     #[test]

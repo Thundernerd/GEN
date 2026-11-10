@@ -3,6 +3,10 @@
 {% block content %}
 <div class="page-head">
   <h1 class="page-title">Sources</h1>
+  {%- if admin and summary.unhealthy %}
+  {%- set attention = summary.unhealthy ~ " source" ~ ("s need" if summary.unhealthy != 1 else " needs") ~ " attention" %}
+  {%- if health_filter.active %}<span class="health-alert">{{ attention }}</span>{% else %}<a class="health-alert" href="{{ health_filter.url }}">{{ attention }}</a>{% endif %}
+  {%- endif %}
   {%- if admin %}
   <form method="post" action="/logout"><button type="submit" class="btn-small btn-quiet">Log out</button></form>
   {%- elif login_available %}
@@ -13,10 +17,17 @@
   <p class="summary-line">
     {{ summary.enabled }} of {{ summary.total }} sources enabled:
     <span class="badge status-ok">{{ summary.ok }} ok</span>
+    <span class="badge status-retrying">{{ summary.retrying }} retrying</span>
+    <span class="badge status-stale">{{ summary.stale }} stale</span>
     <span class="badge status-failing">{{ summary.failing }} failing</span>
     <span class="badge status-pending">{{ summary.pending }} pending</span>
     <span class="badge status-disabled">{{ summary.disabled }} disabled</span>
   </p>
+  {%- if health_filter.active %}
+  <a class="health-filter" href="{{ health_filter.url }}">Show all sources</a>
+  {%- elif summary.unhealthy %}
+  <a class="health-filter" href="{{ health_filter.url }}">Show only unhealthy ({{ summary.unhealthy }})</a>
+  {%- endif %}
   <nav class="segmented" aria-label="Group order">
     <span class="segmented-label">Order</span>
     {%- for l in order_links %}
