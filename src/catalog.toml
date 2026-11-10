@@ -77,6 +77,11 @@ aliases = ["godot", "godot engine", "gdscript"]
   kind = "github"
   repo = "godotengine/godot"
   category = "release"
+  # Dev, beta and RC builds are only published here (the main repo has just -stable).
+  [[engine.source]]
+  kind = "github"
+  repo = "godotengine/godot-builds"
+  category = "release"
 
 # --- Stride -------------------------------------------------------------------
 # GitHub releases also include launcher/ and vsix/ releases; keep only releases/.
@@ -735,6 +740,12 @@ aliases = ["gamemaker", "game maker studio"]
   kind = "feed"
   url = "https://gamemaker.io/en/blog/rss"
   category = "news"
+  interval_minutes = 180
+  # Steam news carries the release notes, hotfix posts included (verified 2026-11-10).
+  [[engine.source]]
+  kind = "feed"
+  url = "https://store.steampowered.com/feeds/news/app/1670460/"
+  category = "release"
   interval_minutes = 180
 
 [[engine]]
