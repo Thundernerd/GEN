@@ -12,7 +12,7 @@ use reqwest::header::{AUTHORIZATION, RETRY_AFTER};
 use serde_json::{Value, json};
 
 use self::parts::Parts;
-use super::{NotifyContext, NotifyError};
+use super::{NotifyContext, NotifyError, TextMessage};
 use crate::config::{AppConfig, MessageStyle, SourcesConfig};
 use crate::fetch::truncate;
 use crate::model::Item;
@@ -21,6 +21,8 @@ use crate::model::Item;
 const MAX_EMBEDS: usize = 10;
 /// Discord caps the combined text of all embeds in one message at 6000 chars.
 const MAX_MESSAGE_CHARS: usize = 6000;
+/// Discord caps a message's `content` at 2000 chars.
+const MAX_CONTENT_CHARS: usize = 2000;
 /// Longest we wait on a 429 before the single retry.
 const MAX_RETRY_WAIT: Duration = Duration::from_secs(30);
 
@@ -98,17 +100,57 @@ pub async fn send_bot(
     style: MessageStyle,
     items: &[Item],
 ) -> Result<(), NotifyError> {
+    let (url, auth) = bot_endpoint(ctx, channel_id)?;
+    for message in build_messages(ctx.sources, ctx.base_url, style, items) {
+        post(ctx, &url, Some(&auth), &message.payload).await?;
+    }
+    Ok(())
+}
+
+/// Sends a plain message, such as a health alert, through a webhook.
+pub async fn send_text(
+    ctx: &NotifyContext<'_>,
+    webhook_url: &str,
+    message: &TextMessage,
+) -> Result<(), NotifyError> {
+    Ok(post(ctx, webhook_url, None, &text_payload(message)).await?)
+}
+
+/// Sends a plain message, such as a health alert, as the bot.
+pub async fn send_bot_text(
+    ctx: &NotifyContext<'_>,
+    channel_id: u64,
+    message: &TextMessage,
+) -> Result<(), NotifyError> {
+    let (url, auth) = bot_endpoint(ctx, channel_id)?;
+    Ok(post(ctx, &url, Some(&auth), &text_payload(message)).await?)
+}
+
+/// The URL to post a channel's messages to as the bot, and its authorization header.
+fn bot_endpoint(ctx: &NotifyContext<'_>, channel_id: u64) -> Result<(String, String), NotifyError> {
     let bot = ctx.discord_bot.ok_or_else(|| {
         NotifyError::Other(
             "the Discord bot is not set up: add a [discord] section to gen.toml".into(),
         )
     })?;
-    let url = format!("{}/channels/{channel_id}/messages", bot.api_base);
-    let auth = format!("Bot {}", bot.token);
-    for message in build_messages(ctx.sources, ctx.base_url, style, items) {
-        post(ctx, &url, Some(&auth), &message.payload).await?;
-    }
-    Ok(())
+    Ok((
+        format!("{}/channels/{channel_id}/messages", bot.api_base),
+        format!("Bot {}", bot.token),
+    ))
+}
+
+/// A plain message: the title in bold, the text and the link, mentioning nobody.
+pub fn text_payload(message: &TextMessage) -> Value {
+    let content = format!(
+        "**{}**\n{}\n{}",
+        parts::escape(&message.title),
+        parts::escape(&message.text),
+        message.link
+    );
+    json!({
+        "content": truncate(&content, MAX_CONTENT_CHARS - 1),
+        "allowed_mentions": {"parse": []},
+    })
 }
 
 /// The messages for `items` in `style`. Compact embeds share messages (up to 10 each);

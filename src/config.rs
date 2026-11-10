@@ -511,6 +511,9 @@ pub struct ChannelConfig {
     pub enabled: bool,
     #[serde(default)]
     pub rules: NotifyRules,
+    /// Also send a message when a source starts failing.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub health_alerts: bool,
     #[serde(flatten)]
     pub target: ChannelTarget,
 }
