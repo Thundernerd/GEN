@@ -173,6 +173,28 @@ mod tests {
     }
 
     #[test]
+    fn godot_tracks_prereleases_from_godot_builds() {
+        // Godot's dev, beta and RC builds are only published in godot-builds.
+        assert!(has_source("godot:github:godotengine/godot-builds"));
+        assert!(has_source("godot:github:godotengine/godot"));
+    }
+
+    #[test]
+    fn offers_gamingonlinux_as_an_engine_match_only_outlet() {
+        let Some(NewOwner::Outlet(outlet)) = owner("gamingonlinux") else {
+            panic!("gamingonlinux is not a catalog outlet");
+        };
+        assert_eq!(outlet.name, "GamingOnLinux");
+        assert!(outlet.require_engine_match);
+        let specs: Vec<_> = outlet.sources.iter().map(|s| &s.spec).collect();
+        assert!(
+            matches!(&specs[..], [SourceSpec::Feed { url, .. }]
+                if url == "https://www.gamingonlinux.com/article_rss.php"),
+            "{specs:?}"
+        );
+    }
+
+    #[test]
     fn seeds_once_and_purges_unconfigured_sources() {
         let mut store = Store::open_in_memory().unwrap();
         let item = |source: &str| crate::model::NewItem {
@@ -256,6 +278,38 @@ mod tests {
         .unwrap();
         backfill_icons_once(&reg, &mut store).unwrap();
         assert_eq!(icon(&reg, "godot"), None);
+    }
+
+    #[test]
+    fn unity_networking_libraries_are_tagged_without_a_bare_mirror_alias() {
+        let classifier = crate::classify::Classifier::new(&CATALOG);
+        let cases: &[(&str, &[&str])] = &[
+            ("Mirror Networking v96.11 released", &["mirror"]),
+            ("FishNet 4.7.4 is out", &["fishnet"]),
+            ("Fish-Networking adds client prediction", &["fishnet"]),
+            ("Fish Networking 4.7 released", &["fishnet"]),
+            ("Mirror reflections for water", &[]),
+            ("Real-time mirror shaders", &[]),
+        ];
+        for (title, expected) in cases {
+            assert_eq!(classifier.match_engines(title), *expected, "{title}");
+        }
+    }
+
+    #[test]
+    fn unity_networking_libraries_are_tier_2_with_icons() {
+        for id in ["mirror", "fishnet"] {
+            let engine = CATALOG.engine(id).expect(id);
+            assert_eq!(engine.tier, 2, "{id}");
+            assert!(engine.icon.is_some(), "{id}");
+        }
+    }
+
+    #[test]
+    fn unreal_tracks_unrealsharp_commits_disabled_by_default() {
+        let s = source("unreal:github-commits:UnrealSharp/UnrealSharp").expect("in catalog");
+        assert_eq!(s.owner, Owner::Engine("unreal".into()));
+        assert!(!s.enabled, "commits are noisy and Unreal is seeded");
     }
 
     #[test]
