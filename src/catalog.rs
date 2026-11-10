@@ -265,6 +265,7 @@ mod tests {
             ("Mirror Networking v96.11 released", &["mirror"]),
             ("FishNet 4.7.4 is out", &["fishnet"]),
             ("Fish-Networking adds client prediction", &["fishnet"]),
+            ("Fish Networking 4.7 released", &["fishnet"]),
             ("Mirror reflections for water", &[]),
             ("Real-time mirror shaders", &[]),
         ];

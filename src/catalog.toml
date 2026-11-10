@@ -601,7 +601,7 @@ tier = 2
 csharp = "native (Unity C# networking library)"
 homepage = "https://github.com/FirstGearGames/FishNet"
 icon = "https://avatars.githubusercontent.com/u/27169134?s=128&v=4"
-aliases = ["fishnet", "fish-networking"]
+aliases = ["fishnet", "fish-networking", "fish networking"]
   [[engine.source]]
   kind = "github"
   repo = "FirstGearGames/FishNet"
