@@ -40,6 +40,9 @@ pub struct FetchReport {
     pub new_items: usize,
     pub not_modified: bool,
     pub error: Option<String>,
+    /// Why the source wasn't fetched, when it was skipped rather than failed (its host is
+    /// cooling down from a rate limit).
+    pub skipped: Option<String>,
 }
 
 impl FetchReport {
@@ -48,6 +51,16 @@ impl FetchReport {
             new_items: 0,
             not_modified: false,
             error: Some(error.into()),
+            skipped: None,
+        }
+    }
+
+    fn skipped(why: impl Into<String>) -> Self {
+        FetchReport {
+            new_items: 0,
+            not_modified: false,
+            error: None,
+            skipped: Some(why.into()),
         }
     }
 }
@@ -77,6 +90,8 @@ pub struct BatchProgress {
     pub done: usize,
     pub new_items: usize,
     pub failed: usize,
+    /// Sources skipped because their host is cooling down from a rate limit.
+    pub skipped: usize,
     #[serde(skip)]
     id: u64,
 }
@@ -102,6 +117,7 @@ impl Batch<'_> {
         if let Some(b) = activity.batch.as_mut().filter(|b| b.id == self.id) {
             b.done += 1;
             match report {
+                Some(r) if r.skipped.is_some() => b.skipped += 1,
                 Some(r) if r.error.is_none() => b.new_items += r.new_items,
                 _ => b.failed += 1,
             }
@@ -389,24 +405,34 @@ impl Poller {
                         new_items: poll.new_items.len(),
                         not_modified: poll.not_modified,
                         error: None,
+                        skipped: None,
                     };
                     (interval, report)
                 }
-                Err(err) => {
-                    failures += 1;
-                    let backoff = interval
-                        .saturating_mul(1 << failures.min(5))
-                        .min(MAX_BACKOFF);
-                    let retry_after = match err.downcast_ref::<FetchError>() {
-                        Some(FetchError::RateLimited { retry_after, .. }) => *retry_after,
-                        _ => None,
-                    };
-                    let delay = retry_after
-                        .map_or(backoff, |r| r.max(interval))
-                        .min(MAX_BACKOFF);
-                    tracing::warn!(source = %source.id, failures, requested, took_ms, retry_in = ?delay, "poll failed: {err:#}");
-                    (delay, FetchReport::failed(format!("{err:#}")))
-                }
+                Err(err) => match err.downcast_ref::<FetchError>() {
+                    // Skipped while the host cools down: no failure, and no request is
+                    // sent before the host's reset.
+                    Some(FetchError::CoolingDown { retry_after, .. }) => {
+                        let delay = (*retry_after).max(interval).min(MAX_BACKOFF);
+                        tracing::debug!(source = %source.id, failures, requested, took_ms, retry_in = ?delay, "poll skipped: {err:#}");
+                        (delay, FetchReport::skipped(format!("{err:#}")))
+                    }
+                    fetch_err => {
+                        failures += 1;
+                        let backoff = interval
+                            .saturating_mul(1 << failures.min(5))
+                            .min(MAX_BACKOFF);
+                        let retry_after = match fetch_err {
+                            Some(FetchError::RateLimited { retry_after, .. }) => *retry_after,
+                            _ => None,
+                        };
+                        let delay = retry_after
+                            .map_or(backoff, |r| r.max(interval))
+                            .min(MAX_BACKOFF);
+                        tracing::warn!(source = %source.id, failures, requested, took_ms, retry_in = ?delay, "poll failed: {err:#}");
+                        (delay, FetchReport::failed(format!("{err:#}")))
+                    }
+                },
             };
             if let Some(reply) = reply {
                 let _ = reply.send(report);
@@ -713,6 +739,102 @@ mod tests {
         task.abort();
     }
 
+    /// One rate-limited response marks only the source that got it as failing. Another
+    /// source on that host, skipped while the host cools down, keeps a clean record, and
+    /// "Fetch now" on it still says why it didn't fetch.
+    #[tokio::test]
+    async fn a_cooldown_skip_is_not_a_failure() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move {
+            while let Ok((mut conn, _)) = listener.accept().await {
+                let mut buf = vec![0u8; 8 * 1024];
+                let _ = conn.read(&mut buf).await;
+                let _ = conn
+                    .write_all(
+                        b"HTTP/1.1 429 Too Many Requests\r\nretry-after: 600\r\ncontent-length: 0\r\nconnection: close\r\n\r\n",
+                    )
+                    .await;
+            }
+        });
+
+        let mut store = crate::store::Store::open_in_memory().unwrap();
+        let config = format!(
+            r#"
+            [[engine]]
+            id = "godot"
+            name = "Godot"
+            tier = 1
+            csharp = "first-class"
+              [[engine.source]]
+              kind = "feed"
+              url = "http://{addr}/a.xml"
+              category = "news"
+              [[engine.source]]
+              kind = "feed"
+              url = "http://{addr}/b.xml"
+              category = "news"
+            "#
+        );
+        let registry = crate::registry::SourceRegistry::with_owners(&mut store, &config);
+        let sources = registry.current().config.all_sources();
+        assert_eq!(sources.len(), 2);
+        let pipeline = Pipeline {
+            http: crate::fetch::Http::new("gen-test", None).unwrap(),
+            store: Arc::new(Mutex::new(store)),
+            registry: Arc::new(registry),
+            toggles: Arc::new(crate::toggles::SourceToggles::default()),
+            notify_wake: Arc::new(Notify::new()),
+            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
+            fetches: Arc::new(FetchRequests::default()),
+        };
+        let mut tasks = Vec::new();
+        for source in &sources {
+            let poller = Poller {
+                pipeline: pipeline.clone(),
+                permits: Arc::new(Semaphore::new(1)),
+                wake: pipeline.notify_wake.clone(),
+            };
+            let requests = pipeline.fetches.register(&source.id);
+            tasks.push(tokio::spawn(poller.run(
+                source.clone(),
+                Duration::from_secs(3600),
+                requests,
+            )));
+        }
+        let fetch = |id: &str| {
+            let rx = pipeline.fetches.request(id).expect("poller is running");
+            async move {
+                tokio::time::timeout(Duration::from_secs(10), rx)
+                    .await
+                    .unwrap()
+                    .unwrap()
+            }
+        };
+
+        let first = fetch(&sources[0].id).await;
+        assert!(first.error.is_some(), "the refused request fails");
+        let second = fetch(&sources[1].id).await;
+        assert_eq!(second.error, None, "a skip isn't a failure");
+        let why = second.skipped.expect("a skip still reports why");
+        assert!(why.contains("rate-limiting"), "{why}");
+
+        let state = |id: String| pipeline.with_store(move |s| s.source_state(&id));
+        let first_state = state(sources[0].id.clone()).await.unwrap();
+        let second_state = state(sources[1].id.clone()).await.unwrap();
+        assert_eq!(first_state.consecutive_failures, 1);
+        assert_eq!(
+            (second_state.consecutive_failures, second_state.last_error),
+            (0, None),
+            "the skipped source isn't marked as failing"
+        );
+        for task in tasks {
+            task.abort();
+        }
+    }
+
     /// The Sources page sees which sources are queued or fetching, and how far a "Fetch
     /// all now" has got, until it ends.
     #[test]
@@ -728,13 +850,15 @@ mod tests {
         assert_eq!(fetches.snapshot().fetching, ["c"]);
 
         let old = fetches.start_batch(5);
-        let batch = fetches.start_batch(3);
+        let batch = fetches.start_batch(4);
         batch.finished(Some(&FetchReport {
             new_items: 2,
             not_modified: false,
             error: None,
+            skipped: None,
         }));
         batch.finished(Some(&FetchReport::failed("HTTP 503")));
+        batch.finished(Some(&FetchReport::skipped("host is cooling down")));
         batch.finished(None);
         old.finished(None);
         let progress = fetches.snapshot().batch.unwrap();
@@ -743,9 +867,10 @@ mod tests {
                 progress.total,
                 progress.done,
                 progress.new_items,
-                progress.failed
+                progress.failed,
+                progress.skipped
             ),
-            (3, 3, 2, 2),
+            (4, 4, 2, 2, 1),
             "an older batch counts nothing"
         );
         drop(old);

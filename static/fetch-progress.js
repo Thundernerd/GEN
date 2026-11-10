@@ -43,6 +43,7 @@
     bar.value = batch.done;
     let text = `${batch.done} of ${batch.total} fetched · ${batch.new_items} new`;
     if (batch.failed) text += ` · ${batch.failed} failed`;
+    if (batch.skipped) text += ` · ${batch.skipped} skipped`;
     const names = [...new Set(labels)];
     if (names.length) {
       text += ` · now: ${names.slice(0, 3).join(", ")}`;
