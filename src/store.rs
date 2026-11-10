@@ -1028,15 +1028,11 @@ mod tests {
     fn reports_each_sources_newest_item_date() {
         let mut store = Store::open_in_memory().unwrap();
         let at = |days: i64| Utc::now() - Duration::days(days);
-        let dated = |source: &str, guid: &str, days: i64| NewItem {
-            published: Some(at(days)),
-            ..new_item(source, guid, guid)
-        };
         store
             .insert_items(&[
-                dated("a", "1", 300),
-                dated("a", "2", 10),
-                dated("b", "3", 200),
+                aged("a", "1", "1", 300),
+                aged("a", "2", "2", 10),
+                aged("b", "3", "3", 200),
             ])
             .unwrap();
         // A duplicate still counts: the source did publish it.
