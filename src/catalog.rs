@@ -179,16 +179,11 @@ mod tests {
         };
         assert_eq!(outlet.name, "GamingOnLinux");
         assert!(outlet.require_engine_match);
-        let feeds: Vec<_> = CATALOG
-            .all_sources()
-            .into_iter()
-            .filter(|s| s.owner_name == "GamingOnLinux")
-            .map(|s| s.spec)
-            .collect();
+        let specs: Vec<_> = outlet.sources.iter().map(|s| &s.spec).collect();
         assert!(
-            matches!(&feeds[..], [SourceSpec::Feed { url, .. }]
+            matches!(&specs[..], [SourceSpec::Feed { url, .. }]
                 if url == "https://www.gamingonlinux.com/article_rss.php"),
-            "{feeds:?}"
+            "{specs:?}"
         );
     }
 
