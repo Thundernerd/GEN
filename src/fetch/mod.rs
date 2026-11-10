@@ -80,6 +80,9 @@ pub async fn fetch_source(
     }
 }
 
+/// Longest a rate-limited host is left alone, whatever it asks for.
+const MAX_COOLDOWN: Duration = Duration::from_secs(24 * 60 * 60);
+
 /// Shared HTTP client.
 #[derive(Clone)]
 pub struct Http {
@@ -198,9 +201,7 @@ impl Http {
             last_modified,
         }))
     }
-}
 
-impl Http {
     /// Time left before `host` may be asked again, if it rate-limited us.
     fn cooling_down(&self, host: &str) -> Option<Duration> {
         let mut cooldowns = self.cooldowns.lock().unwrap_or_else(|e| e.into_inner());
@@ -213,11 +214,12 @@ impl Http {
         Some(left)
     }
 
+    /// Keeps requests to `host` from going out for `wait` (at most [`MAX_COOLDOWN`]).
     fn cool_down(&self, host: String, wait: Duration) {
         if wait.is_zero() {
             return;
         }
-        let until = Instant::now() + wait;
+        let until = Instant::now() + wait.min(MAX_COOLDOWN);
         let mut cooldowns = self.cooldowns.lock().unwrap_or_else(|e| e.into_inner());
         let entry = cooldowns.entry(host).or_insert(until);
         *entry = (*entry).max(until);
@@ -413,40 +415,49 @@ pub fn truncate(s: &str, max: usize) -> String {
 mod tests {
     use super::*;
 
-    /// Once a host rate-limits one source, the other sources on that host wait out the
-    /// same reset instead of each spending a request to find out (GitHub's limit is per
-    /// IP, shared by every GitHub source). Other hosts are unaffected.
-    #[tokio::test]
-    async fn a_rate_limited_host_cools_down_for_every_source() {
-        use std::sync::atomic::{AtomicUsize, Ordering};
+    /// A server that answers every request with 429 and `retry-after`, counting requests.
+    async fn rate_limiting_server(
+        retry_after: &'static str,
+    ) -> (std::net::SocketAddr, Arc<std::sync::atomic::AtomicUsize>) {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-        let hits = std::sync::Arc::new(AtomicUsize::new(0));
+        let hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let counter = hits.clone();
         tokio::spawn(async move {
             while let Ok((mut conn, _)) = listener.accept().await {
-                counter.fetch_add(1, Ordering::SeqCst);
+                counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
                 let mut buf = vec![0u8; 8 * 1024];
                 let _ = conn.read(&mut buf).await;
-                let reply = "HTTP/1.1 429 Too Many Requests\r\nretry-after: 600\r\ncontent-length: 0\r\nconnection: close\r\n\r\n";
+                let reply = format!(
+                    "HTTP/1.1 429 Too Many Requests\r\nretry-after: {retry_after}\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+                );
                 let _ = conn.write_all(reply.as_bytes()).await;
             }
         });
+        (addr, hits)
+    }
 
+    async fn get(http: &Http, url: String) -> Result<Conditional, FetchError> {
+        http.get_conditional(&url, &SourceState::default(), HeaderMap::new())
+            .await
+    }
+
+    /// Once a host rate-limits one source, the other sources on that host wait out the
+    /// same reset instead of each spending a request to find out (GitHub's limit is per
+    /// IP, shared by every GitHub source). Other hosts are unaffected.
+    #[tokio::test]
+    async fn a_rate_limited_host_cools_down_for_every_source() {
+        use std::sync::atomic::Ordering;
+
+        let (addr, hits) = rate_limiting_server("600").await;
+        let (other, other_hits) = rate_limiting_server("600").await;
         let http = Http::new("gen-test", None).unwrap();
-        let get = |path: &str| {
-            let url = format!("http://{addr}/{path}");
-            let http = http.clone();
-            async move {
-                http.get_conditional(&url, &SourceState::default(), HeaderMap::new())
-                    .await
-            }
-        };
-        let first = get("a.atom").await;
+
+        let first = get(&http, format!("http://{addr}/a.atom")).await;
         assert!(matches!(first, Err(FetchError::RateLimited { .. })));
-        let second = get("b.atom").await;
+        let second = get(&http, format!("http://{addr}/b.atom")).await;
         let Err(FetchError::RateLimited { retry_after, .. }) = second else {
             panic!("expected RateLimited");
         };
@@ -461,15 +472,23 @@ mod tests {
             "second source didn't hit the host"
         );
 
-        let other = format!("http://localhost:{}/c.atom", addr.port());
-        let _ = http
-            .get_conditional(&other, &SourceState::default(), HeaderMap::new())
-            .await;
+        let _ = get(&http, format!("http://{other}/c.atom")).await;
         assert_eq!(
-            hits.load(Ordering::SeqCst),
-            2,
-            "another host name is unaffected"
+            other_hits.load(Ordering::SeqCst),
+            1,
+            "another host is unaffected"
         );
+    }
+
+    /// An absurd `retry-after` from a broken server can't overflow the cooldown.
+    #[tokio::test]
+    async fn survives_a_huge_retry_after() {
+        let (addr, _) = rate_limiting_server("18446744073709551615").await;
+        let http = Http::new("gen-test", None).unwrap();
+        let first = get(&http, format!("http://{addr}/a.atom")).await;
+        assert!(matches!(first, Err(FetchError::RateLimited { .. })));
+        let second = get(&http, format!("http://{addr}/a.atom")).await;
+        assert!(matches!(second, Err(FetchError::RateLimited { .. })));
     }
 
     #[test]
