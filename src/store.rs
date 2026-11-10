@@ -1572,6 +1572,30 @@ mod tests {
     }
 
     #[test]
+    fn backfilled_duplicate_of_an_expired_story_is_pruned_and_stays_pruned() {
+        let mut store = Store::open_in_memory().unwrap();
+        let primary = insert_ago(&mut store, &[aged("a", "1", "godot 3 6", 400)], 400);
+        // A new source's first fetch backfills the same old release: seen now, dated long ago.
+        let backfilled = store
+            .insert_items(&[aged("b", "x", "godot 3 6", 401)])
+            .unwrap();
+        assert_eq!(backfilled[0].duplicate_of, Some(primary[0].id));
+        // It goes with its story, although it was first seen just now.
+        let cutoff = || Utc::now() - Duration::days(365);
+        assert_eq!(store.prune_items(cutoff()).unwrap(), 2);
+        // Its feed keeps listing it: it never comes back as a new item, across later prunes.
+        for _ in 0..2 {
+            assert!(
+                store
+                    .insert_items(&[aged("b", "x", "godot 3 6", 401)])
+                    .unwrap()
+                    .is_empty()
+            );
+            store.prune_items(cutoff()).unwrap();
+        }
+    }
+
+    #[test]
     fn pruned_items_their_feed_keeps_listing_are_remembered() {
         let mut store = Store::open_in_memory().unwrap();
         insert_ago(&mut store, &[aged("a", "old", "", 400)], 400);
