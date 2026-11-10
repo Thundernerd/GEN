@@ -59,6 +59,14 @@ aliases = ["unreal", "unreal engine", "ue5", "ue6", "uefn", "metahuman", "nanite
   kind = "feed"
   url = "https://www.unrealengine.com/en-US/rss"
   category = "news"
+  # UnrealSharp (the C# plugin) publishes no releases or tags, so follow its commits.
+  [[engine.source]]
+  kind = "github"
+  repo = "UnrealSharp/UnrealSharp"
+  mode = "commits"
+  category = "news"
+  interval_minutes = 360
+  enabled = false
 
 # --- Godot --------------------------------------------------------------------
 [[engine]]
