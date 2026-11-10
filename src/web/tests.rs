@@ -743,7 +743,11 @@ async fn removed_engines_come_back_from_the_suggestions() {
     assert_eq!(status, StatusCode::SEE_OTHER);
     let snapshot = st.registry.current();
     let godot = snapshot.config.engine("godot").unwrap();
-    assert_eq!(godot.sources.len(), 3);
+    let Some(crate::registry::NewOwner::Engine(catalog_godot)) = crate::catalog::owner("godot")
+    else {
+        panic!("godot is a catalog engine");
+    };
+    assert_eq!(godot.sources.len(), catalog_godot.sources.len());
     assert!(godot.aliases.contains(&"gdscript".to_string()));
     let (status, _, _) = send(
         &st,
