@@ -15,6 +15,7 @@
   <a href="{{ e.url }}"{% if e.active %} aria-current="page"{% endif %}>{{ e.label }}</a>
   {%- endfor %}
 </nav>
+{% include "_search.html" %}
 {%- if filter.tier %}
 <p class="notice">Showing tier {{ filter.tier }} engines only. <a href="/">Show all</a></p>
 {%- endif %}

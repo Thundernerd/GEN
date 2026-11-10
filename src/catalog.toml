@@ -59,6 +59,14 @@ aliases = ["unreal", "unreal engine", "ue5", "ue6", "uefn", "metahuman", "nanite
   kind = "feed"
   url = "https://www.unrealengine.com/en-US/rss"
   category = "news"
+  # UnrealSharp (the C# plugin) publishes no releases or tags, so follow its commits.
+  [[engine.source]]
+  kind = "github"
+  repo = "UnrealSharp/UnrealSharp"
+  mode = "commits"
+  category = "news"
+  interval_minutes = 360
+  enabled = false
 
 # --- Godot --------------------------------------------------------------------
 [[engine]]
@@ -76,6 +84,11 @@ aliases = ["godot", "godot engine", "gdscript"]
   [[engine.source]]
   kind = "github"
   repo = "godotengine/godot"
+  category = "release"
+  # Dev, beta and RC builds are only published here (the main repo has just -stable).
+  [[engine.source]]
+  kind = "github"
+  repo = "godotengine/godot-builds"
   category = "release"
 
 # --- Stride -------------------------------------------------------------------
@@ -580,6 +593,33 @@ aliases = ["jitter physics", "jitterphysics"]
   repo = "notgiven688/jitterphysics2"
   category = "release"
 
+# Unity networking libraries. No bare "mirror" alias: the word is too common.
+[[engine]]
+id = "mirror"
+name = "Mirror"
+tier = 2
+csharp = "native (Unity C# networking library)"
+homepage = "https://mirror-networking.com"
+icon = "https://avatars.githubusercontent.com/u/65781588?s=128&v=4"
+aliases = ["mirror networking"]
+  [[engine.source]]
+  kind = "github"
+  repo = "MirrorNetworking/Mirror"
+  category = "release"
+
+[[engine]]
+id = "fishnet"
+name = "FishNet"
+tier = 2
+csharp = "native (Unity C# networking library)"
+homepage = "https://github.com/FirstGearGames/FishNet"
+icon = "https://avatars.githubusercontent.com/u/27169134?s=128&v=4"
+aliases = ["fishnet", "fish-networking", "fish networking"]
+  [[engine.source]]
+  kind = "github"
+  repo = "FirstGearGames/FishNet"
+  category = "release"
+
 [[engine]]
 id = "box2dnet"
 name = "Box2D.NET"
@@ -735,6 +775,12 @@ aliases = ["gamemaker", "game maker studio"]
   kind = "feed"
   url = "https://gamemaker.io/en/blog/rss"
   category = "news"
+  interval_minutes = 180
+  # Steam news carries the release notes, hotfix posts included (verified 2026-11-10).
+  [[engine.source]]
+  kind = "feed"
+  url = "https://store.steampowered.com/feeds/news/app/1670460/"
+  category = "release"
   interval_minutes = 180
 
 [[engine]]
@@ -918,6 +964,21 @@ aliases = ["excalibur.js", "excaliburjs"]
   repo = "excaliburjs/Excalibur"
   category = "release"
 
+# ebitengine.org has no RSS/Atom feed (checked 2026-11-10); its blog posts a few times a
+# year (releases, game jams, yearly reviews), so only GitHub releases are tracked.
+[[engine]]
+id = "ebitengine"
+name = "Ebitengine"
+tier = 3
+csharp = "none (Go)"
+homepage = "https://ebitengine.org"
+icon = "https://avatars.githubusercontent.com/u/106237124?s=128&v=4"
+aliases = ["ebitengine", "ebiten"]
+  [[engine.source]]
+  kind = "github"
+  repo = "hajimehoshi/ebiten"
+  category = "release"
+
 # ===========================================================================
 # Outlets: general game-dev news. Items are tagged with engines via aliases.
 # ===========================================================================
@@ -978,6 +1039,31 @@ require_engine_match = true
   url = "https://www.cgchannel.com/category/news/feed/"
   category = "news"
   cache_bust = true
+
+# --- JetBrains .NET Blog -----------------------------------------------------------
+# Rider support for Unity, Unreal and Godot.
+[[outlet]]
+id = "jetbrains-dotnet"
+name = "JetBrains .NET Blog"
+homepage = "https://blog.jetbrains.com/dotnet/"
+require_engine_match = true  # drop the general .NET / ReSharper posts
+  [[outlet.source]]
+  kind = "feed"
+  url = "https://blog.jetbrains.com/dotnet/feed/"
+  category = "news"
+
+# --- GamingOnLinux ---------------------------------------------------------------
+# Verified 2026-11-10. Mostly game news; keep only engine-related posts. Expect some
+# noise on the `Unity` alias (game titles, "made with Unity" game coverage).
+[[outlet]]
+id = "gamingonlinux"
+name = "GamingOnLinux"
+homepage = "https://www.gamingonlinux.com"
+require_engine_match = true
+  [[outlet.source]]
+  kind = "feed"
+  url = "https://www.gamingonlinux.com/article_rss.php"
+  category = "news"
 
 # ===========================================================================
 # Skipped on purpose

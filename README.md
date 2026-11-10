@@ -12,7 +12,7 @@ GEN is a single Rust binary. It contains a web server and a background poller, a
 - Polls RSS/Atom/JSON feeds, GitHub releases/tags/commits, the Unity release API, Hacker News searches and scraped HTML pages.
 - Classifies each item as `release`, `prerelease`, `news`, `video` or `community`, and tags it with engines using per-engine aliases.
 - Removes cross-source duplicates, for example the same release announced on GitHub, the engine blog and GameFromScratch.
-- Provides a web UI by engine and by source, a combined Atom feed and a JSON API.
+- Provides a web UI by engine and by source, a combined Atom feed and a JSON API, with full-text search over item titles and summaries.
 - Sends notifications to Discord, ntfy, email and Apprise API (which reaches Telegram, Slack, Matrix, Pushover and many more), with per-channel filter rules. Email can be sent as a digest.
 - Runs an optional Discord bot. Server admins subscribe channels to engine topics with `/gen` slash commands, and `/gen setup` creates the channels, e.g. a Unity category with `#unity-releases` and `#unity-news`.
 - Uses conditional requests (ETag / Last-Modified) and per-source intervals. The first fetch of a new source fills the database without notifying, so adding a source never floods your channels.
@@ -49,7 +49,7 @@ The image is multi-stage. It builds on `rust:1.96-slim-bookworm` and runs on `de
 ### Compose (recommended)
 
 ```sh
-cp deploy/.env.example .env      # optional: tokens and notification secrets
+cp deploy/.env.example .env      # GITHUB_TOKEN (recommended), other tokens and secrets
 $EDITOR deploy/gen.docker.toml   # base_url, admin token
 docker compose up -d --build
 docker compose logs -f gen
@@ -172,7 +172,11 @@ concurrency = 8                    # max sources fetched at the same time
 # dev_guild_id = 123456789012345678 # optional: register commands on this server only (instant)
 ```
 
-Relative paths resolve against the working directory. A GitHub token is optional, but without one the GitHub API allows only 60 requests per hour.
+Relative paths resolve against the working directory.
+
+**Set a GitHub token.** It is optional, but recommended: with a token, `github` sources in `releases` mode use the GitHub API, which marks prereleases. Without one they read the public `releases.atom` feed, which has no prerelease flag (only a title such as `-beta` marks one), and every GitHub source polls github.com anonymously. A fine-grained token with no permissions is enough; put it in the `GITHUB_TOKEN` env var or `polling.github_token`. `gen check-config` warns, and `gen serve` logs a warning at startup, when GitHub releases sources are switched on without a token, with an estimate of the requests per hour they make. Tags and commits always use the Atom feeds.
+
+When a host answers with a rate limit (HTTP 429, or GitHub's 403 with `x-ratelimit-remaining: 0`) and says when it resets (`Retry-After` or `x-ratelimit-reset`), every source on that host waits until then instead of retrying on its own.
 
 Without `retention_days`, the database keeps every item and grows without bound. With it, GEN deletes items that are dated, and were first fetched, more than that many days ago. It does so at startup and then once a day, and deletes their cross-source duplicates with them. It must be at least 7, the window in which the same story from different sources is merged. GEN remembers each deleted item's source and id, so a feed that still lists an old entry doesn't bring it back as new or notify it again. That record is two short strings per item, so the database still grows, but slowly. SQLite reuses the freed space; the file doesn't shrink unless you run `sqlite3 gen.db VACUUM` while GEN is stopped.
 
@@ -229,7 +233,7 @@ require_engine_match = false
 | kind | Fields | Notes |
 |---|---|---|
 | `feed` | `url`, `cache_bust` (bool) | RSS, Atom or JSON Feed. `cache_bust` defeats stale CDN caches. |
-| `github` | `repo` (`owner/repo`), `mode`, `tag_prefix` | Releases (with the prerelease flag), tags or commits. |
+| `github` | `repo` (`owner/repo`), `mode`, `tag_prefix` | Releases (with the prerelease flag), tags or commits. A bare version title is prefixed with the repo name minus a `-builds` suffix, so `godotengine/godot-builds` releases read `godot 4.8-beta3` and its stable releases merge with `godotengine/godot`'s. |
 | `unity` | `limit` (default 25) | Unity editor releases API. |
 | `hn` | `query` | Hacker News search via Algolia. |
 | `html` | `url`, `item`, `title`, `link`, `date` | Scrapes a page. `item` is a CSS selector matching one element per entry; the others are relative to it. |
@@ -389,9 +393,11 @@ Its subscriptions are changed in Discord. On the website you can add keywords, c
 | `/notifications` | Admin only: notification channels, their rules and last deliveries. |
 | `/view?mode=compact\|expanded` | Sets the timeline layout and goes back to the page it came from. |
 | `/login`, `/logout` | Admin login with `server.admin_token`. |
-| `/feed.xml` | Combined Atom feed. |
-| `/api/items` | JSON API for items. |
+| `/feed.xml` | Combined Atom feed. Takes `engine`, `kind` and `q`. |
+| `/api/items` | JSON API for items. Takes `engine`, `kind`, `tier`, `csharp`, `q`, `page` and `limit`. |
 | `/health` | Liveness check that returns `ok`. |
+
+**Search:** `/`, `/feed.xml` and `/api/items` take `q=` to search item titles and summaries; the timeline has a search box for it. Every word must match, as a word or the start of one (`god` finds Godot), regardless of case and accents. Punctuation is ignored, and words like `AND` or `NEAR` are searched for as words, not used as operators. Search combines with the other filters, so `/feed.xml?engine=godot&q=shader` is a feed you can subscribe to.
 
 ## Managing sources from the web
 
