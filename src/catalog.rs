@@ -152,6 +152,37 @@ pub fn backfill_icons_once(registry: &SourceRegistry, store: &mut Store) -> anyh
     Ok(())
 }
 
+/// On every start: adds the catalog's exclude phrases that stored engines of the same id
+/// lack, so catalog fixes reach existing databases. Never removes a phrase, and leaves
+/// engines that aren't in the catalog alone.
+pub fn merge_catalog_excludes(registry: &SourceRegistry, store: &mut Store) -> anyhow::Result<()> {
+    let snapshot = registry.current();
+    for engine in &snapshot.config.engines {
+        let Some(catalog) = CATALOG.engine(&engine.id) else {
+            continue;
+        };
+        let missing: Vec<String> = catalog
+            .exclude
+            .iter()
+            .filter(|c| !engine.exclude.iter().any(|p| p.eq_ignore_ascii_case(c)))
+            .cloned()
+            .collect();
+        if missing.is_empty() {
+            continue;
+        }
+        let added = missing.len();
+        let edit = SourceEdit::AddEngineExcludes {
+            engine_id: engine.id.clone(),
+            phrases: missing,
+        };
+        registry
+            .apply(store, edit)
+            .map_err(|err| anyhow::anyhow!("adding catalog excludes to {}: {err}", engine.id))?;
+        tracing::info!(engine = %engine.id, added, "added catalog exclude phrases");
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -278,6 +309,93 @@ mod tests {
         .unwrap();
         backfill_icons_once(&reg, &mut store).unwrap();
         assert_eq!(icon(&reg, "godot"), None);
+    }
+
+    /// Unity as stored before #13, with a phrase of the user's own, plus an engine that
+    /// isn't in the catalog.
+    fn store_with_old_unity() -> (Store, SourceRegistry) {
+        let mut store = Store::open_in_memory().unwrap();
+        let reg = SourceRegistry::load(&store).unwrap();
+        let mut unity = CATALOG.engine("unity").cloned().unwrap();
+        unity.exclude = ["ubuntu unity", "unity desktop", "unity shell", "unitypoint"]
+            .map(String::from)
+            .into();
+        unity.exclude.push("unity tower".into());
+        unity.sources.clear();
+        reg.apply(&mut store, SourceEdit::AddOwner(NewOwner::Engine(unity)))
+            .unwrap();
+        let mut own = CATALOG.engine("unity").cloned().unwrap();
+        own.id = "mine".into();
+        own.exclude = vec!["ubuntu unity".into()];
+        own.sources.clear();
+        reg.apply(&mut store, SourceEdit::AddOwner(NewOwner::Engine(own)))
+            .unwrap();
+        (store, reg)
+    }
+
+    fn excludes(reg: &SourceRegistry, id: &str) -> Vec<String> {
+        reg.current().config.engine(id).unwrap().exclude.clone()
+    }
+
+    #[test]
+    fn merges_catalog_excludes_into_stored_engines() {
+        let (mut store, reg) = store_with_old_unity();
+
+        merge_catalog_excludes(&reg, &mut store).unwrap();
+
+        let unity = excludes(&reg, "unity");
+        for phrase in &CATALOG.engine("unity").unwrap().exclude {
+            assert!(unity.contains(phrase), "{phrase} missing from {unity:?}");
+        }
+        assert!(
+            unity.contains(&"unity tower".to_string()),
+            "user's phrase kept"
+        );
+        // Stored, so it survives a restart.
+        let reloaded = SourceRegistry::load(&store).unwrap();
+        assert_eq!(excludes(&reloaded, "unity"), unity);
+    }
+
+    #[test]
+    fn merging_catalog_excludes_leaves_engines_outside_the_catalog_alone() {
+        let (mut store, reg) = store_with_old_unity();
+
+        merge_catalog_excludes(&reg, &mut store).unwrap();
+
+        assert_eq!(excludes(&reg, "mine"), ["ubuntu unity"]);
+    }
+
+    #[test]
+    fn merging_catalog_excludes_twice_adds_nothing() {
+        let (mut store, reg) = store_with_old_unity();
+        merge_catalog_excludes(&reg, &mut store).unwrap();
+        let once = excludes(&reg, "unity");
+
+        merge_catalog_excludes(&reg, &mut store).unwrap();
+
+        assert_eq!(excludes(&reg, "unity"), once);
+        assert_eq!(
+            excludes(&SourceRegistry::load(&store).unwrap(), "unity"),
+            once
+        );
+    }
+
+    #[test]
+    fn merged_catalog_excludes_stop_the_classifier_tagging_game_titles() {
+        let (mut store, reg) = store_with_old_unity();
+        let title = "Assassin's Creed Unity gets a Linux port";
+        assert!(
+            reg.current()
+                .classifier
+                .match_engines(title)
+                .contains(&"unity".into()),
+            "the old excludes tag it"
+        );
+
+        merge_catalog_excludes(&reg, &mut store).unwrap();
+
+        let tags = reg.current().classifier.match_engines(title);
+        assert!(!tags.contains(&"unity".into()), "{tags:?}");
     }
 
     #[test]
