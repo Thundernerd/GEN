@@ -7,7 +7,8 @@
 //!
 //! Titles that are just a version (e.g. Godot's `4.7.2-stable`, S&Box's `26.10.13`) are
 //! prefixed with the repository name so they make sense out of context
-//! (`godot 4.7.2-stable`, also for `godot-builds`); descriptive names such as `Stride 4.4.1` are kept as is.
+//! (`godot 4.7.2-stable`); a `-builds` suffix is dropped from that name. Descriptive names
+//! such as `Stride 4.4.1` are kept as is.
 
 use chrono::{DateTime, Utc};
 use reqwest::header::{self, HeaderMap, HeaderValue};
