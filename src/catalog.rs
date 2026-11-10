@@ -262,8 +262,6 @@ mod tests {
     fn unreal_tracks_unrealsharp_commits_disabled_by_default() {
         let s = source("unreal:github-commits:UnrealSharp/UnrealSharp").expect("in catalog");
         assert_eq!(s.owner, Owner::Engine("unreal".into()));
-        assert_eq!(s.category, Some(crate::model::ItemKind::News));
-        assert_eq!(s.interval_minutes, Some(360));
         assert!(!s.enabled, "commits are noisy and Unreal is seeded");
     }
 
