@@ -1410,3 +1410,21 @@ async fn timeline_searches() {
     let (_, _, body) = get("/?q=nothingmatches").await;
     assert!(body.contains("Nothing matches"), "{body}");
 }
+
+#[tokio::test]
+async fn engine_pages_search() {
+    let (status, _, body) = get("/engine/godot?q=nothingmatches").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!body.contains("Godot 4.8 released"));
+    assert!(body.contains("Nothing matches"));
+    assert!(body.contains(r#"<input type="search" name="q" value="nothingmatches""#));
+    // Kind tabs and the feed keep the search.
+    assert!(
+        body.contains("godot?kind=news&amp;q=nothingmatches"),
+        "{body}"
+    );
+    assert!(body.contains("feed.xml?engine=godot&amp;q=nothingmatches"));
+
+    let (_, _, body) = get("/engine/godot?q=released").await;
+    assert!(body.contains("Godot 4.8 released"));
+}

@@ -33,5 +33,6 @@
   <a href="{{ t.url }}"{% if t.active %} aria-current="page"{% endif %}>{% if t.kind %}<i class="kind-dot kind-{{ t.kind }}" aria-hidden="true"></i>{% endif %}{{ t.label }}</a>
   {%- endfor %}
 </nav>
+{% include "_search.html" %}
 {% include "_items.html" %}
 {% endblock %}

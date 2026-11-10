@@ -355,6 +355,21 @@ fn filter_pairs(f: &ItemFilter) -> Vec<(&'static str, Option<String>)> {
     ]
 }
 
+/// The search box of a list page at `path` whose filters are `pairs`; the box resubmits
+/// the other filters as hidden fields. `clear` is the page without the search.
+fn search_box(path: &str, pairs: &[(&str, Option<String>)], clear: String) -> serde_json::Value {
+    let q = pairs
+        .iter()
+        .find(|(k, _)| *k == "q")
+        .and_then(|(_, v)| v.clone());
+    let hidden: Vec<_> = pairs
+        .iter()
+        .filter(|(k, _)| *k != "q")
+        .filter_map(|(k, v)| v.as_ref().map(|v| json!({"name": k, "value": v})))
+        .collect();
+    json!({"action": path, "q": q, "hidden": hidden, "clear": clear})
+}
+
 /// Previous/next page links for list pages.
 fn pagination(
     path: &str,
@@ -451,12 +466,6 @@ async fn index_page(
         })
         .collect();
     let csharp_link = link("csharp", (!filter.csharp).then(|| "1".to_string()));
-    // The search form resubmits the other filters as hidden fields.
-    let search_hidden: Vec<_> = pairs
-        .iter()
-        .filter(|(k, _)| *k != "q")
-        .filter_map(|(k, v)| v.as_ref().map(|v| json!({"name": k, "value": v})))
-        .collect();
     // The feed takes the engine, kind and search filters.
     let feed_pairs: Vec<_> = pairs
         .iter()
@@ -473,8 +482,7 @@ async fn index_page(
             "kind_tabs": kind_tabs,
             "engine_links": engine_links,
             "csharp_link": csharp_link,
-            "search_hidden": search_hidden,
-            "clear_search_link": link("q", None),
+            "search": search_box("/", &pairs, link("q", None)),
             "filter": {
                 "engine": filter.engine,
                 "kind": filter.kind.map(ItemKind::as_str),
@@ -556,9 +564,11 @@ async fn engine_page(
     let Some(engine) = snapshot.config.engine(&id) else {
         return Err(AppError::NotFound(format!("Unknown engine “{id}”.")));
     };
+    let params_filter = params.filter();
     let filter = ItemFilter {
         engine: Some(engine.id.clone()),
-        kind: params.filter().kind,
+        kind: params_filter.kind,
+        q: params_filter.q,
         ..Default::default()
     };
     let page = params.page();
@@ -583,18 +593,23 @@ async fn engine_page(
         .collect();
 
     let base = format!("/engine/{}", engine.id);
+    let q_pair = ("q", filter.q.clone());
     let tabs: Vec<_> = std::iter::once(None)
         .chain(ItemKind::ALL.into_iter().map(Some))
         .map(|k| {
             json!({
                 "kind": k.map(ItemKind::as_str),
                 "label": k.map_or("all", ItemKind::as_str),
-                "url": format!("{base}{}", query_string(&[("kind", k.map(|k| k.as_str().to_string()))])),
+                "url": format!("{base}{}", query_string(&[("kind", k.map(|k| k.as_str().to_string())), q_pair.clone()])),
                 "active": k == filter.kind,
             })
         })
         .collect();
-    let kind_pair = [("kind", filter.kind.map(|k| k.as_str().to_string()))];
+    let kind_pair = [
+        ("kind", filter.kind.map(|k| k.as_str().to_string())),
+        q_pair.clone(),
+    ];
+    let feed_pairs = [("engine", Some(engine.id.clone())), q_pair.clone()];
     st.render(
         "engine.html",
         json!({
@@ -620,7 +635,8 @@ async fn engine_page(
             "tabs": tabs,
             "items": st.item_views(&items, &dups),
             "pagination": pagination(&base, &kind_pair, page, has_more),
-            "feed_url": format!("/feed.xml?engine={}", url::form_urlencoded::byte_serialize(engine.id.as_bytes()).collect::<String>()),
+            "feed_url": format!("/feed.xml{}", query_string(&feed_pairs)),
+            "search": search_box(&base, &kind_pair, format!("{base}{}", query_string(&kind_pair[..1]))),
         }),
     )
 }

@@ -1,0 +1,12 @@
+{#- Search box. Expects `search` with `action`, `q`, `hidden` (other filters as
+    name/value pairs) and `clear` (the page without the search). -#}
+<form class="search" role="search" action="{{ search.action }}" method="get">
+  {%- for h in search.hidden %}
+  <input type="hidden" name="{{ h.name }}" value="{{ h.value }}">
+  {%- endfor %}
+  <input type="search" name="q" value="{{ search.q or "" }}" placeholder="Search titles and summaries" aria-label="Search">
+  <button type="submit">Search</button>
+  {%- if search.q %}
+  <a href="{{ search.clear }}">Clear</a>
+  {%- endif %}
+</form>

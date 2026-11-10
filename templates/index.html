@@ -15,16 +15,7 @@
   <a href="{{ e.url }}"{% if e.active %} aria-current="page"{% endif %}>{{ e.label }}</a>
   {%- endfor %}
 </nav>
-<form class="search" role="search" action="/" method="get">
-  {%- for h in search_hidden %}
-  <input type="hidden" name="{{ h.name }}" value="{{ h.value }}">
-  {%- endfor %}
-  <input type="search" name="q" value="{{ filter.q or "" }}" placeholder="Search titles and summaries" aria-label="Search">
-  <button type="submit">Search</button>
-  {%- if filter.q %}
-  <a href="{{ clear_search_link }}">Clear</a>
-  {%- endif %}
-</form>
+{% include "_search.html" %}
 {%- if filter.tier %}
 <p class="notice">Showing tier {{ filter.tier }} engines only. <a href="/">Show all</a></p>
 {%- endif %}
