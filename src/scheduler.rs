@@ -515,9 +515,23 @@ impl Notifier {
         if pending.is_empty() {
             return Ok(false);
         }
-        let (mut matching, skipped): (Vec<Item>, Vec<Item>) = pending
-            .into_iter()
-            .partition(|i| notify::accepts(channel, i));
+        // The search rule needs the search index, so the store answers it for all pending
+        // items at once; `notify::accepts` checks the other rules.
+        let found = match &channel.rules.search {
+            Some(search) => {
+                let ids: Vec<i64> = pending.iter().map(|i| i.id).collect();
+                let search = search.clone();
+                Some(
+                    self.pipeline
+                        .with_store(move |s| s.matching_search(&ids, &search))
+                        .await?,
+                )
+            }
+            None => None,
+        };
+        let (mut matching, skipped): (Vec<Item>, Vec<Item>) = pending.into_iter().partition(|i| {
+            notify::accepts(channel, i) && found.as_ref().is_none_or(|f| f.contains(&i.id))
+        });
         self.mark(channel, &skipped).await?;
         let style = match &channel.target {
             ChannelTarget::Discord { style, .. } | ChannelTarget::DiscordBot { style, .. } => {
@@ -932,6 +946,96 @@ mod tests {
         assert!(request.contains("Godot 4.8"), "{request}");
         let channels = notify::load_channels(&pipeline.store.lock().unwrap()).unwrap();
         assert!(channels[0].last_ok.is_some() && channels[0].last_error.is_none());
+    }
+
+    /// A channel with a search rule is sent only the pending items that match it, as the
+    /// site's search would; the others are marked handled so they aren't looked at again.
+    #[tokio::test]
+    async fn delivers_only_items_matching_a_channel_search() {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let requests = Arc::new(Mutex::new(Vec::<String>::new()));
+        let seen = requests.clone();
+        tokio::spawn(async move {
+            loop {
+                let (mut conn, _) = listener.accept().await.unwrap();
+                let mut buf = vec![0u8; 16 * 1024];
+                let n = conn.read(&mut buf).await.unwrap();
+                seen.lock()
+                    .unwrap()
+                    .push(String::from_utf8_lossy(&buf[..n]).into_owned());
+                conn.write_all(
+                    b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\nconnection: close\r\n\r\n",
+                )
+                .await
+                .unwrap();
+            }
+        });
+
+        let mut store = crate::store::Store::open_in_memory().unwrap();
+        let registry = crate::registry::SourceRegistry::load(&store).unwrap();
+        let channel = format!(
+            r#"{{"name":"phone","kind":"ntfy","server":"http://{addr}","topic":"gen-test",
+                "rules":{{"search":"godot shader"}}}}"#
+        );
+        store.add_channel("phone", &channel).unwrap();
+        tokio::time::sleep(Duration::from_millis(5)).await;
+        let item = |guid: &str, title: &str, summary: Option<&str>| crate::model::NewItem {
+            source_id: format!("x:feed:{guid}"),
+            guid: guid.into(),
+            engines: vec!["godot".into()],
+            kind: crate::model::ItemKind::News,
+            title: title.into(),
+            url: None,
+            summary: summary.map(Into::into),
+            published: None,
+            story_key: guid.into(),
+            notify: true,
+            image_url: None,
+        };
+        store
+            .insert_items(&[
+                item("a", "Godot shaders explained", None),
+                item("b", "Godot 4.8 released", None),
+                item("c", "Weekly roundup", Some("A new GODOT Shader editor")),
+                item("d", "Unity shader graph", None),
+            ])
+            .unwrap();
+        let pipeline = Pipeline {
+            http: crate::fetch::Http::new("gen-test", None).unwrap(),
+            store: Arc::new(Mutex::new(store)),
+            registry: Arc::new(registry),
+            toggles: Arc::new(crate::toggles::SourceToggles::default()),
+            notify_wake: Arc::new(Notify::new()),
+            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
+            fetches: Arc::new(FetchRequests::default()),
+        };
+        let notifier = Notifier {
+            pipeline: pipeline.clone(),
+            bot: None,
+            app: Arc::new(AppConfig::default()),
+            wake: pipeline.notify_wake.clone(),
+        };
+        notifier.run_once().await;
+
+        let requests = requests.lock().unwrap().clone();
+        assert_eq!(requests.len(), 2, "{requests:?}");
+        assert!(
+            requests[0].contains("Godot shaders explained"),
+            "{requests:?}"
+        );
+        assert!(requests[1].contains("Weekly roundup"), "{requests:?}");
+        let store = pipeline.store.lock().unwrap();
+        let since = chrono::Utc::now() - chrono::Duration::days(1);
+        assert!(
+            store
+                .pending_notifications("phone", since, 10)
+                .unwrap()
+                .is_empty(),
+            "non-matching items are marked handled too"
+        );
     }
 
     /// A Discord bot channel is posted only the items of its subscriptions, each once even

@@ -81,9 +81,7 @@ async fn render(st: &AppState, feedback: Option<Value>, notice: Option<Value>) -
                     let subscribed = subscriptions_summary(st, subscriptions);
                     form["subscriptions"] = json!(subscribed);
                     let mut parts = vec![subscribed.join(", ")];
-                    if !c.config.rules.keywords.is_empty() {
-                        parts.push(format!("keywords: {}", c.config.rules.keywords.join(", ")));
-                    }
+                    text_rules_summary(&c.config.rules, &mut parts);
                     parts.join(" · ")
                 }
                 _ => rules_summary(st, &c.config.rules),
@@ -303,10 +301,18 @@ fn rules_summary(st: &AppState, rules: &NotifyRules) -> String {
     if rules.include_untagged {
         parts.push("untagged outlet news".to_string());
     }
+    text_rules_summary(rules, &mut parts);
+    parts.join(" · ")
+}
+
+/// The keywords and search rules, which every kind of channel can have.
+fn text_rules_summary(rules: &NotifyRules, parts: &mut Vec<String>) {
     if !rules.keywords.is_empty() {
         parts.push(format!("keywords: {}", rules.keywords.join(", ")));
     }
-    parts.join(" · ")
+    if let Some(search) = &rules.search {
+        parts.push(format!("search: {search}"));
+    }
 }
 
 /// The kinds a channel is sent: `kinds` (or all when empty) minus `exclude_kinds`.
@@ -356,6 +362,7 @@ fn form_values(c: &ChannelConfig) -> Value {
         "engines": c.rules.engines,
         "kinds": effective_kinds(&c.rules).iter().map(|k| k.as_str()).collect::<Vec<_>>(),
         "keywords": c.rules.keywords.join(", "),
+        "search": c.rules.search,
         "include_untagged": c.rules.include_untagged,
         "ntfy_server": "https://ntfy.sh",
         "smtp_port": 587,
@@ -438,6 +445,7 @@ impl Posted {
             "kind",
             "style",
             "keywords",
+            "search",
             "ntfy_server",
             "smtp_host",
             "smtp_port",
@@ -561,6 +569,7 @@ impl Posted {
             },
             exclude_kinds: Vec::new(),
             keywords: split_list(self.get("keywords")),
+            search: self.search(),
             include_untagged: self.checked("include_untagged"),
         };
         let channel = ChannelConfig {
@@ -588,11 +597,20 @@ impl Posted {
         let mut channel = existing.clone();
         channel.enabled = self.checked("enabled");
         channel.rules.keywords = split_list(self.get("keywords"));
+        channel.rules.search = self.search();
         if let ChannelTarget::DiscordBot { style, .. } = &mut channel.target {
             *style = self.style()?;
         }
         channel.check()?;
         Ok(channel)
+    }
+
+    /// The search rule, words separated by single spaces; `None` when it has no words the
+    /// site's search would look for, so a rule that filters nothing isn't shown.
+    fn search(&self) -> Option<String> {
+        let text = self.get("search")?;
+        crate::store::fts_query(&text)?;
+        Some(text.split_whitespace().collect::<Vec<_>>().join(" "))
     }
 
     /// The chosen message style; the default when the form has none.

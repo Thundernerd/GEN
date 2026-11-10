@@ -285,6 +285,7 @@ Channels are managed on the **Notifications** page (`/notifications`), which sho
 - **Engines:** only items tagged with one of these. None checked means every engine.
 - **Also news-outlet items that mention no engine:** off by default.
 - **Keywords:** the title or summary must contain at least one (case-insensitive).
+- **Search:** works like the site's search box: every word must match the start of a word in the title or summary, ignoring case and accents. `godot shader` gets "Godot shaders explained" but not "Godot 4.8 released". Use it to have new items of a search you built on the timeline pushed to the channel.
 
 Each channel shows its last delivery or error. **Send test** sends it something right away, ignoring its rules, so you can see how notifications look there: one of several examples (a release, a prerelease, a news post, an outlet article about two engines, one with no engine, summary or link, and one long enough to be cut short), all examples at once (one digest mail for a digest channel), or one of the newest real items. Changes take effect on the notifier's next run, which starts right after a change. A new channel only gets items that arrive after it was added, and switching a channel off keeps its place, so it catches up on items from the last three days when switched back on.
 
@@ -327,6 +328,7 @@ topic = "${GEN_NTFY_TOPIC}"
   kinds = ["release", "news"]
   exclude_kinds = ["prerelease"]
   keywords = ["LTS"]
+  search = "godot shader"        # every word must match, like the site's search box
   include_untagged = false
 ```
 
@@ -393,7 +395,7 @@ Each subscribed Discord channel is listed as a **Discord bot** channel named aft
 - it can be switched off or removed
 - it only gets items that arrive after it was subscribed
 
-Its subscriptions are changed in Discord. On the website you can add keywords, change its message style and switch it on or off. Deleting the channel in Discord, or removing the bot from the server, removes it here too.
+Its subscriptions are changed in Discord. On the website you can add keywords and a search, change its message style and switch it on or off. Deleting the channel in Discord, or removing the bot from the server, removes it here too.
 
 ## Web routes
 
