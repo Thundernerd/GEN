@@ -402,8 +402,8 @@ Each source on `/sources` and on the engine pages has a status:
 |---|---|
 | `ok` | Fetches fine and has had new items in the last six months. |
 | `pending` | Not fetched yet. |
-| `retrying` | The last one or two fetches failed, but it fetched fine within the last 3 days. It's tried again on its next poll. |
-| `failing` | 3 or more fetches in a row failed, or it fails and hasn't fetched fine for over 3 days (or ever), e.g. a feed URL that now returns 404. |
+| `retrying` | The last one or two fetches failed, but it fetched fine recently (see `failing`). It's tried again on its next poll. |
+| `failing` | 3 or more fetches in a row failed, or it hasn't fetched fine for over 3 days (or ever), e.g. a feed URL that now returns 404, or polling stopped. For sources polled less often than every 36 hours, the limit is two polling intervals instead of 3 days. |
 | `stale` | Fetches fine, but its newest item is over six months old, or it has no items at all, e.g. an abandoned blog or a scraper whose selector no longer matches. |
 | `disabled` | Switched off. |
 

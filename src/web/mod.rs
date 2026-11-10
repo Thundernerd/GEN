@@ -1054,7 +1054,10 @@ fn source_row(
     now: chrono::DateTime<Utc>,
 ) -> serde_json::Value {
     let enabled = st.toggles.is_enabled(s);
-    let health = history.health(enabled, now);
+    let interval = s
+        .interval_minutes
+        .unwrap_or_else(|| st.settings.default_interval());
+    let health = history.health(enabled, interval, now);
     let state = &history.state;
     let (kind, target, target_url) = describe(&s.spec);
     let (owner_kind, owner_id) = match &s.owner {
@@ -1072,7 +1075,7 @@ fn source_row(
         "target": target,
         "target_url": target_url,
         "category": s.category.map(ItemKind::as_str),
-        "interval": s.interval_minutes.unwrap_or_else(|| st.settings.default_interval()),
+        "interval": interval,
         "interval_custom": s.interval_minutes.is_some(),
         "in_catalog": catalog::has_source(&s.id),
         "status": health.as_str(),

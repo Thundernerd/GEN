@@ -122,7 +122,10 @@ fn check_config(app: &AppConfig) -> anyhow::Result<()> {
         .into_iter()
         .filter_map(|s| {
             let history = history.source(&s.id);
-            let health = history.health(pipeline.toggles.is_enabled(&s), now);
+            let interval = s
+                .interval_minutes
+                .unwrap_or_else(|| pipeline.settings.default_interval());
+            let health = history.health(pipeline.toggles.is_enabled(&s), interval, now);
             health
                 .is_unhealthy()
                 .then(|| (s.id, health, history.reason(health, now)))

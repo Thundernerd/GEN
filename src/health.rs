@@ -4,6 +4,7 @@ use chrono::{DateTime, Duration, Utc};
 
 use std::collections::HashMap;
 
+use crate::config::MAX_INTERVAL_MINUTES;
 use crate::model::SourceState;
 use crate::store::Store;
 use crate::time_ago::relative_time;
@@ -27,10 +28,20 @@ pub enum Health {
 
 /// Consecutive failed fetches after which a source counts as failing.
 pub const FAILING_AFTER: u32 = 3;
-/// A source that fails and hasn't fetched successfully for this long counts as failing.
+/// A source that hasn't fetched successfully for this long counts as failing, unless it
+/// is polled so rarely that two polls take longer; see `overdue_after`.
 pub const FAILING_WITHOUT_OK_DAYS: i64 = 3;
 /// A working source without new items for this long (about six months) counts as stale.
 pub const STALE_AFTER_DAYS: i64 = 182;
+
+/// How long without a successful fetch makes a source polled every `interval_minutes`
+/// count as failing: 3 days, or two polls for sources polled less often.
+fn overdue_after(interval_minutes: u64) -> Duration {
+    // Intervals are at most a week; the clamp only keeps the arithmetic in range.
+    let minutes = interval_minutes.min(MAX_INTERVAL_MINUTES) as i64;
+    let two_polls = Duration::minutes(2 * minutes);
+    two_polls.max(Duration::days(FAILING_WITHOUT_OK_DAYS))
+}
 
 /// Every source's fetch state and the date of its newest item.
 pub struct FetchHistory {
@@ -63,25 +74,25 @@ pub struct SourceHistory {
 }
 
 impl SourceHistory {
-    /// The source's health, given whether it is switched on.
-    pub fn health(&self, enabled: bool, now: DateTime<Utc>) -> Health {
+    /// The source's health, given whether it is switched on and how often it is polled.
+    pub fn health(&self, enabled: bool, interval_minutes: u64, now: DateTime<Utc>) -> Health {
         let state = &self.state;
-        let older_than = |dt: Option<DateTime<Utc>>, days: i64| {
-            dt.is_none_or(|dt| now - dt > Duration::days(days))
-        };
+        let older_than =
+            |dt: Option<DateTime<Utc>>, limit: Duration| dt.is_none_or(|dt| now - dt > limit);
+        let overdue = older_than(state.last_ok, overdue_after(interval_minutes));
         if !enabled {
             Health::Disabled
         } else if state.consecutive_failures > 0 {
-            if state.consecutive_failures >= FAILING_AFTER
-                || older_than(state.last_ok, FAILING_WITHOUT_OK_DAYS)
-            {
+            if state.consecutive_failures >= FAILING_AFTER || overdue {
                 Health::Failing
             } else {
                 Health::Retrying
             }
         } else if state.last_ok.is_none() {
             Health::Pending
-        } else if older_than(self.latest_item, STALE_AFTER_DAYS) {
+        } else if overdue {
+            Health::Failing
+        } else if older_than(self.latest_item, Duration::days(STALE_AFTER_DAYS)) {
             Health::Stale
         } else {
             Health::Ok
@@ -93,6 +104,10 @@ impl SourceHistory {
     pub fn reason(&self, health: Health, now: DateTime<Utc>) -> String {
         let ago = |dt| relative_time(dt, now);
         match health {
+            Health::Failing if self.state.consecutive_failures == 0 => {
+                let last_ok = self.state.last_ok.map_or_else(|| "never".into(), ago);
+                format!("last OK {last_ok}, not fetched since")
+            }
             Health::Failing | Health::Retrying => {
                 let n = self.state.consecutive_failures;
                 let last_ok = self.state.last_ok.map_or_else(
@@ -159,8 +174,20 @@ mod tests {
         latest_item: Option<DateTime<Utc>>,
         now: DateTime<Utc>,
     ) -> Health {
-        history(state.clone(), latest_item).health(enabled, now)
+        classify_every(60, enabled, state, latest_item, now)
     }
+
+    fn classify_every(
+        interval_minutes: u64,
+        enabled: bool,
+        state: &SourceState,
+        latest_item: Option<DateTime<Utc>>,
+        now: DateTime<Utc>,
+    ) -> Health {
+        history(state.clone(), latest_item).health(enabled, interval_minutes, now)
+    }
+
+    const WEEKLY: u64 = 7 * 24 * 60;
 
     fn reason(
         health: Health,
@@ -236,8 +263,32 @@ mod tests {
     fn a_slow_polling_interval_alone_is_not_failing() {
         // Polled weekly: last OK a week ago, no failures since.
         assert_eq!(
-            classify(true, &state(Some(7), 0), days_ago(7), now()),
+            classify_every(WEEKLY, true, &state(Some(7), 0), days_ago(7), now()),
             Health::Ok
+        );
+        // One failed weekly poll is retried before it counts as failing.
+        assert_eq!(
+            classify_every(WEEKLY, true, &state(Some(7), 1), days_ago(7), now()),
+            Health::Retrying
+        );
+        // But not two polls' worth of silence.
+        assert_eq!(
+            classify_every(WEEKLY, true, &state(Some(15), 1), days_ago(15), now()),
+            Health::Failing
+        );
+    }
+
+    #[test]
+    fn sources_not_fetched_for_over_three_days_are_failing() {
+        // Hourly source whose last successful fetch was 4 days ago and that hasn't been
+        // fetched since, e.g. polling stopped.
+        assert_eq!(
+            classify(true, &state(Some(4), 0), days_ago(4), now()),
+            Health::Failing
+        );
+        assert_eq!(
+            reason(Health::Failing, &state(Some(4), 0), days_ago(4), now()),
+            "last OK 4 days ago, not fetched since"
         );
     }
 
