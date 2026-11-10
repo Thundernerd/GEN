@@ -259,6 +259,26 @@ mod tests {
     }
 
     #[test]
+    fn unity_networking_libraries_are_tagged_without_a_bare_mirror_alias() {
+        let classifier = crate::classify::Classifier::new(&CATALOG);
+        let cases: &[(&str, &[&str])] = &[
+            ("Mirror Networking v96.11 released", &["mirror"]),
+            ("FishNet 4.7.4 is out", &["fishnet"]),
+            ("Fish-Networking adds client prediction", &["fishnet"]),
+            ("Mirror reflections for water", &[]),
+            ("Real-time mirror shaders", &[]),
+        ];
+        for (title, expected) in cases {
+            assert_eq!(classifier.match_engines(title), *expected, "{title}");
+        }
+        for id in ["mirror", "fishnet"] {
+            let engine = CATALOG.engine(id).expect(id);
+            assert_eq!(engine.tier, 2, "{id}");
+            assert!(engine.icon.is_some(), "{id}");
+        }
+    }
+
+    #[test]
     fn catalog_icons_are_web_images() {
         for e in &CATALOG.engines {
             if let Some(icon) = &e.icon {
