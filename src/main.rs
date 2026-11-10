@@ -110,7 +110,27 @@ fn check_config(app: &AppConfig) -> anyhow::Result<()> {
     for s in &enabled {
         println!("  {}", s.id);
     }
+    if let Some(warning) = github_token_warning(app, &pipeline) {
+        println!("\nwarning: {warning}");
+    }
     Ok(())
+}
+
+/// [`fetch::github::token_warning`] for the sources that are switched on.
+fn github_token_warning(app: &AppConfig, pipeline: &Pipeline) -> Option<String> {
+    let sources: Vec<_> = pipeline
+        .registry
+        .current()
+        .config
+        .manageable_sources()
+        .into_iter()
+        .filter(|s| pipeline.toggles.is_enabled(s))
+        .collect();
+    fetch::github::token_warning(
+        &sources,
+        pipeline.settings.default_interval(),
+        app.polling.github_token.is_some(),
+    )
 }
 
 async fn fetch_once(app: &AppConfig, filter: Option<&str>) -> anyhow::Result<()> {
@@ -216,6 +236,9 @@ async fn notify_test(app: &AppConfig, channel: &str, sample: &str) -> anyhow::Re
 
 async fn serve(app: AppConfig) -> anyhow::Result<()> {
     let pipeline = build_pipeline(&app)?;
+    if let Some(warning) = github_token_warning(&app, &pipeline) {
+        tracing::warn!("{warning}");
+    }
     let mut state = web::AppState::new(&pipeline, app)?;
     let bot_status = discord_bot::BotStatusHandle::default();
     // Like the scheduler, the bot stops when `serve` returns.

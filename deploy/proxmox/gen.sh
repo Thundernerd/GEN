@@ -497,7 +497,7 @@ advanced_settings() {
   GEN_BASE_URL=$(ask "GEN" \
     "Public URL of GEN, used in links (empty: http://<container IP>:$GEN_PORT):" "$GEN_BASE_URL") || cancelled
   GEN_GITHUB_TOKEN=$(ask "GEN" \
-    "GitHub token, optional (raises the API limit from 60 to 5000 requests an hour):" "$GEN_GITHUB_TOKEN") || cancelled
+    "GitHub token, recommended (GitHub releases then come from the API, with prerelease flags):" "$GEN_GITHUB_TOKEN") || cancelled
   GEN_DISCORD_TOKEN=$(ask "GEN" \
     "Discord bot token, optional (turns on the /gen bot):" "$GEN_DISCORD_TOKEN") || cancelled
 }
