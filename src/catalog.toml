@@ -32,7 +32,11 @@ csharp = "native (C# scripting)"
 homepage = "https://unity.com"
 icon = "https://unity.com/apple-touch-icon.png"
 aliases = ["Unity", "UNITY", "unity3d", "unity engine", "unity 6", "unity technologies"]
-exclude = ["ubuntu unity", "unity desktop", "unity shell", "unitypoint"]
+exclude = [
+  "ubuntu unity", "unity desktop", "unity shell", "unitypoint",
+  # Game titles (common in GamingOnLinux coverage); they veto Unity for the whole item.
+  "assassin's creed unity", "unity of command",
+]
   [[engine.source]]
   kind = "feed"
   url = "https://unity.com/blog/rss"
