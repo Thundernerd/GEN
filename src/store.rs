@@ -13,7 +13,8 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use crate::model::{Item, ItemKind, NewItem, SourceState};
 
-/// Items with the same `story_key` within this window are treated as the same story.
+/// Items from different sources with the same `story_key` whose dates lie within this many
+/// days of each other are treated as the same story, however long ago they were published.
 pub const DUPLICATE_WINDOW_DAYS: i64 = 7;
 
 /// Index in `MIGRATIONS` of the migration that adds full-text search.
@@ -463,8 +464,11 @@ impl Store {
     // -- items --------------------------------------------------------------
 
     /// Inserts items, skipping ones already stored (or pruned) for the same source. Returns
-    /// the newly stored items; ones whose story was already stored from another source within
-    /// `DUPLICATE_WINDOW_DAYS` come back with `duplicate_of` set.
+    /// the newly stored items; ones whose story was already stored from another source, dated
+    /// within `DUPLICATE_WINDOW_DAYS` of the new item, come back with `duplicate_of` set to the
+    /// stored story dated closest to it. The window is measured between the two items' dates,
+    /// so a first fetch's backfill of old releases still merges with the same releases stored
+    /// from another source.
     pub fn insert_items(&mut self, items: &[NewItem]) -> anyhow::Result<Vec<Item>> {
         self.insert_items_at(items, Utc::now())
     }
@@ -475,7 +479,7 @@ impl Store {
         items: &[NewItem],
         now: DateTime<Utc>,
     ) -> anyhow::Result<Vec<Item>> {
-        let window_start = now - Duration::days(DUPLICATE_WINDOW_DAYS);
+        let window = Duration::days(DUPLICATE_WINDOW_DAYS);
         let tx = self.conn.transaction()?;
         let mut inserted = Vec::new();
         for it in items {
@@ -496,9 +500,15 @@ impl Store {
                 tx.query_row(
                     "SELECT id FROM items
                      WHERE story_key = ?1 AND source_id != ?2 AND duplicate_of IS NULL
-                       AND sort_date >= ?3
-                     ORDER BY id LIMIT 1",
-                    params![it.story_key, it.source_id, window_start],
+                       AND sort_date BETWEEN ?3 AND ?4
+                     ORDER BY ABS(julianday(sort_date) - julianday(?5)), id LIMIT 1",
+                    params![
+                        it.story_key,
+                        it.source_id,
+                        sort_date - window,
+                        sort_date + window,
+                        sort_date
+                    ],
                     |r| r.get(0),
                 )
                 .optional()?
@@ -997,6 +1007,53 @@ mod tests {
         assert_eq!(listed[0].engines, vec!["godot".to_string()]);
         let dups = store.duplicate_sources(&[first[0].id]).unwrap();
         assert_eq!(dups[&first[0].id], vec!["b".to_string()]);
+    }
+
+    #[test]
+    fn backfilled_story_merges_with_one_published_at_the_same_time() {
+        let mut store = Store::open_in_memory().unwrap();
+        let first = store
+            .insert_items(&[aged("a", "1", "godot 4 7 stable", 30)])
+            .unwrap();
+        let backfilled = store
+            .insert_items(&[aged("b", "x", "godot 4 7 stable", 30)])
+            .unwrap();
+        assert_eq!(backfilled[0].duplicate_of, Some(first[0].id));
+    }
+
+    #[test]
+    fn same_story_key_published_weeks_apart_is_not_merged() {
+        let mut store = Store::open_in_memory().unwrap();
+        store
+            .insert_items(&[aged("a", "1", "godot showreel", 0)])
+            .unwrap();
+        let older = store
+            .insert_items(&[aged("b", "x", "godot showreel", 30)])
+            .unwrap();
+        assert_eq!(older[0].duplicate_of, None);
+        let newer = store
+            .insert_items(&[aged("c", "y", "godot showreel", 60)])
+            .unwrap();
+        assert_eq!(newer[0].duplicate_of, None);
+    }
+
+    #[test]
+    fn duplicate_joins_the_story_published_closest_to_it() {
+        let mut store = Store::open_in_memory().unwrap();
+        // Two separate stories with the same key, published eight days apart.
+        let earlier = store
+            .insert_items(&[aged("a", "1", "godot 4 7", 20)])
+            .unwrap();
+        let later = store
+            .insert_items(&[aged("b", "2", "godot 4 7", 12)])
+            .unwrap();
+        assert_eq!(later[0].duplicate_of, None);
+        // Within the window of both, but closer to the later one.
+        let dup = store
+            .insert_items(&[aged("c", "3", "godot 4 7", 14)])
+            .unwrap();
+        assert_ne!(dup[0].duplicate_of, Some(earlier[0].id));
+        assert_eq!(dup[0].duplicate_of, Some(later[0].id));
     }
 
     #[test]
@@ -1512,6 +1569,30 @@ mod tests {
                 .is_empty(),
             "the duplicate isn't stored again as a new item either"
         );
+    }
+
+    #[test]
+    fn backfilled_duplicate_of_an_expired_story_is_pruned_and_stays_pruned() {
+        let mut store = Store::open_in_memory().unwrap();
+        let primary = insert_ago(&mut store, &[aged("a", "1", "godot 3 6", 400)], 400);
+        // A new source's first fetch backfills the same old release: seen now, dated long ago.
+        let backfilled = store
+            .insert_items(&[aged("b", "x", "godot 3 6", 401)])
+            .unwrap();
+        assert_eq!(backfilled[0].duplicate_of, Some(primary[0].id));
+        // It goes with its story, although it was first seen just now.
+        let cutoff = || Utc::now() - Duration::days(365);
+        assert_eq!(store.prune_items(cutoff()).unwrap(), 2);
+        // Its feed keeps listing it: it never comes back as a new item, across later prunes.
+        for _ in 0..2 {
+            assert!(
+                store
+                    .insert_items(&[aged("b", "x", "godot 3 6", 401)])
+                    .unwrap()
+                    .is_empty()
+            );
+            store.prune_items(cutoff()).unwrap();
+        }
     }
 
     #[test]
