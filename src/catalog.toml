@@ -77,6 +77,11 @@ aliases = ["godot", "godot engine", "gdscript"]
   kind = "github"
   repo = "godotengine/godot"
   category = "release"
+  # Dev, beta and RC builds are only published here (the main repo has just -stable).
+  [[engine.source]]
+  kind = "github"
+  repo = "godotengine/godot-builds"
+  category = "release"
 
 # --- Stride -------------------------------------------------------------------
 # GitHub releases also include launcher/ and vsix/ releases; keep only releases/.
@@ -736,6 +741,12 @@ aliases = ["gamemaker", "game maker studio"]
   url = "https://gamemaker.io/en/blog/rss"
   category = "news"
   interval_minutes = 180
+  # Steam news carries the release notes, hotfix posts included (verified 2026-11-10).
+  [[engine.source]]
+  kind = "feed"
+  url = "https://store.steampowered.com/feeds/news/app/1670460/"
+  category = "release"
+  interval_minutes = 180
 
 [[engine]]
 id = "cocos"
@@ -978,6 +989,18 @@ require_engine_match = true
   url = "https://www.cgchannel.com/category/news/feed/"
   category = "news"
   cache_bust = true
+
+# --- JetBrains .NET Blog -----------------------------------------------------------
+# Rider support for Unity, Unreal and Godot.
+[[outlet]]
+id = "jetbrains-dotnet"
+name = "JetBrains .NET Blog"
+homepage = "https://blog.jetbrains.com/dotnet/"
+require_engine_match = true  # drop the general .NET / ReSharper posts
+  [[outlet.source]]
+  kind = "feed"
+  url = "https://blog.jetbrains.com/dotnet/feed/"
+  category = "news"
 
 # --- GamingOnLinux ---------------------------------------------------------------
 # Verified 2026-11-10. Mostly game news; keep only engine-related posts. Expect some
