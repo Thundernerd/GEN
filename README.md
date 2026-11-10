@@ -26,7 +26,7 @@ GEN is a single Rust binary. It contains a web server and a background poller, a
 Requires Rust 1.96 or newer (edition 2024). You don't need OpenSSL or a system SQLite: TLS uses rustls, and SQLite is compiled in.
 
 ```sh
-cargo run -- check-config     # validate config/gen.toml, list the sources in the database
+cargo run -- check-config     # validate config/gen.toml, list the sources in the database and the unhealthy ones
 cargo run -- fetch            # poll every source once and print what's new (no notifications)
 cargo run -- fetch --source godot   # only sources whose id contains "godot"
 cargo run -- serve            # web server + background polling
@@ -382,7 +382,7 @@ Its subscriptions are changed in Discord. On the website you can add keywords, c
 | `/` | Latest items from all enabled sources, grouped by day. **Compact** shows one line per item (descriptions on hover); **Expanded** shows every description. The choice is remembered in a cookie and applies to engine pages too. |
 | `/engines` | Engine list with tier, C# support and recent activity. |
 | `/engine/{id}` | Items for one engine. |
-| `/sources` | Every source with its last fetch time and errors. Admins can switch sources on and off, add sources, engines and outlets (by hand or from the suggestions) and remove them here. |
+| `/sources` | Every source with its health, last fetch time and errors; `?health=unhealthy` lists only failing and stale sources. Admins can switch sources on and off, add sources, engines and outlets (by hand or from the suggestions) and remove them here. |
 | `/notifications` | Admin only: notification channels, their rules and last deliveries. |
 | `/view?mode=compact\|expanded` | Sets the timeline layout and goes back to the page it came from. |
 | `/login`, `/logout` | Admin login with `server.admin_token`. |
@@ -393,6 +393,21 @@ Its subscriptions are changed in Discord. On the website you can add keywords, c
 ## Managing sources from the web
 
 With `admin_token` set under `[server]`, the Sources page shows a **Manage sources** link. Log in with the token to manage sources without restarting. All changes are stored in the database and take effect right away. The buttons and forms update the page in place (via `static/inline-forms.js`); without JavaScript they work as ordinary form posts.
+
+### Source health
+
+Each source on `/sources` and on the engine pages has a status:
+
+| Status | Meaning |
+|---|---|
+| `ok` | Fetches fine and has had new items in the last six months. |
+| `pending` | Not fetched yet. |
+| `retrying` | The last one or two fetches failed, but it fetched fine within the last 3 days. It's tried again on its next poll. |
+| `failing` | 3 or more fetches in a row failed, or it fails and hasn't fetched fine for over 3 days (or ever), e.g. a feed URL that now returns 404. |
+| `stale` | Fetches fine, but its newest item is over six months old, or it has no items at all, e.g. an abandoned blog or a scraper whose selector no longer matches. |
+| `disabled` | Switched off. |
+
+Failing and stale sources count as unhealthy. The summary above the table counts each status, and **Show only unhealthy** lists just those sources. Admins also see how many sources need attention next to the page title. `gen check-config` lists the unhealthy sources with the reason, e.g. `failing  unity:feed:…  (3 failures in a row, never OK: HTTP 404)`.
 
 ### Switching sources on and off
 
@@ -437,6 +452,7 @@ Layout of `src/`:
 | `model.rs` | Shared types: `ItemKind`, `Topic`, `RawItem`, `NewItem`, `Item`, `SourceState`. |
 | `fetch/` | HTTP client and one fetcher per source kind: `feed`, `github`, `unity`, `hn`, `html`. |
 | `classify.rs` | Item kind detection, engine tagging by alias and story keys for deduplication. |
+| `health.rs` | Source health (ok, retrying, failing, stale …) from fetch state and newest item. |
 | `store.rs` | SQLite storage: items, source state, engines/outlets/sources and queries for the web UI. |
 | `catalog.rs` | The built-in catalog (`catalog.toml`): seeding a new database and the suggestions. |
 | `registry.rs` | The live set of sources stored in the database, published to the web UI, pipeline and scheduler. |

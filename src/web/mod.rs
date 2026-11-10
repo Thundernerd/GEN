@@ -9,7 +9,7 @@ mod notifications;
 mod queries;
 #[cfg(test)]
 mod tests;
-mod view;
+pub(crate) mod view;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -32,6 +32,7 @@ use crate::catalog;
 use crate::config::{AppConfig, Owner, SourceSpec};
 use crate::discord_bot::BotStatusHandle;
 use crate::fetch::Http;
+use crate::health;
 use crate::model::{Item, ItemKind, SourceState};
 use crate::notify::discord::BotApi;
 use crate::pipeline::{Pipeline, PollSettings};
@@ -555,14 +556,14 @@ async fn engine_page(
     let has_more = items.len() > PAGE_SIZE as usize;
     items.truncate(PAGE_SIZE as usize);
 
-    let states = st.with_store(|s| s.source_states()).await?;
+    let (states, latest) = st.with_store(source_health_data).await?;
     let now = Utc::now();
     let sources: Vec<_> = snapshot
         .config
         .manageable_sources()
         .into_iter()
         .filter(|s| s.owner == Owner::Engine(engine.id.clone()))
-        .map(|s| source_row(st, &s, states.get(&s.id), now))
+        .map(|s| source_row(st, &s, states.get(&s.id), latest.get(&s.id).copied(), now))
         .collect();
 
     let base = format!("/engine/{}", engine.id);
@@ -615,6 +616,8 @@ struct SourcesParams {
     sort: Option<String>,
     dir: Option<String>,
     owner: Option<String>,
+    /// `unhealthy` lists only failing and stale sources.
+    health: Option<String>,
 }
 
 async fn sources(
@@ -636,15 +639,16 @@ async fn sources_page(
     feedback: Option<serde_json::Value>,
     notice: Option<serde_json::Value>,
 ) -> PageResult {
-    let states = st.with_store(|s| s.source_states()).await?;
+    let (states, latest) = st.with_store(source_health_data).await?;
     let now = Utc::now();
     let snapshot = st.registry.current();
     let rows: Vec<_> = snapshot
         .config
         .manageable_sources()
         .iter()
-        .map(|s| source_row(st, s, states.get(&s.id), now))
+        .map(|s| source_row(st, s, states.get(&s.id), latest.get(&s.id).copied(), now))
         .collect();
+    let unhealthy_only = params.health.as_deref() == Some("unhealthy");
 
     // Group order: config order by default, or owner name A–Z / Z–A.
     let order = match (params.sort.as_deref(), params.dir.as_deref()) {
@@ -654,26 +658,41 @@ async fn sources_page(
     };
     let owners_in_order = snapshot.config.manageable_owners();
     let mut groups = group_by_owner(&owners_in_order, &rows);
+    if unhealthy_only {
+        // Keep each group's counts, but list only its unhealthy sources.
+        for g in &mut groups {
+            if let Some(sources) = g["sources"].as_array_mut() {
+                sources.retain(|r| r["unhealthy"] == true);
+            }
+        }
+        groups.retain(|g| g["sources"].as_array().is_some_and(|s| !s.is_empty()));
+    }
     if order != "config" {
         groups.sort_by_key(|g| g["owner"].as_str().unwrap_or_default().to_lowercase());
         if order == "desc" {
             groups.reverse();
         }
     }
-    let order_links: Vec<_> = [
-        ("config", "Config", "/sources"),
-        ("asc", "A–Z", "/sources?sort=owner"),
-        ("desc", "Z–A", "/sources?sort=owner&dir=desc"),
-    ]
-    .into_iter()
-    .map(|(key, label, url)| json!({"label": label, "url": url, "active": key == order}))
-    .collect();
-    let next = order_links
-        .iter()
-        .find(|l| l["active"] == true)
-        .and_then(|l| l["url"].as_str())
-        .unwrap_or("/sources")
-        .to_string();
+    let sources_url = |order: &str, unhealthy: bool| {
+        let (sort, dir) = match order {
+            "asc" => (Some("owner"), None),
+            "desc" => (Some("owner"), Some("desc")),
+            _ => (None, None),
+        };
+        let pairs = [
+            ("sort", sort.map(String::from)),
+            ("dir", dir.map(String::from)),
+            ("health", unhealthy.then(|| "unhealthy".to_string())),
+        ];
+        format!("/sources{}", query_string(&pairs))
+    };
+    let order_links: Vec<_> = [("config", "Config"), ("asc", "A–Z"), ("desc", "Z–A")]
+        .into_iter()
+        .map(|(key, label)| {
+            json!({"label": label, "url": sources_url(key, unhealthy_only), "active": key == order})
+        })
+        .collect();
+    let next = sources_url(order, unhealthy_only);
     let owners = |engines: bool| -> Vec<_> {
         snapshot
             .config
@@ -696,6 +715,13 @@ async fn sources_page(
         "failing": count("failing"),
         "pending": count("pending"),
         "disabled": count("disabled"),
+        "retrying": count("retrying"),
+        "stale": count("stale"),
+        "unhealthy": rows.iter().filter(|r| r["unhealthy"] == true).count(),
+    });
+    let health_filter = json!({
+        "active": unhealthy_only,
+        "url": sources_url(order, !unhealthy_only),
     });
     st.render(
         "sources.html",
@@ -705,6 +731,7 @@ async fn sources_page(
             "grouped": true,
             "order_links": order_links,
             "summary": summary,
+            "health_filter": health_filter,
             "admin": admin,
             "login_available": st.admin_token().is_some(),
             "next": next,
@@ -810,6 +837,7 @@ async fn page_with_notice(
         sort: query("sort"),
         dir: query("dir"),
         owner: None,
+        health: query("health"),
     };
     sources_page(st, true, params, None, Some(notice)).await
 }
@@ -1018,24 +1046,27 @@ fn safe_next(next: Option<&str>) -> String {
     }
 }
 
+/// Every source's fetch state and newest item date, for `source_row`.
+type HealthData = (
+    HashMap<String, SourceState>,
+    HashMap<String, chrono::DateTime<Utc>>,
+);
+
+fn source_health_data(store: &Store) -> anyhow::Result<HealthData> {
+    Ok((store.source_states()?, store.latest_item_dates()?))
+}
+
 /// One source with its health, for the engine and sources pages.
 fn source_row(
     st: &AppState,
     s: &crate::config::ResolvedSource,
     state: Option<&SourceState>,
+    latest_item: Option<chrono::DateTime<Utc>>,
     now: chrono::DateTime<Utc>,
 ) -> serde_json::Value {
     let state = state.cloned().unwrap_or_default();
     let enabled = st.toggles.is_enabled(s);
-    let status = if !enabled {
-        "disabled"
-    } else if state.consecutive_failures > 0 {
-        "failing"
-    } else if state.last_ok.is_some() {
-        "ok"
-    } else {
-        "pending"
-    };
+    let health = health::classify(enabled, &state, latest_item, now);
     let (kind, target, target_url) = describe(&s.spec);
     let (owner_kind, owner_id) = match &s.owner {
         Owner::Engine(id) => ("engine", id.clone()),
@@ -1055,7 +1086,9 @@ fn source_row(
         "interval": s.interval_minutes.unwrap_or_else(|| st.settings.default_interval()),
         "interval_custom": s.interval_minutes.is_some(),
         "in_catalog": catalog::has_source(&s.id),
-        "status": status,
+        "status": health.as_str(),
+        "unhealthy": health.is_unhealthy(),
+        "latest_item": latest_item.map(|d| DateView::new(d, now)),
         "last_ok": state.last_ok.map(|d| DateView::new(d, now)),
         "last_error": state.last_error,
         "failures": state.consecutive_failures,

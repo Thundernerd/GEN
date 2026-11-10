@@ -69,6 +69,7 @@
             </form>
           </div>
           {%- else %}every {{ s.interval }} min{% endif %}
+          {%- if s.status == "stale" %} · {% if s.latest_item %}newest item <time datetime="{{ s.latest_item.iso }}" title="{{ s.latest_item.abs }}">{{ s.latest_item.rel }}</time>{% else %}no items yet{% endif %}{% endif %}
           {%- if s.category %} · {{ s.category }}{% endif %}{% if s.enabled != s.config_enabled %} · overrides config{% endif %}</div>
       </td>
       <td class="center last-ok">{% if s.last_ok %}<time datetime="{{ s.last_ok.iso }}" title="{{ s.last_ok.abs }}">{{ s.last_ok.rel }}</time>{% else %}never{% endif %}</td>

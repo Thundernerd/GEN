@@ -3,6 +3,7 @@ mod classify;
 mod config;
 mod discord_bot;
 mod fetch;
+mod health;
 mod model;
 mod notify;
 mod pipeline;
@@ -89,12 +90,16 @@ fn check_config(app: &AppConfig) -> anyhow::Result<()> {
     let pipeline = build_pipeline(app)?;
     let snapshot = pipeline.registry.current();
     let sources = &snapshot.config;
-    let channels = {
+    let (channels, states, latest) = {
         let store = pipeline
             .store
             .lock()
             .map_err(|_| anyhow::anyhow!("store mutex poisoned"))?;
-        notify::load_channels(&store)?
+        (
+            notify::load_channels(&store)?,
+            store.source_states()?,
+            store.latest_item_dates()?,
+        )
     };
     let all = sources.all_sources();
     let enabled = sources.enabled_sources();
@@ -109,6 +114,26 @@ fn check_config(app: &AppConfig) -> anyhow::Result<()> {
     );
     for s in &enabled {
         println!("  {}", s.id);
+    }
+
+    let now = chrono::Utc::now();
+    let unhealthy: Vec<_> = sources
+        .manageable_sources()
+        .into_iter()
+        .filter_map(|s| {
+            let state = states.get(&s.id).cloned().unwrap_or_default();
+            let latest = latest.get(&s.id).copied();
+            let health = health::classify(pipeline.toggles.is_enabled(&s), &state, latest, now);
+            health
+                .is_unhealthy()
+                .then(|| (s.id, health, health::reason(health, &state, latest, now)))
+        })
+        .collect();
+    if !unhealthy.is_empty() {
+        println!("{} unhealthy sources:", unhealthy.len());
+        for (id, health, reason) in &unhealthy {
+            println!("  {:<8} {id}  ({reason})", health.as_str());
+        }
     }
     Ok(())
 }

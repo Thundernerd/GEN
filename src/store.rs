@@ -215,6 +215,15 @@ impl Store {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
+    /// The date of each source's newest item, duplicates included.
+    pub fn latest_item_dates(&self) -> anyhow::Result<HashMap<String, DateTime<Utc>>> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT source_id, MAX(sort_date) FROM items GROUP BY source_id")?;
+        let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
     /// Records a successful fetch. Validators are only replaced when the response sent new ones.
     pub fn record_fetch_ok(
         &self,
@@ -795,6 +804,34 @@ mod tests {
             Some("https://example.org/1.png")
         );
         assert!(first.image_checked);
+    }
+
+    #[test]
+    fn reports_each_sources_newest_item_date() {
+        let mut store = Store::open_in_memory().unwrap();
+        let at = |days: i64| Utc::now() - Duration::days(days);
+        let dated = |source: &str, guid: &str, days: i64| NewItem {
+            published: Some(at(days)),
+            ..new_item(source, guid, guid)
+        };
+        store
+            .insert_items(&[
+                dated("a", "1", 300),
+                dated("a", "2", 10),
+                dated("b", "3", 200),
+            ])
+            .unwrap();
+        // A duplicate still counts: the source did publish it.
+        store
+            .insert_items(&[NewItem {
+                published: Some(at(1)),
+                ..new_item("b", "4", "2")
+            }])
+            .unwrap();
+        let latest = store.latest_item_dates().unwrap();
+        assert_eq!(latest.len(), 2);
+        assert_eq!(latest["a"].date_naive(), at(10).date_naive());
+        assert_eq!(latest["b"].date_naive(), at(1).date_naive());
     }
 
     #[test]
