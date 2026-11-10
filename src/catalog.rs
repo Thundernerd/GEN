@@ -234,6 +234,7 @@ mod tests {
         let item = |source: &str| crate::model::NewItem {
             engines: Vec::new(),
             kind: crate::model::ItemKind::News,
+            title: "t".into(),
             story_key: format!("{source} t"),
             ..crate::model::NewItem::test(source, "1")
         };
