@@ -154,14 +154,15 @@ pub fn backfill_icons_once(registry: &SourceRegistry, store: &mut Store) -> anyh
 
 /// On every start: adds the catalog's exclude phrases that stored engines of the same id
 /// lack, so catalog fixes reach existing databases. Never removes a phrase, and leaves
-/// engines that aren't in the catalog alone.
-pub fn merge_catalog_excludes(registry: &SourceRegistry, store: &mut Store) -> anyhow::Result<()> {
+/// engines that aren't in the catalog alone. An engine the edit fails for is logged and
+/// skipped.
+pub fn merge_catalog_excludes(registry: &SourceRegistry, store: &mut Store) {
     let snapshot = registry.current();
     for engine in &snapshot.config.engines {
-        let Some(catalog) = CATALOG.engine(&engine.id) else {
+        let Some(catalog_engine) = CATALOG.engine(&engine.id) else {
             continue;
         };
-        let missing: Vec<String> = catalog
+        let missing: Vec<String> = catalog_engine
             .exclude
             .iter()
             .filter(|c| !engine.exclude.iter().any(|p| p.eq_ignore_ascii_case(c)))
@@ -175,12 +176,14 @@ pub fn merge_catalog_excludes(registry: &SourceRegistry, store: &mut Store) -> a
             engine_id: engine.id.clone(),
             phrases: missing,
         };
-        registry
-            .apply(store, edit)
-            .map_err(|err| anyhow::anyhow!("adding catalog excludes to {}: {err}", engine.id))?;
-        tracing::info!(engine = %engine.id, added, "added catalog exclude phrases");
+        // This runs on every start, so a failure must not keep GEN from starting.
+        match registry.apply(store, edit) {
+            Ok(_) => tracing::info!(engine = %engine.id, added, "added catalog exclude phrases"),
+            Err(err) => {
+                tracing::warn!(engine = %engine.id, "not adding catalog exclude phrases: {err}")
+            }
+        }
     }
-    Ok(())
 }
 
 #[cfg(test)]
@@ -341,7 +344,7 @@ mod tests {
     fn merges_catalog_excludes_into_stored_engines() {
         let (mut store, reg) = store_with_old_unity();
 
-        merge_catalog_excludes(&reg, &mut store).unwrap();
+        merge_catalog_excludes(&reg, &mut store);
 
         let unity = excludes(&reg, "unity");
         for phrase in &CATALOG.engine("unity").unwrap().exclude {
@@ -360,7 +363,7 @@ mod tests {
     fn merging_catalog_excludes_leaves_engines_outside_the_catalog_alone() {
         let (mut store, reg) = store_with_old_unity();
 
-        merge_catalog_excludes(&reg, &mut store).unwrap();
+        merge_catalog_excludes(&reg, &mut store);
 
         assert_eq!(excludes(&reg, "mine"), ["ubuntu unity"]);
     }
@@ -368,10 +371,10 @@ mod tests {
     #[test]
     fn merging_catalog_excludes_twice_adds_nothing() {
         let (mut store, reg) = store_with_old_unity();
-        merge_catalog_excludes(&reg, &mut store).unwrap();
+        merge_catalog_excludes(&reg, &mut store);
         let once = excludes(&reg, "unity");
 
-        merge_catalog_excludes(&reg, &mut store).unwrap();
+        merge_catalog_excludes(&reg, &mut store);
 
         assert_eq!(excludes(&reg, "unity"), once);
         assert_eq!(
@@ -392,7 +395,7 @@ mod tests {
             "the old excludes tag it"
         );
 
-        merge_catalog_excludes(&reg, &mut store).unwrap();
+        merge_catalog_excludes(&reg, &mut store);
 
         let tags = reg.current().classifier.match_engines(title);
         assert!(!tags.contains(&"unity".into()), "{tags:?}");
