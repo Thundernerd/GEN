@@ -431,14 +431,41 @@ impl Default for ServerConfig {
 pub struct DatabaseConfig {
     #[serde(default = "default_db_path")]
     pub path: PathBuf,
+    /// Items older than this many days are deleted once a day. Unset keeps every item.
+    #[serde(default, deserialize_with = "deserialize_retention_days")]
+    pub retention_days: Option<u32>,
+}
+
+impl DatabaseConfig {
+    /// How long items are kept, if they're pruned at all.
+    pub fn retention(&self) -> Option<chrono::TimeDelta> {
+        self.retention_days
+            .map(|days| chrono::TimeDelta::days(days.into()))
+    }
 }
 
 impl Default for DatabaseConfig {
     fn default() -> Self {
         DatabaseConfig {
             path: default_db_path(),
+            retention_days: None,
         }
     }
+}
+
+/// Retention must cover the duplicate window: a story pruned sooner could be stored again
+/// from another source as a new item.
+fn deserialize_retention_days<'de, D: serde::Deserializer<'de>>(
+    d: D,
+) -> Result<Option<u32>, D::Error> {
+    let days = u32::deserialize(d)?;
+    let min = crate::store::DUPLICATE_WINDOW_DAYS;
+    if i64::from(days) < min {
+        return Err(serde::de::Error::custom(format!(
+            "retention_days must be at least {min}"
+        )));
+    }
+    Ok(Some(days))
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -1155,5 +1182,16 @@ mod tests {
             (discord.token.as_str(), discord.dev_guild_id),
             ("abc", Some(42))
         );
+    }
+
+    #[test]
+    fn item_retention_is_off_by_default_and_keeps_the_duplicate_window() {
+        let cfg: AppConfig = toml::from_str("").unwrap();
+        assert_eq!(cfg.database.retention(), None);
+        let cfg: AppConfig = toml::from_str("[database]\nretention_days = 365").unwrap();
+        assert_eq!(cfg.database.retention(), Some(chrono::TimeDelta::days(365)));
+        // Shorter than the duplicate window would let a pruned story come back as new.
+        let err = toml::from_str::<AppConfig>("[database]\nretention_days = 3").unwrap_err();
+        assert!(err.to_string().contains("at least 7"), "{err}");
     }
 }

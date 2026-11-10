@@ -22,9 +22,21 @@ pub struct ItemFilter {
     pub tier: Option<u8>,
     /// Only items tagged with a C#-capable engine, or outlet items mentioning C#.
     pub csharp: bool,
+    /// Full-text search over title and summary.
+    pub q: Option<String>,
 }
 
 impl ItemFilter {
+    /// The part of the filter `/feed.xml` takes: engine, kind and search.
+    pub fn for_feed(self) -> ItemFilter {
+        ItemFilter {
+            engine: self.engine,
+            kind: self.kind,
+            q: self.q,
+            ..Default::default()
+        }
+    }
+
     fn needs_scan(&self) -> bool {
         self.tier.is_some() || self.csharp
     }
@@ -65,6 +77,7 @@ pub fn list_items(
     let base = ItemQuery {
         engine: filter.engine.clone(),
         kind: filter.kind,
+        q: filter.q.clone(),
         ..Default::default()
     };
     if !filter.needs_scan() {

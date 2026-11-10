@@ -13,6 +13,7 @@ static_dir = "/app/static"
 
 [database]
 path = "/data/gen.db"
+# retention_days = 365            # delete items older than this, daily; unset keeps everything
 
 [polling]
 default_interval_minutes = 60

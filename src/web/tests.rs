@@ -743,7 +743,11 @@ async fn removed_engines_come_back_from_the_suggestions() {
     assert_eq!(status, StatusCode::SEE_OTHER);
     let snapshot = st.registry.current();
     let godot = snapshot.config.engine("godot").unwrap();
-    assert_eq!(godot.sources.len(), 2);
+    let Some(crate::registry::NewOwner::Engine(catalog_godot)) = crate::catalog::owner("godot")
+    else {
+        panic!("godot is a catalog engine");
+    };
+    assert_eq!(godot.sources.len(), catalog_godot.sources.len());
     assert!(godot.aliases.contains(&"gdscript".to_string()));
     let (status, _, _) = send(
         &st,
@@ -1400,4 +1404,90 @@ async fn sources_page_filters_unhealthy_sources() {
         body.contains(r#"href="&#x2f;sources?sort=owner&amp;dir=desc&amp;health=unhealthy">Z–A<"#)
     );
     assert!(body.contains(r#"href="&#x2f;sources?sort=owner">Show all sources<"#));
+}
+
+fn api_titles(body: &str) -> Vec<String> {
+    let json: serde_json::Value = serde_json::from_str(body).unwrap();
+    json["items"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|i| i["title"].as_str().unwrap().to_string())
+        .collect()
+}
+
+#[tokio::test]
+async fn json_api_searches() {
+    let (status, _, body) = get("/api/items?q=bevy").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(api_titles(&body), ["Bevy 0.17 is out"]);
+
+    // Combined with the other filters.
+    let (_, _, body) = get("/api/items?q=released&kind=news").await;
+    assert!(api_titles(&body).is_empty());
+    let (_, _, body) = get(&format!("/api/items?q={}&csharp=1", urlenc("c# engine"))).await;
+    assert_eq!(api_titles(&body), ["New C# engine appears"]);
+}
+
+#[tokio::test]
+async fn atom_feed_searches() {
+    let (status, _, body) = get("/feed.xml?q=bevy").await;
+    assert_eq!(status, StatusCode::OK);
+    let feed = atom_syndication::Feed::read_from(body.as_bytes()).unwrap();
+    let titles: Vec<_> = feed.entries().iter().map(|e| e.title().as_str()).collect();
+    assert_eq!(titles, ["Bevy 0.17 is out"]);
+    assert!(
+        feed.title().as_str().contains("“bevy”"),
+        "{}",
+        feed.title().as_str()
+    );
+    assert!(
+        feed.links()
+            .iter()
+            .any(|l| l.href() == "https://gen.example.org/feed.xml?q=bevy"),
+        "{:?}",
+        feed.links()
+    );
+}
+
+#[tokio::test]
+async fn timeline_searches() {
+    let (status, _, body) = get("/?q=bevy&kind=news").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains("Bevy 0.17 is out"));
+    assert!(!body.contains("Godot 4.8 released"));
+    assert!(!body.contains("New C# engine appears"));
+    // The search box shows the query and keeps the other filters.
+    assert!(
+        body.contains(r#"<input type="search" name="q" value="bevy""#),
+        "{body}"
+    );
+    assert!(body.contains(r#"<input type="hidden" name="kind" value="news">"#));
+    // Filter links and the feed keep the search.
+    assert!(
+        body.contains("engine=godot&amp;kind=news&amp;q=bevy"),
+        "{body}"
+    );
+    assert!(body.contains("feed.xml?kind=news&amp;q=bevy"));
+
+    let (_, _, body) = get("/?q=nothingmatches").await;
+    assert!(body.contains("Nothing matches"), "{body}");
+}
+
+#[tokio::test]
+async fn engine_pages_search() {
+    let (status, _, body) = get("/engine/godot?q=nothingmatches").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(!body.contains("Godot 4.8 released"));
+    assert!(body.contains("Nothing matches"));
+    assert!(body.contains(r#"<input type="search" name="q" value="nothingmatches""#));
+    // Kind tabs and the feed keep the search.
+    assert!(
+        body.contains("godot?kind=news&amp;q=nothingmatches"),
+        "{body}"
+    );
+    assert!(body.contains("feed.xml?engine=godot&amp;q=nothingmatches"));
+
+    let (_, _, body) = get("/engine/godot?q=released").await;
+    assert!(body.contains("Godot 4.8 released"));
 }

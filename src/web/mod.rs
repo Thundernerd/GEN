@@ -310,6 +310,7 @@ struct ListParams {
     kind: Option<String>,
     tier: Option<String>,
     csharp: Option<String>,
+    q: Option<String>,
     page: Option<String>,
     limit: Option<String>,
 }
@@ -331,6 +332,7 @@ impl ListParams {
                 non_empty(&self.csharp).as_deref(),
                 Some("1" | "on" | "true" | "yes")
             ),
+            q: non_empty(&self.q),
         }
     }
 
@@ -350,7 +352,23 @@ fn filter_pairs(f: &ItemFilter) -> Vec<(&'static str, Option<String>)> {
         ("kind", f.kind.map(|k| k.as_str().to_string())),
         ("tier", f.tier.map(|t| t.to_string())),
         ("csharp", f.csharp.then(|| "1".to_string())),
+        ("q", f.q.clone()),
     ]
+}
+
+/// The search box of a list page at `path` whose filters are `pairs`; the box resubmits
+/// the other filters as hidden fields. `clear` is the page without the search.
+fn search_box(path: &str, pairs: &[(&str, Option<String>)], clear: String) -> serde_json::Value {
+    let q = pairs
+        .iter()
+        .find(|(k, _)| *k == "q")
+        .and_then(|(_, v)| v.clone());
+    let hidden: Vec<_> = pairs
+        .iter()
+        .filter(|(k, _)| *k != "q")
+        .filter_map(|(k, v)| v.as_ref().map(|v| json!({"name": k, "value": v})))
+        .collect();
+    json!({"action": path, "q": q, "hidden": hidden, "clear": clear})
 }
 
 /// Previous/next page links for list pages.
@@ -449,7 +467,7 @@ async fn index_page(
         })
         .collect();
     let csharp_link = link("csharp", (!filter.csharp).then(|| "1".to_string()));
-    let feed_pairs: Vec<_> = pairs[..2].to_vec();
+    let feed_pairs = filter_pairs(&filter.clone().for_feed());
     st.render(
         "index.html",
         json!({
@@ -460,13 +478,15 @@ async fn index_page(
             "kind_tabs": kind_tabs,
             "engine_links": engine_links,
             "csharp_link": csharp_link,
+            "search": search_box("/", &pairs, link("q", None)),
             "filter": {
                 "engine": filter.engine,
                 "kind": filter.kind.map(ItemKind::as_str),
                 "tier": filter.tier,
                 "csharp": filter.csharp,
+                "q": filter.q,
                 "active": filter.engine.is_some() || filter.kind.is_some()
-                    || filter.tier.is_some() || filter.csharp,
+                    || filter.tier.is_some() || filter.csharp || filter.q.is_some(),
             },
             "pagination": pagination("/", &pairs, page, has_more),
             "feed_url": format!("/feed.xml{}", query_string(&feed_pairs)),
@@ -540,9 +560,11 @@ async fn engine_page(
     let Some(engine) = snapshot.config.engine(&id) else {
         return Err(AppError::NotFound(format!("Unknown engine “{id}”.")));
     };
+    let params_filter = params.filter();
     let filter = ItemFilter {
         engine: Some(engine.id.clone()),
-        kind: params.filter().kind,
+        kind: params_filter.kind,
+        q: params_filter.q,
         ..Default::default()
     };
     let page = params.page();
@@ -567,18 +589,23 @@ async fn engine_page(
         .collect();
 
     let base = format!("/engine/{}", engine.id);
+    let q_pair = ("q", filter.q.clone());
     let tabs: Vec<_> = std::iter::once(None)
         .chain(ItemKind::ALL.into_iter().map(Some))
         .map(|k| {
             json!({
                 "kind": k.map(ItemKind::as_str),
                 "label": k.map_or("all", ItemKind::as_str),
-                "url": format!("{base}{}", query_string(&[("kind", k.map(|k| k.as_str().to_string()))])),
+                "url": format!("{base}{}", query_string(&[("kind", k.map(|k| k.as_str().to_string())), q_pair.clone()])),
                 "active": k == filter.kind,
             })
         })
         .collect();
-    let kind_pair = [("kind", filter.kind.map(|k| k.as_str().to_string()))];
+    let kind_pair = [
+        ("kind", filter.kind.map(|k| k.as_str().to_string())),
+        q_pair.clone(),
+    ];
+    let feed_pairs = [("engine", Some(engine.id.clone())), q_pair.clone()];
     st.render(
         "engine.html",
         json!({
@@ -604,7 +631,8 @@ async fn engine_page(
             "tabs": tabs,
             "items": st.item_views(&items, &dups),
             "pagination": pagination(&base, &kind_pair, page, has_more),
-            "feed_url": format!("/feed.xml?engine={}", url::form_urlencoded::byte_serialize(engine.id.as_bytes()).collect::<String>()),
+            "feed_url": format!("/feed.xml{}", query_string(&feed_pairs)),
+            "search": search_box(&base, &kind_pair, format!("{base}{}", query_string(&kind_pair[..1]))),
         }),
     )
 }
@@ -1113,12 +1141,7 @@ async fn feed(State(st): State<AppState>, Query(params): Query<ListParams>) -> R
 }
 
 async fn feed_response(st: &AppState, params: ListParams) -> PageResult {
-    let full = params.filter();
-    let filter = ItemFilter {
-        engine: full.engine,
-        kind: full.kind,
-        ..Default::default()
-    };
+    let filter = params.filter().for_feed();
     let (items, _) = st.items_with_dups(filter.clone(), FEED_SIZE, 0).await?;
     let lookup = &st.registry.current().lookup;
     let mut title = "GEN — Game Engine News".to_string();
@@ -1127,6 +1150,9 @@ async fn feed_response(st: &AppState, params: ListParams) -> PageResult {
     }
     if let Some(k) = filter.kind {
         title.push_str(&format!(" ({})", k.as_str()));
+    }
+    if let Some(q) = &filter.q {
+        title.push_str(&format!(" — “{q}”"));
     }
     let query = query_string(&filter_pairs(&filter));
     let feed = feed::build(&items, lookup, st.base_url(), &query, &title);
