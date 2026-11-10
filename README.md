@@ -12,7 +12,7 @@ GEN is a single Rust binary. It contains a web server and a background poller, a
 - Polls RSS/Atom/JSON feeds, GitHub releases/tags/commits, the Unity release API, Hacker News searches and scraped HTML pages.
 - Classifies each item as `release`, `prerelease`, `news`, `video` or `community`, and tags it with engines using per-engine aliases.
 - Removes cross-source duplicates, for example the same release announced on GitHub, the engine blog and GameFromScratch.
-- Provides a web UI by engine and by source, a combined Atom feed and a JSON API.
+- Provides a web UI by engine and by source, a combined Atom feed and a JSON API, with full-text search over item titles and summaries.
 - Sends notifications to Discord, ntfy, email and Apprise API (which reaches Telegram, Slack, Matrix, Pushover and many more), with per-channel filter rules. Email can be sent as a digest.
 - Runs an optional Discord bot. Server admins subscribe channels to engine topics with `/gen` slash commands, and `/gen setup` creates the channels, e.g. a Unity category with `#unity-releases` and `#unity-news`.
 - Uses conditional requests (ETag / Last-Modified) and per-source intervals. The first fetch of a new source fills the database without notifying, so adding a source never floods your channels.
@@ -386,9 +386,11 @@ Its subscriptions are changed in Discord. On the website you can add keywords, c
 | `/notifications` | Admin only: notification channels, their rules and last deliveries. |
 | `/view?mode=compact\|expanded` | Sets the timeline layout and goes back to the page it came from. |
 | `/login`, `/logout` | Admin login with `server.admin_token`. |
-| `/feed.xml` | Combined Atom feed. |
-| `/api/items` | JSON API for items. |
+| `/feed.xml` | Combined Atom feed. Takes `engine`, `kind` and `q`. |
+| `/api/items` | JSON API for items. Takes `engine`, `kind`, `tier`, `csharp`, `q`, `page` and `limit`. |
 | `/health` | Liveness check that returns `ok`. |
+
+**Search:** `/`, `/feed.xml` and `/api/items` take `q=` to search item titles and summaries; the timeline has a search box for it. Every word must match, as a word or the start of one (`god` finds Godot), regardless of case and accents. Punctuation and words like `AND` or `NEAR` are matched as text, not operators. Search combines with the other filters, so `/feed.xml?engine=godot&q=shader` is a feed you can subscribe to.
 
 ## Managing sources from the web
 
