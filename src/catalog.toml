@@ -980,8 +980,8 @@ require_engine_match = true
   cache_bust = true
 
 # --- GamingOnLinux ---------------------------------------------------------------
-# Verified 2026-11-10. Mostly game news; keep only engine-related posts. Unity's
-# `exclude` list already vetoes the Ubuntu Unity desktop.
+# Verified 2026-11-10. Mostly game news; keep only engine-related posts. Expect some
+# noise on the `Unity` alias (game titles, "made with Unity" game coverage).
 [[outlet]]
 id = "gamingonlinux"
 name = "GamingOnLinux"
