@@ -173,6 +173,13 @@ mod tests {
     }
 
     #[test]
+    fn godot_tracks_prereleases_from_godot_builds() {
+        // Godot's dev, beta and RC builds are only published in godot-builds.
+        assert!(has_source("godot:github:godotengine/godot-builds"));
+        assert!(has_source("godot:github:godotengine/godot"));
+    }
+
+    #[test]
     fn seeds_once_and_purges_unconfigured_sources() {
         let mut store = Store::open_in_memory().unwrap();
         let item = |source: &str| crate::model::NewItem {
