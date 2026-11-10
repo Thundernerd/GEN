@@ -650,6 +650,59 @@ mod tests {
         }
     }
 
+    /// Every request a [`recording_sink`] has received, in order.
+    type RequestLog = Arc<Mutex<Vec<String>>>;
+
+    /// A local HTTP server that records every request until the test ends and answers
+    /// each with `200 OK` and the body `reply` gives for that request.
+    async fn recording_sink(
+        reply: impl Fn(&str) -> &'static str + Send + 'static,
+    ) -> (std::net::SocketAddr, RequestLog) {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let requests = RequestLog::default();
+        let seen = requests.clone();
+        tokio::spawn(async move {
+            loop {
+                let (mut conn, _) = listener.accept().await.unwrap();
+                let mut buf = vec![0u8; 32 * 1024];
+                let n = conn.read(&mut buf).await.unwrap();
+                let request = String::from_utf8_lossy(&buf[..n]).into_owned();
+                let body = reply(&request);
+                seen.lock().unwrap().push(request);
+                let response = format!(
+                    "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+                    body.len()
+                );
+                conn.write_all(response.as_bytes()).await.unwrap();
+            }
+        });
+        (addr, requests)
+    }
+
+    /// A notifier, and its pipeline, over `store` and the sources it holds. `bot` is the
+    /// Discord bot that posts to bot channels.
+    fn notifier(store: crate::store::Store, bot: Option<BotApi>) -> Notifier {
+        let registry = crate::registry::SourceRegistry::load(&store).unwrap();
+        let pipeline = Pipeline {
+            http: crate::fetch::Http::new("gen-test", None).unwrap(),
+            store: Arc::new(Mutex::new(store)),
+            registry: Arc::new(registry),
+            toggles: Arc::new(crate::toggles::SourceToggles::default()),
+            notify_wake: Arc::new(Notify::new()),
+            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
+            fetches: Arc::new(FetchRequests::default()),
+        };
+        Notifier {
+            wake: pipeline.notify_wake.clone(),
+            pipeline,
+            bot,
+            app: Arc::new(AppConfig::default()),
+        }
+    }
+
     /// "Fetch now" makes a poller fetch right away, long before its next poll, and reports
     /// what it found. A request for a switched-off source is answered without fetching.
     #[tokio::test]
@@ -886,23 +939,9 @@ mod tests {
     /// notifier run, and the result is recorded on the channel.
     #[tokio::test]
     async fn delivers_to_channels_from_the_store() {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-        // A one-shot HTTP sink that records the request.
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let sink = tokio::spawn(async move {
-            let (mut conn, _) = listener.accept().await.unwrap();
-            let mut buf = vec![0u8; 16 * 1024];
-            let n = conn.read(&mut buf).await.unwrap();
-            conn.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
-                .await
-                .unwrap();
-            String::from_utf8_lossy(&buf[..n]).into_owned()
-        });
+        let (addr, requests) = recording_sink(|_| "").await;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
-        let registry = crate::registry::SourceRegistry::load(&store).unwrap();
         let channel = format!(
             r#"{{"name":"phone","kind":"ntfy","server":"http://{addr}","topic":"gen-test"}}"#
         );
@@ -924,27 +963,13 @@ mod tests {
                 image_url: None,
             }])
             .unwrap();
-        let pipeline = Pipeline {
-            http: crate::fetch::Http::new("gen-test", None).unwrap(),
-            store: Arc::new(Mutex::new(store)),
-            registry: Arc::new(registry),
-            toggles: Arc::new(crate::toggles::SourceToggles::default()),
-            notify_wake: Arc::new(Notify::new()),
-            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
-            fetches: Arc::new(FetchRequests::default()),
-        };
-        let notifier = Notifier {
-            pipeline: pipeline.clone(),
-            bot: None,
-            app: Arc::new(AppConfig::default()),
-            wake: pipeline.notify_wake.clone(),
-        };
+        let notifier = notifier(store, None);
         notifier.run_once().await;
 
-        let request = sink.await.unwrap();
+        let request = requests.lock().unwrap()[0].clone();
         assert!(request.starts_with("POST /gen-test "), "{request}");
         assert!(request.contains("Godot 4.8"), "{request}");
-        let channels = notify::load_channels(&pipeline.store.lock().unwrap()).unwrap();
+        let channels = notify::load_channels(&notifier.pipeline.store.lock().unwrap()).unwrap();
         assert!(channels[0].last_ok.is_some() && channels[0].last_error.is_none());
     }
 
@@ -952,30 +977,9 @@ mod tests {
     /// site's search would; the others are marked handled so they aren't looked at again.
     #[tokio::test]
     async fn delivers_only_items_matching_a_channel_search() {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let requests = Arc::new(Mutex::new(Vec::<String>::new()));
-        let seen = requests.clone();
-        tokio::spawn(async move {
-            loop {
-                let (mut conn, _) = listener.accept().await.unwrap();
-                let mut buf = vec![0u8; 16 * 1024];
-                let n = conn.read(&mut buf).await.unwrap();
-                seen.lock()
-                    .unwrap()
-                    .push(String::from_utf8_lossy(&buf[..n]).into_owned());
-                conn.write_all(
-                    b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\nconnection: close\r\n\r\n",
-                )
-                .await
-                .unwrap();
-            }
-        });
+        let (addr, requests) = recording_sink(|_| "").await;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
-        let registry = crate::registry::SourceRegistry::load(&store).unwrap();
         let channel = format!(
             r#"{{"name":"phone","kind":"ntfy","server":"http://{addr}","topic":"gen-test",
                 "rules":{{"search":"godot shader"}}}}"#
@@ -1003,21 +1007,7 @@ mod tests {
                 item("d", "Unity shader graph", None),
             ])
             .unwrap();
-        let pipeline = Pipeline {
-            http: crate::fetch::Http::new("gen-test", None).unwrap(),
-            store: Arc::new(Mutex::new(store)),
-            registry: Arc::new(registry),
-            toggles: Arc::new(crate::toggles::SourceToggles::default()),
-            notify_wake: Arc::new(Notify::new()),
-            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
-            fetches: Arc::new(FetchRequests::default()),
-        };
-        let notifier = Notifier {
-            pipeline: pipeline.clone(),
-            bot: None,
-            app: Arc::new(AppConfig::default()),
-            wake: pipeline.notify_wake.clone(),
-        };
+        let notifier = notifier(store, None);
         notifier.run_once().await;
 
         let requests = requests.lock().unwrap().clone();
@@ -1027,7 +1017,7 @@ mod tests {
             "{requests:?}"
         );
         assert!(requests[1].contains("Weekly roundup"), "{requests:?}");
-        let store = pipeline.store.lock().unwrap();
+        let store = notifier.pipeline.store.lock().unwrap();
         let since = chrono::Utc::now() - chrono::Duration::days(1);
         assert!(
             store
@@ -1042,31 +1032,9 @@ mod tests {
     /// when several subscriptions match, with the bot's token.
     #[tokio::test]
     async fn delivers_subscribed_items_to_bot_channels() {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-        // An HTTP sink that records every request until the test ends.
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let requests = Arc::new(Mutex::new(Vec::<String>::new()));
-        let seen = requests.clone();
-        tokio::spawn(async move {
-            loop {
-                let (mut conn, _) = listener.accept().await.unwrap();
-                let mut buf = vec![0u8; 16 * 1024];
-                let n = conn.read(&mut buf).await.unwrap();
-                seen.lock()
-                    .unwrap()
-                    .push(String::from_utf8_lossy(&buf[..n]).into_owned());
-                conn.write_all(
-                    b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\n{}",
-                )
-                .await
-                .unwrap();
-            }
-        });
+        let (addr, requests) = recording_sink(|_| "{}").await;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
-        let registry = crate::registry::SourceRegistry::load(&store).unwrap();
         let channel = r#"{"name":"discord-godot","kind":"discordbot","guild_id":1,"channel_id":42,
             "subscriptions":[{"engine":"godot","topic":"releases"},{"engine":"unity","topic":"releases"}]}"#;
         store.add_channel("discord-godot", channel).unwrap();
@@ -1092,24 +1060,11 @@ mod tests {
                 item("c", &["bevy"], Release, "Bevy release, not subscribed"),
             ])
             .unwrap();
-        let pipeline = Pipeline {
-            http: crate::fetch::Http::new("gen-test", None).unwrap(),
-            store: Arc::new(Mutex::new(store)),
-            registry: Arc::new(registry),
-            toggles: Arc::new(crate::toggles::SourceToggles::default()),
-            notify_wake: Arc::new(Notify::new()),
-            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
-            fetches: Arc::new(FetchRequests::default()),
+        let bot = BotApi {
+            token: "t0ken".into(),
+            api_base: format!("http://{addr}"),
         };
-        let notifier = Notifier {
-            pipeline: pipeline.clone(),
-            bot: Some(BotApi {
-                token: "t0ken".into(),
-                api_base: format!("http://{addr}"),
-            }),
-            app: Arc::new(AppConfig::default()),
-            wake: pipeline.notify_wake.clone(),
-        };
+        let notifier = notifier(store, Some(bot));
         notifier.run_once().await;
         notifier.run_once().await;
 
@@ -1122,7 +1077,7 @@ mod tests {
                 .to_lowercase()
                 .contains("authorization: bot t0ken")
         );
-        let channels = notify::load_channels(&pipeline.store.lock().unwrap()).unwrap();
+        let channels = notify::load_channels(&notifier.pipeline.store.lock().unwrap()).unwrap();
         assert!(channels[0].last_ok.is_some() && channels[0].last_error.is_none());
     }
 
@@ -1130,34 +1085,16 @@ mod tests {
     /// og:image once and stores it; the message carries it.
     #[tokio::test]
     async fn looks_up_preview_images_once() {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let requests = Arc::new(Mutex::new(Vec::<String>::new()));
-        let seen = requests.clone();
-        tokio::spawn(async move {
-            loop {
-                let (mut conn, _) = listener.accept().await.unwrap();
-                let mut buf = vec![0u8; 32 * 1024];
-                let n = conn.read(&mut buf).await.unwrap();
-                let request = String::from_utf8_lossy(&buf[..n]).into_owned();
-                let body = if request.starts_with("GET /post") {
-                    r#"<head><meta property="og:image" content="/hero.png"></head>"#
-                } else {
-                    "{}"
-                };
-                seen.lock().unwrap().push(request);
-                let reply = format!(
-                    "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-                    body.len()
-                );
-                conn.write_all(reply.as_bytes()).await.unwrap();
+        let (addr, requests) = recording_sink(|request| {
+            if request.starts_with("GET /post") {
+                r#"<head><meta property="og:image" content="/hero.png"></head>"#
+            } else {
+                "{}"
             }
-        });
+        })
+        .await;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
-        let registry = crate::registry::SourceRegistry::load(&store).unwrap();
         let channel = format!(
             r#"{{"name":"chat","kind":"discord","webhook_url":"http://{addr}/hook","style":"polished"}}"#
         );
@@ -1178,25 +1115,12 @@ mod tests {
                 image_url: None,
             }])
             .unwrap();
-        let pipeline = Pipeline {
-            http: crate::fetch::Http::new("gen-test", None).unwrap(),
-            store: Arc::new(Mutex::new(store)),
-            registry: Arc::new(registry),
-            toggles: Arc::new(crate::toggles::SourceToggles::default()),
-            notify_wake: Arc::new(Notify::new()),
-            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
-            fetches: Arc::new(FetchRequests::default()),
-        };
-        let notifier = Notifier {
-            pipeline: pipeline.clone(),
-            bot: None,
-            app: Arc::new(AppConfig::default()),
-            wake: pipeline.notify_wake.clone(),
-        };
+        let notifier = notifier(store, None);
         notifier.run_once().await;
 
         let hero = format!("http://{addr}/hero.png");
-        let item = pipeline
+        let item = notifier
+            .pipeline
             .store
             .lock()
             .unwrap()
