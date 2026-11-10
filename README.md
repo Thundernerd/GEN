@@ -287,6 +287,8 @@ Channels are managed on the **Notifications** page (`/notifications`), which sho
 - **Keywords:** the title or summary must contain at least one (case-insensitive).
 - **Search:** works like the site's search box: every word must match the start of a word in the title or summary, ignoring case and accents. `godot shader` gets "Godot shaders explained" but not "Godot 4.8 released". Use it to have new items of a search you built on the timeline pushed to the channel.
 
+**Health alerts** (off by default) also sends the channel a message when a source starts failing (see "Source health"), whatever its rules, e.g. "GEN: Godot feed https://godotengine.org/rss.xml is failing (3 failures in a row, last OK 2 days ago: unexpected status 404 Not Found from …)", with a link to the unhealthy sources on `/sources`. A source alerts once, when it goes from working (`ok`, `stale` or `retrying`) to `failing`; it doesn't alert again while it stays failing, nor when it recovers. A new source that fails on its first fetch doesn't alert either. A source that last fetched fine but wasn't fetched for days (GEN was stopped, or the source switched off) alerts on its next failed fetch. Alerts that can't be sent are retried like items, for up to three days.
+
 Each channel shows its last delivery or error. **Send test** sends it something right away, ignoring its rules, so you can see how notifications look there: one of several examples (a release, a prerelease, a news post, an outlet article about two engines, one with no engine, summary or link, and one long enough to be cut short), all examples at once (one digest mail for a digest channel), or one of the newest real items. Changes take effect on the notifier's next run, which starts right after a change. A new channel only gets items that arrive after it was added, and switching a channel off keeps its place, so it catches up on items from the last three days when switched back on.
 
 Secrets (the webhook URL, the ntfy topic and token, the SMTP password, the Apprise key, URLs and password) are never shown back on the page; leave a secret field empty when editing to keep it. Instead of the secret itself, you can enter an environment variable reference such as `${GEN_DISCORD_WEBHOOK}`: it's expanded when sending, so the secret stays out of the database. A reference is shown on the page as written.
@@ -323,6 +325,7 @@ kind = "ntfy"                    # or "discord" (webhook_url), "email" (smtp_hos
 server = "https://ntfy.sh"       #   username, password, from, to = [...], digest) or "apprise"
                                  #   (server, key or urls, tag, username, password)
 topic = "${GEN_NTFY_TOPIC}"
+health_alerts = true             # also a message when a source starts failing
   [notify.channel.rules]
   engines = ["godot", "stride"]
   kinds = ["release", "news"]
@@ -431,7 +434,7 @@ Each source on `/sources` and on the engine pages has a status:
 | `stale` | Fetches fine, but its newest item is over six months old, or it has no items at all, e.g. an abandoned blog or a scraper whose selector no longer matches. Items deleted by `retention_days` still count for their source's newest item. |
 | `disabled` | Switched off. |
 
-Failing and stale sources count as unhealthy. The summary above the table counts each status, and **Show only unhealthy** lists just those sources. Admins also see how many sources need attention next to the page title. `gen check-config` lists the unhealthy sources with the reason, e.g. `failing  unity:feed:…  (3 failures in a row, never OK: HTTP 404)`.
+Failing and stale sources count as unhealthy. The summary above the table counts each status, and **Show only unhealthy** lists just those sources. Admins also see how many sources need attention next to the page title. `gen check-config` lists the unhealthy sources with the reason, e.g. `failing  unity:feed:…  (3 failures in a row, never OK: HTTP 404)`. Channels with **health alerts** on get a message when a source starts failing (see "Notifications").
 
 ### Switching sources on and off
 
@@ -481,8 +484,8 @@ Layout of `src/`:
 | `store.rs` | SQLite storage: items, source state, engines/outlets/sources and queries for the web UI. |
 | `catalog.rs` | The built-in catalog (`catalog.toml`): seeding a new database, merging catalog excludes into stored engines, and the suggestions. |
 | `registry.rs` | The live set of sources stored in the database, published to the web UI, pipeline and scheduler. |
-| `pipeline.rs` | Polls a source: fetch, classify, dedupe and store. |
-| `notify/` | Rule matching and delivery: `discord` (webhooks and bot channels), `ntfy`, `email`, `apprise`. |
+| `pipeline.rs` | Polls a source: fetch, classify, dedupe and store, and queue a health alert when it starts failing. |
+| `notify/` | Rule matching and delivery: `discord` (webhooks and bot channels), `ntfy`, `email`, `apprise`; `alert` for health alerts. |
 | `discord_bot/` | The Discord bot: gateway connection, `/gen` commands, channel layout for `/gen setup`, and subscriptions stored as notification channels. |
 | `web/` | axum router: HTML pages (minijinja templates), Atom feed, JSON API. |
 
