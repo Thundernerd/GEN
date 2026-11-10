@@ -1423,6 +1423,8 @@ mod tests {
     fn pruned_items_their_feed_keeps_listing_are_remembered() {
         let mut store = Store::open_in_memory().unwrap();
         insert_ago(&mut store, &[aged("a", "old", "", 400)], 400);
+        // A newer pruned entry, so "old" isn't kept just for being the source's newest.
+        insert_ago(&mut store, &[aged("a", "newest", "", 380)], 380);
         store.prune_items(Utc::now() - Duration::days(365)).unwrap();
         // The feed still lists the entry 30 days later, e.g. an evergreen list of tags...
         let later = Utc::now() + Duration::days(30);
