@@ -91,7 +91,9 @@ pub struct NotifyContext<'a> {
     pub discord_bot: Option<&'a discord::BotApi>,
 }
 
-/// Whether `item` should be sent to a channel with these rules.
+/// Whether `item` should be sent to a channel with these rules. The `search` rule isn't
+/// checked here: it needs the search index, so the notifier asks the store
+/// (`Store::matching_search`).
 pub fn matches(rules: &NotifyRules, item: &Item) -> bool {
     if item.duplicate_of.is_some() || rules.exclude_kinds.contains(&item.kind) {
         return false;
@@ -419,6 +421,7 @@ pub(crate) mod tests {
             kinds: kinds.to_vec(),
             exclude_kinds: exclude.to_vec(),
             keywords: keywords.iter().map(|k| k.to_string()).collect(),
+            search: None,
             include_untagged: untagged,
         }
     }

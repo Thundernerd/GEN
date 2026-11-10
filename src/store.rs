@@ -4,7 +4,7 @@
 //! `Store` is synchronous; async code shares it as `Arc<Mutex<Store>>` and calls it from
 //! `tokio::task::spawn_blocking` (queries are small and fast).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use anyhow::Context;
@@ -166,6 +166,12 @@ CREATE TABLE pruned_items (
 -- The pruned item's date, so a source's newest item date (for its health) survives
 -- retention. NULL for items pruned before this column existed.
 ALTER TABLE pruned_items ADD COLUMN sort_date TEXT;
+"#,
+    r#"
+-- When the pruned item's feed last listed it, so keys no feed lists any more can go.
+-- Existing keys count as listed now (written like rusqlite's chrono times, to the ms).
+ALTER TABLE pruned_items ADD COLUMN last_listed TEXT;
+UPDATE pruned_items SET last_listed = strftime('%Y-%m-%d %H:%M:%f+00:00', 'now');
 "#,
 ];
 
@@ -477,10 +483,13 @@ impl Store {
         let tx = self.conn.transaction()?;
         let mut inserted = Vec::new();
         for it in items {
-            let pruned = tx
-                .prepare_cached("SELECT 1 FROM pruned_items WHERE source_id = ?1 AND guid = ?2")?
-                .exists(params![it.source_id, it.guid])?;
-            if pruned {
+            // A pruned entry its feed still lists stays pruned; note that it's still listed.
+            let still_pruned = tx
+                .prepare_cached(
+                    "UPDATE pruned_items SET last_listed = ?3 WHERE source_id = ?1 AND guid = ?2",
+                )?
+                .execute(params![it.source_id, it.guid, now])?;
+            if still_pruned > 0 {
                 continue;
             }
             // Future dates (feed typos) would otherwise pin an item to the top.
@@ -558,8 +567,9 @@ impl Store {
     }
 
     /// Deletes items dated before `cutoff`, with their cross-source duplicates. Their source
-    /// and guid are kept, so a feed that still lists one doesn't store it again. Returns how
-    /// many were deleted.
+    /// and guid are kept, so a feed that still lists one doesn't store it again, until no feed
+    /// has listed it since `cutoff` (each source keeps its newest, for its health). Returns
+    /// how many items were deleted.
     pub fn prune_items(&mut self, cutoff: DateTime<Utc>) -> anyhow::Result<usize> {
         let tx = self.conn.transaction()?;
         // Duplicates go with their story, even when dated later than it.
@@ -567,12 +577,23 @@ impl Store {
         // backdated entry that just arrived is still notified.
         const EXPIRED: &str = "(sort_date < ?1 AND first_seen < ?1)
             OR duplicate_of IN (SELECT id FROM items WHERE sort_date < ?1 AND first_seen < ?1)";
+        // Keys no feed has listed since the cutoff can't bring an entry back any more. Each
+        // source's newest one stays, as its newest item date. This runs before the keys of
+        // items pruned now are added, so those (listed as of now) are never dropped at once.
+        tx.execute(
+            "DELETE FROM pruned_items
+             WHERE last_listed < ?1
+               AND (sort_date IS NULL OR sort_date < (
+                   SELECT MAX(sort_date) FROM pruned_items p
+                   WHERE p.source_id = pruned_items.source_id))",
+            [cutoff],
+        )?;
         tx.execute(
             &format!(
-                "INSERT OR IGNORE INTO pruned_items (source_id, guid, sort_date)
-                 SELECT source_id, guid, sort_date FROM items WHERE {EXPIRED}"
+                "INSERT OR IGNORE INTO pruned_items (source_id, guid, sort_date, last_listed)
+                 SELECT source_id, guid, sort_date, ?2 FROM items WHERE {EXPIRED}"
             ),
-            [cutoff],
+            params![cutoff, Utc::now()],
         )?;
         let deleted = tx.execute(&format!("DELETE FROM items WHERE {EXPIRED}"), [cutoff])?;
         tx.commit()?;
@@ -615,6 +636,22 @@ impl Store {
         ));
         let mut stmt = self.conn.prepare(&sql)?;
         let rows = stmt.query_map(rusqlite::params_from_iter(args.iter()), item_from_row)?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Which of the given item ids match a search, with the same meaning as the site's
+    /// search box (`ItemQuery::q`). A search without words matches every id.
+    pub fn matching_search(&self, ids: &[i64], text: &str) -> anyhow::Result<HashSet<i64>> {
+        let Some(fts) = fts_query(text) else {
+            return Ok(ids.iter().copied().collect());
+        };
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT rowid FROM items_fts WHERE items_fts MATCH ?1
+             AND rowid IN (SELECT value FROM json_each(?2))",
+        )?;
+        // The ids go in as one JSON array, so any number of them fit one cached statement.
+        let ids = serde_json::to_string(ids)?;
+        let rows = stmt.query_map(params![fts, ids], |r| r.get::<_, i64>(0))?;
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
@@ -789,7 +826,7 @@ const ITEM_SELECT: &str = "SELECT i.id, i.source_id, i.guid, i.kind, i.title, i.
 /// prefix term, so FTS5 operators are searched for as words and every word must match.
 /// Words without letters or digits would match nothing, so they're left out. `None` when
 /// no words are left.
-fn fts_query(text: &str) -> Option<String> {
+pub(crate) fn fts_query(text: &str) -> Option<String> {
     let terms: Vec<String> = text
         .split_whitespace()
         .filter(|w| w.chars().any(char::is_alphanumeric))
@@ -1073,6 +1110,44 @@ mod tests {
         assert!(search(&store, "bevy").is_empty());
     }
 
+    /// Notification channels ask which of their pending items match a search; the answer
+    /// is the same as the site's search, limited to the given ids.
+    #[test]
+    fn tells_which_items_match_a_search() {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut a = new_item("a", "1", "");
+        a.title = "Godot 4.3 released with Jolt physics".into();
+        let mut b = new_item("a", "2", "");
+        b.title = "Weekly roundup".into();
+        b.summary = Some("New lighting in Unity 6; Godot gets a shader editor".into());
+        let mut c = new_item("a", "3", "");
+        c.title = "Stride community meeting".into();
+        let mut d = new_item("a", "4", "");
+        d.title = "GODOT shaders, déjà vu".into();
+        let stored = store.insert_items(&[a, b, c, d]).unwrap();
+        let ids: Vec<i64> = stored.iter().map(|i| i.id).collect();
+        let matching = |ids: &[i64], q: &str| {
+            let mut found: Vec<i64> = store.matching_search(ids, q).unwrap().into_iter().collect();
+            found.sort();
+            found
+        };
+
+        assert_eq!(matching(&ids, "godot"), [ids[0], ids[1], ids[3]]);
+        assert_eq!(matching(&ids, "Jolt"), [ids[0]]);
+        assert_eq!(
+            matching(&ids, "godot shader"),
+            [ids[1], ids[3]],
+            "every word, as a prefix"
+        );
+        assert_eq!(matching(&ids, "deja"), [ids[3]], "accents are ignored");
+        assert!(matching(&ids, "bevy").is_empty());
+        // Only the given ids are answered for.
+        assert_eq!(matching(&ids[1..3], "godot"), [ids[1]]);
+        assert!(matching(&[], "godot").is_empty());
+        // A search without words is no filter.
+        assert_eq!(matching(&ids[..2], " * "), ids[..2]);
+    }
+
     #[test]
     fn search_takes_any_text_literally() {
         let mut store = Store::open_in_memory().unwrap();
@@ -1112,6 +1187,46 @@ mod tests {
 
         let store = Store::init(conn).unwrap();
         assert_eq!(search(&store, "bevy"), ["1"]);
+    }
+
+    #[test]
+    fn upgrading_counts_existing_pruned_items_as_listed_now() {
+        // A database from before pruned keys had a last-listed time, with two pruned keys.
+        let before = MIGRATIONS
+            .iter()
+            .position(|sql| sql.contains("ADD COLUMN last_listed"))
+            .unwrap();
+        let conn = Connection::open_in_memory().unwrap();
+        for sql in &MIGRATIONS[..before] {
+            conn.execute_batch(sql).unwrap();
+        }
+        conn.pragma_update(None, "user_version", before as i64)
+            .unwrap();
+        for (guid, days) in [("old", 400), ("newest", 380)] {
+            conn.execute(
+                "INSERT INTO pruned_items (source_id, guid, sort_date) VALUES ('a', ?1, ?2)",
+                params![guid, Utc::now() - Duration::days(days)],
+            )
+            .unwrap();
+        }
+        let mut store = Store::init(conn).unwrap();
+        // Listed as of the upgrade, so a prune just after it keeps them...
+        store.prune_items(Utc::now() - Duration::days(1)).unwrap();
+        assert!(
+            store
+                .insert_items(&[aged("a", "old", "", 400)])
+                .unwrap()
+                .is_empty()
+        );
+        // ...and one past it forgets the one that isn't the source's newest.
+        store.prune_items(Utc::now() + Duration::days(1)).unwrap();
+        assert_eq!(
+            store
+                .insert_items(&[aged("a", "old", "", 400)])
+                .unwrap()
+                .len(),
+            1
+        );
     }
 
     #[test]
@@ -1419,6 +1534,19 @@ mod tests {
     }
 
     #[test]
+    fn forgetting_pruned_items_keeps_each_sources_newest_item_date() {
+        let mut store = Store::open_in_memory().unwrap();
+        insert_ago(&mut store, &[aged("a", "old", "", 60)], 60);
+        insert_ago(&mut store, &[aged("a", "older", "", 90)], 90);
+        store.prune_items(Utc::now() - Duration::days(30)).unwrap();
+        // The feed now lists nothing, so its pruned keys are forgotten later on...
+        store.prune_items(Utc::now() + Duration::days(1)).unwrap();
+        // ...but the source did publish 60 days ago: it still has a newest item date.
+        let latest = store.latest_item_dates().unwrap();
+        assert_eq!((Utc::now() - latest["a"]).num_days(), 60);
+    }
+
+    #[test]
     fn pruning_a_story_takes_its_duplicates_along() {
         let mut store = Store::open_in_memory().unwrap();
         let primary = insert_ago(&mut store, &[aged("a", "1", "godot 4 8", 5)], 5);
@@ -1440,6 +1568,47 @@ mod tests {
                 .unwrap()
                 .is_empty(),
             "the duplicate isn't stored again as a new item either"
+        );
+    }
+
+    #[test]
+    fn pruned_items_their_feed_keeps_listing_are_remembered() {
+        let mut store = Store::open_in_memory().unwrap();
+        insert_ago(&mut store, &[aged("a", "old", "", 400)], 400);
+        // A newer pruned entry, so "old" isn't kept just for being the source's newest.
+        insert_ago(&mut store, &[aged("a", "newest", "", 380)], 380);
+        store.prune_items(Utc::now() - Duration::days(365)).unwrap();
+        // The feed still lists the entry 30 days later, e.g. an evergreen list of tags...
+        let later = Utc::now() + Duration::days(30);
+        store
+            .insert_items_at(&[aged("a", "old", "", 400)], later)
+            .unwrap();
+        // ...so a prune after that, with a cutoff past the original prune, keeps its key.
+        store.prune_items(later - Duration::days(1)).unwrap();
+        let mut again = aged("a", "old", "", 400);
+        again.notify = true;
+        assert!(
+            store.insert_items_at(&[again], later).unwrap().is_empty(),
+            "the entry isn't stored again as new"
+        );
+    }
+
+    #[test]
+    fn pruned_items_no_feed_lists_any_more_are_forgotten() {
+        let mut store = Store::open_in_memory().unwrap();
+        insert_ago(&mut store, &[aged("a", "old", "", 400)], 400);
+        insert_ago(&mut store, &[aged("a", "newest", "", 380)], 380);
+        store.prune_items(Utc::now() - Duration::days(365)).unwrap();
+        // A year on, the feed stopped listing the entries long ago: their keys go too,
+        // except the source's newest, which keeps its newest item date.
+        store.prune_items(Utc::now() + Duration::days(1)).unwrap();
+        let back = store
+            .insert_items(&[aged("a", "old", "", 400), aged("a", "newest", "", 380)])
+            .unwrap();
+        assert_eq!(
+            back.iter().map(|i| i.guid.as_str()).collect::<Vec<_>>(),
+            ["old"],
+            "the forgotten key no longer blocks its entry"
         );
     }
 
