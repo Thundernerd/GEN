@@ -184,7 +184,7 @@ Without `retention_days`, the database keeps every item and grows without bound.
 
 Engines, outlets and their sources live in the database and are managed on the Sources page (see "Managing sources from the web"). The first start on a database adds the engines in `catalog::SEEDED` (Unity, Unreal Engine and Godot) with their sources, once. On a database from before sources moved into it, that first start also deletes the items and fetch state of sources that are no longer configured.
 
-Everything else in the built-in catalog, `src/catalog.toml`, is offered as a suggestion on the Sources page. It includes the other C# engines and frameworks (tiers 1 and 2), notable engines without C# (tier 3) and general news outlets. It has no YouTube, forum, Reddit or Hacker News sources. To change the catalog, edit `src/catalog.toml` and rebuild; existing databases keep what they have.
+Everything else in the built-in catalog, `src/catalog.toml`, is offered as a suggestion on the Sources page. It includes the other C# engines and frameworks (tiers 1 and 2), notable engines without C# (tier 3) and general news outlets. It has no YouTube, forum, Reddit or Hacker News sources. To change the catalog, edit `src/catalog.toml` and rebuild; existing databases keep what they have, except that on every start each stored engine gets the catalog `exclude` phrases it lacks (phrases are only added, never removed, and engines that aren't in the catalog are left alone).
 
 There are two kinds of owners, and each has one or more `source` entries:
 
@@ -272,7 +272,7 @@ The `check-config` and `fetch` commands only see the sources stored in the datab
    ```
 
    Run `cargo run -- --config data/scratch.toml serve`, open <http://localhost:8081/sources>, log in with the token, and click **Add** next to the new entry under **Suggestions**. GEN polls its sources straight away: the log shows `fetched source=<source id> new=<count>` for each, and an engine's page, `/engine/<id>`, lists its items.
-4. After that, `cargo run -- --config data/scratch.toml fetch --source <id>` polls them again and prints the items that are new since then (usually none, or `not modified`). Editing `src/catalog.toml` doesn't change an entry a database already has. To try a changed entry, stop the server, delete `data/scratch.db` (with its `-wal` and `-shm` files) and repeat step 3.
+4. After that, `cargo run -- --config data/scratch.toml fetch --source <id>` polls them again and prints the items that are new since then (usually none, or `not modified`). Editing `src/catalog.toml` doesn't change an entry a database already has, apart from new `exclude` phrases, which are added on the next start. To try a changed entry, stop the server, delete `data/scratch.db` (with its `-wal` and `-shm` files) and repeat step 3.
 5. Rebuild and restart the real server. The new entry shows under **Suggestions** on the real server's Sources page.
 
 New sources fill the database silently on their first successful fetch.
@@ -482,7 +482,7 @@ Layout of `src/`:
 | `health.rs` | Source health (ok, retrying, failing, stale …) from fetch state and newest item. |
 | `time_ago.rs` | Relative times such as "3 hours ago", for the web UI and `check-config`. |
 | `store.rs` | SQLite storage: items, source state, engines/outlets/sources and queries for the web UI. |
-| `catalog.rs` | The built-in catalog (`catalog.toml`): seeding a new database and the suggestions. |
+| `catalog.rs` | The built-in catalog (`catalog.toml`): seeding a new database, merging catalog excludes into stored engines, and the suggestions. |
 | `registry.rs` | The live set of sources stored in the database, published to the web UI, pipeline and scheduler. |
 | `pipeline.rs` | Polls a source: fetch, classify, dedupe and store, and queue a health alert when it starts failing. |
 | `notify/` | Rule matching and delivery: `discord` (webhooks and bot channels), `ntfy`, `email`, `apprise`; `alert` for health alerts. |

@@ -338,6 +338,7 @@ fn build_pipeline(app: &AppConfig) -> anyhow::Result<Pipeline> {
     let registry = SourceRegistry::load(&store)?;
     catalog::seed_once(&registry, &mut store)?;
     catalog::backfill_icons_once(&registry, &mut store)?;
+    catalog::merge_catalog_excludes(&registry, &mut store);
     notify::import_once(app, &store)?;
     let toggles = SourceToggles::new(store.source_overrides()?);
     // The default interval set on the website wins over gen.toml.
