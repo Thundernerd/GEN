@@ -232,17 +232,11 @@ mod tests {
     fn seeds_once_and_purges_unconfigured_sources() {
         let mut store = Store::open_in_memory().unwrap();
         let item = |source: &str| crate::model::NewItem {
-            source_id: source.into(),
-            guid: "1".into(),
             engines: Vec::new(),
             kind: crate::model::ItemKind::News,
             title: "t".into(),
-            url: None,
-            summary: None,
-            published: None,
             story_key: format!("{source} t"),
-            notify: false,
-            image_url: None,
+            ..crate::model::NewItem::test(source, "1")
         };
         let godot = "godot:github:godotengine/godot";
         store
