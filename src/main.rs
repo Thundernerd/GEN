@@ -478,4 +478,34 @@ mod tests {
             "“gamefromscratch” is already in the database."
         );
     }
+
+    #[test]
+    fn an_added_engine_has_its_catalog_excludes_and_the_next_start_keeps_them() {
+        let (registry, mut store) = empty_registry();
+        let Some(registry::NewOwner::Engine(unity)) = catalog::owner("unity") else {
+            panic!("unity is a catalog engine");
+        };
+        let catalog_excludes = unity.exclude;
+        assert!(!catalog_excludes.is_empty(), "unity has catalog excludes");
+        add_catalog_owner(&registry, &mut store, "unity").unwrap();
+        let excludes = |reg: &SourceRegistry| {
+            reg.current()
+                .config
+                .engine("unity")
+                .unwrap()
+                .exclude
+                .clone()
+        };
+        assert_eq!(excludes(&registry), catalog_excludes);
+
+        // What the next start does: nothing is missing, so nothing changes.
+        let restarted = SourceRegistry::load(&store).unwrap();
+        catalog::merge_catalog_excludes(&restarted, &mut store);
+
+        assert_eq!(excludes(&restarted), catalog_excludes);
+        assert_eq!(
+            excludes(&SourceRegistry::load(&store).unwrap()),
+            catalog_excludes
+        );
+    }
 }
