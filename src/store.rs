@@ -166,6 +166,12 @@ CREATE TABLE pruned_items (
 -- retention. NULL for items pruned before this column existed.
 ALTER TABLE pruned_items ADD COLUMN sort_date TEXT;
 "#,
+    r#"
+-- When the pruned item's feed last listed it, so keys no feed lists any more can go.
+-- Existing keys count as listed now (in the format rusqlite writes chrono times).
+ALTER TABLE pruned_items ADD COLUMN last_listed TEXT;
+UPDATE pruned_items SET last_listed = strftime('%Y-%m-%d %H:%M:%f+00:00', 'now');
+"#,
 ];
 
 /// A configured notification channel with its last delivery result.
@@ -473,10 +479,13 @@ impl Store {
         let tx = self.conn.transaction()?;
         let mut inserted = Vec::new();
         for it in items {
+            // A pruned entry its feed still lists stays pruned; note that it's still listed.
             let pruned = tx
-                .prepare_cached("SELECT 1 FROM pruned_items WHERE source_id = ?1 AND guid = ?2")?
-                .exists(params![it.source_id, it.guid])?;
-            if pruned {
+                .prepare_cached(
+                    "UPDATE pruned_items SET last_listed = ?3 WHERE source_id = ?1 AND guid = ?2",
+                )?
+                .execute(params![it.source_id, it.guid, now])?;
+            if pruned > 0 {
                 continue;
             }
             // Future dates (feed typos) would otherwise pin an item to the top.
@@ -548,8 +557,8 @@ impl Store {
     }
 
     /// Deletes items dated before `cutoff`, with their cross-source duplicates. Their source
-    /// and guid are kept, so a feed that still lists one doesn't store it again. Returns how
-    /// many were deleted.
+    /// and guid are kept, so a feed that still lists one doesn't store it again, until no feed
+    /// has listed it since `cutoff`. Returns how many items were deleted.
     pub fn prune_items(&mut self, cutoff: DateTime<Utc>) -> anyhow::Result<usize> {
         let tx = self.conn.transaction()?;
         // Duplicates go with their story, even when dated later than it.
@@ -557,12 +566,14 @@ impl Store {
         // backdated entry that just arrived is still notified.
         const EXPIRED: &str = "(sort_date < ?1 AND first_seen < ?1)
             OR duplicate_of IN (SELECT id FROM items WHERE sort_date < ?1 AND first_seen < ?1)";
+        // Keys no feed has listed since the cutoff can't bring an entry back any more.
+        tx.execute("DELETE FROM pruned_items WHERE last_listed < ?1", [cutoff])?;
         tx.execute(
             &format!(
-                "INSERT OR IGNORE INTO pruned_items (source_id, guid, sort_date)
-                 SELECT source_id, guid, sort_date FROM items WHERE {EXPIRED}"
+                "INSERT OR IGNORE INTO pruned_items (source_id, guid, sort_date, last_listed)
+                 SELECT source_id, guid, sort_date, ?2 FROM items WHERE {EXPIRED}"
             ),
-            [cutoff],
+            params![cutoff, Utc::now()],
         )?;
         let deleted = tx.execute(&format!("DELETE FROM items WHERE {EXPIRED}"), [cutoff])?;
         tx.commit()?;
@@ -1384,6 +1395,37 @@ mod tests {
                 .is_empty(),
             "the duplicate isn't stored again as a new item either"
         );
+    }
+
+    #[test]
+    fn pruned_items_their_feed_keeps_listing_are_remembered() {
+        let mut store = Store::open_in_memory().unwrap();
+        insert_ago(&mut store, &[aged("a", "old", "", 400)], 400);
+        store.prune_items(Utc::now() - Duration::days(365)).unwrap();
+        // The feed still lists the entry 30 days later, e.g. an evergreen list of tags...
+        let later = Utc::now() + Duration::days(30);
+        store
+            .insert_items_at(&[aged("a", "old", "", 400)], later)
+            .unwrap();
+        // ...so a prune after that, with a cutoff past the original prune, keeps its key.
+        store.prune_items(later - Duration::days(1)).unwrap();
+        let mut again = aged("a", "old", "", 400);
+        again.notify = true;
+        assert!(
+            store.insert_items_at(&[again], later).unwrap().is_empty(),
+            "the entry isn't stored again as new"
+        );
+    }
+
+    #[test]
+    fn pruned_items_no_feed_lists_any_more_are_forgotten() {
+        let mut store = Store::open_in_memory().unwrap();
+        insert_ago(&mut store, &[aged("a", "old", "", 400)], 400);
+        store.prune_items(Utc::now() - Duration::days(365)).unwrap();
+        // A year on, the feed stopped listing the entry long ago: its key goes too.
+        store.prune_items(Utc::now() + Duration::days(1)).unwrap();
+        let back = store.insert_items(&[aged("a", "old", "", 400)]).unwrap();
+        assert_eq!(back.len(), 1, "the key no longer blocks the entry");
     }
 
     #[test]
