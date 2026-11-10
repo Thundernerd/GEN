@@ -4,7 +4,7 @@ use lettre::message::{Mailbox, MultiPart};
 use lettre::transport::smtp::authentication::Credentials;
 use lettre::{AsyncSmtpTransport, AsyncTransport, Message, Tokio1Executor};
 
-use super::{NotifyContext, NotifyError, engine_names, kind_label, prefixed_title};
+use super::{NotifyContext, NotifyError, TextMessage, engine_names, kind_label, prefixed_title};
 use crate::config::{ChannelTarget, SourcesConfig};
 use crate::fetch::truncate;
 use crate::model::Item;
@@ -27,6 +27,33 @@ pub async fn send(
     target: &ChannelTarget,
     items: &[Item],
 ) -> Result<(), NotifyError> {
+    let digest = matches!(target, ChannelTarget::Email { digest: true, .. });
+    deliver(
+        target,
+        build_emails(ctx.sources, ctx.base_url, digest, items),
+    )
+    .await
+}
+
+/// Sends a plain message, such as a health alert. `target` is always `ChannelTarget::Email`.
+pub async fn send_text(target: &ChannelTarget, message: &TextMessage) -> Result<(), NotifyError> {
+    deliver(target, vec![build_text_email(message)]).await
+}
+
+/// A plain message as an email: the text and the link.
+pub fn build_text_email(message: &TextMessage) -> Email {
+    let link = escape_html(&message.link);
+    Email {
+        subject: message.title.clone(),
+        text: format!("{}\n\n{}\n", message.text, message.link),
+        html: format!(
+            "<p>{}</p>\n<p><a href=\"{link}\">{link}</a></p>\n",
+            escape_html(&message.text)
+        ),
+    }
+}
+
+async fn deliver(target: &ChannelTarget, emails: Vec<Email>) -> Result<(), NotifyError> {
     let ChannelTarget::Email {
         smtp_host,
         smtp_port,
@@ -34,7 +61,7 @@ pub async fn send(
         password,
         from,
         to,
-        digest,
+        ..
     } = target
     else {
         return Err(NotifyError::Other("not an email channel".into()));
@@ -66,7 +93,7 @@ pub async fn send(
     };
     let transport = builder.build();
 
-    for email in build_emails(ctx.sources, ctx.base_url, *digest, items) {
+    for email in emails {
         let mut message = Message::builder().from(from.clone());
         for rcpt in &to {
             message = message.to(rcpt.clone());

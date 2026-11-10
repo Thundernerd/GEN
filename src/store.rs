@@ -173,6 +173,19 @@ ALTER TABLE pruned_items ADD COLUMN sort_date TEXT;
 ALTER TABLE pruned_items ADD COLUMN last_listed TEXT;
 UPDATE pruned_items SET last_listed = strftime('%Y-%m-%d %H:%M:%f+00:00', 'now');
 "#,
+    r#"
+-- Health alerts waiting to be sent: a source started failing, and `channel` has health
+-- alerts on. Deleted once sent.
+CREATE TABLE health_alerts (
+    id         INTEGER PRIMARY KEY,
+    channel    TEXT NOT NULL,
+    source_id  TEXT NOT NULL,
+    source     TEXT NOT NULL,
+    reason     TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX health_alerts_channel ON health_alerts (channel, created_at);
+"#,
 ];
 
 /// A configured notification channel with its last delivery result.
@@ -184,6 +197,18 @@ pub struct StoredChannel {
     pub last_ok: Option<DateTime<Utc>>,
     pub last_error: Option<String>,
     pub last_error_at: Option<DateTime<Utc>>,
+}
+
+/// A health alert waiting to be sent to a channel.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StoredHealthAlert {
+    pub id: i64,
+    pub source_id: String,
+    /// The source as people know it, e.g. "Godot feed https://godotengine.org/rss.xml".
+    pub source: String,
+    /// Why it is failing, e.g. "3 failures in a row, last OK 2 days ago: HTTP 404".
+    pub reason: String,
+    pub created_at: DateTime<Utc>,
 }
 
 /// Filters for listing items. `Default` lists the newest non-duplicate items.
@@ -731,6 +756,7 @@ impl Store {
     pub fn remove_channel(&mut self, name: &str) -> anyhow::Result<()> {
         let tx = self.conn.transaction()?;
         tx.execute("DELETE FROM notifications_sent WHERE channel = ?1", [name])?;
+        tx.execute("DELETE FROM health_alerts WHERE channel = ?1", [name])?;
         tx.execute("DELETE FROM notify_channels WHERE name = ?1", [name])?;
         tx.commit()?;
         Ok(())
@@ -802,6 +828,58 @@ impl Store {
              WHERE id = ?1",
             params![item_id, image_url],
         )?;
+        Ok(())
+    }
+
+    // -- health alerts ------------------------------------------------------
+
+    /// Queues a health alert for a channel.
+    pub fn add_health_alert(
+        &self,
+        channel: &str,
+        source_id: &str,
+        source: &str,
+        reason: &str,
+    ) -> anyhow::Result<()> {
+        self.conn.execute(
+            "INSERT INTO health_alerts (channel, source_id, source, reason, created_at)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![channel, source_id, source, reason, Utc::now()],
+        )?;
+        Ok(())
+    }
+
+    /// A channel's queued health alerts, oldest first. Alerts queued before `since` are
+    /// given up on and deleted.
+    pub fn pending_health_alerts(
+        &self,
+        channel: &str,
+        since: DateTime<Utc>,
+    ) -> anyhow::Result<Vec<StoredHealthAlert>> {
+        self.conn.execute(
+            "DELETE FROM health_alerts WHERE channel = ?1 AND created_at < ?2",
+            params![channel, since],
+        )?;
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT id, source_id, source, reason, created_at FROM health_alerts
+             WHERE channel = ?1 ORDER BY created_at, id",
+        )?;
+        let rows = stmt.query_map([channel], |r| {
+            Ok(StoredHealthAlert {
+                id: r.get(0)?,
+                source_id: r.get(1)?,
+                source: r.get(2)?,
+                reason: r.get(3)?,
+                created_at: r.get(4)?,
+            })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Deletes a sent (or dropped) health alert.
+    pub fn remove_health_alert(&self, id: i64) -> anyhow::Result<()> {
+        self.conn
+            .execute("DELETE FROM health_alerts WHERE id = ?1", [id])?;
         Ok(())
     }
 

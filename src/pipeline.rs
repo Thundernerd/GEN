@@ -2,11 +2,14 @@
 
 use std::sync::{Arc, Mutex};
 
+use chrono::Utc;
+
 use tokio::sync::{Notify, watch};
 
 use crate::config::ResolvedSource;
 use crate::fetch::{self, FetchError, FetchOutcome, Http};
 use crate::model::{Item, NewItem};
+use crate::notify::alert;
 use crate::registry::SourceRegistry;
 use crate::scheduler::FetchRequests;
 use crate::store::Store;
@@ -84,9 +87,21 @@ impl Pipeline {
             // failure, so its stored record stays as it is.
             Err(err @ FetchError::CoolingDown { .. }) => return Err(err.into()),
             Err(err) => {
-                let (id, msg) = (source.id.clone(), err.to_string());
-                self.with_store(move |s| s.record_fetch_error(&id, &msg))
+                let msg = err.to_string();
+                let enabled = self.toggles.is_enabled(source);
+                let interval = source
+                    .interval_minutes
+                    .unwrap_or_else(|| self.settings.default_interval());
+                let (source, before) = (source.clone(), state);
+                let alerted = self
+                    .with_store(move |s| {
+                        s.record_fetch_error(&source.id, &msg)?;
+                        alert::after_fetch_error(s, &source, &before, enabled, interval, Utc::now())
+                    })
                     .await?;
+                if alerted {
+                    self.notify_wake.notify_one();
+                }
                 return Err(err.into());
             }
         };

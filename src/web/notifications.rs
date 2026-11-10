@@ -576,6 +576,7 @@ impl Posted {
             name,
             enabled: self.checked("enabled"),
             rules,
+            health_alerts: false,
             target,
         };
         channel.check()?;

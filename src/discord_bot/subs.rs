@@ -124,6 +124,7 @@ pub fn subscribe(
                 name: row_name(&channel.channel_name, &taken),
                 enabled: true,
                 rules: NotifyRules::default(),
+                health_alerts: false,
                 target: ChannelTarget::DiscordBot {
                     guild_id: channel.guild_id,
                     channel_id: channel.channel_id,

@@ -474,7 +474,13 @@ impl Notifier {
         for channel in channels.iter().map(|c| &c.config).filter(|c| c.enabled) {
             let name = channel.name.clone();
             let result = match channel.resolved() {
-                Ok(resolved) => self.deliver(&resolved).await,
+                Ok(resolved) => {
+                    let alerts = self.deliver_alerts(&resolved).await;
+                    match (alerts, self.deliver(&resolved).await) {
+                        (Ok(alerts), Ok(items)) => Ok(alerts || items),
+                        (Err(err), _) | (_, Err(err)) => Err(err),
+                    }
+                }
                 Err(err) => Err(err),
             };
             let record = match &result {
@@ -499,6 +505,18 @@ impl Notifier {
             }
         }
     }
+    /// Sends one channel's queued health alerts. Returns whether anything was sent.
+    async fn deliver_alerts(&self, channel: &ChannelConfig) -> anyhow::Result<bool> {
+        let snapshot = self.pipeline.registry.current();
+        let ctx = NotifyContext {
+            http: &self.pipeline.http,
+            sources: &snapshot.config,
+            base_url: &self.app.server.base_url,
+            discord_bot: self.bot.as_ref(),
+        };
+        notify::alert::deliver(&self.pipeline, &ctx, channel).await
+    }
+
     /// Sends one channel's pending items. Each item is marked as handled right after it is
     /// sent (or skipped by the rules), so a failure only leaves unsent items pending.
     /// Returns whether anything was sent.
