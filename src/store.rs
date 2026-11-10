@@ -558,7 +558,8 @@ impl Store {
 
     /// Deletes items dated before `cutoff`, with their cross-source duplicates. Their source
     /// and guid are kept, so a feed that still lists one doesn't store it again, until no feed
-    /// has listed it since `cutoff`. Returns how many items were deleted.
+    /// has listed it since `cutoff` (each source keeps its newest, for its health). Returns
+    /// how many items were deleted.
     pub fn prune_items(&mut self, cutoff: DateTime<Utc>) -> anyhow::Result<usize> {
         let tx = self.conn.transaction()?;
         // Duplicates go with their story, even when dated later than it.
@@ -566,8 +567,16 @@ impl Store {
         // backdated entry that just arrived is still notified.
         const EXPIRED: &str = "(sort_date < ?1 AND first_seen < ?1)
             OR duplicate_of IN (SELECT id FROM items WHERE sort_date < ?1 AND first_seen < ?1)";
-        // Keys no feed has listed since the cutoff can't bring an entry back any more.
-        tx.execute("DELETE FROM pruned_items WHERE last_listed < ?1", [cutoff])?;
+        // Keys no feed has listed since the cutoff can't bring an entry back any more. Each
+        // source's newest one stays, as its newest item date.
+        tx.execute(
+            "DELETE FROM pruned_items
+             WHERE last_listed < ?1
+               AND (sort_date IS NULL OR sort_date < (
+                   SELECT MAX(sort_date) FROM pruned_items p
+                   WHERE p.source_id = pruned_items.source_id))",
+            [cutoff],
+        )?;
         tx.execute(
             &format!(
                 "INSERT OR IGNORE INTO pruned_items (source_id, guid, sort_date, last_listed)
@@ -1373,6 +1382,19 @@ mod tests {
     }
 
     #[test]
+    fn forgetting_pruned_items_keeps_each_sources_newest_item_date() {
+        let mut store = Store::open_in_memory().unwrap();
+        insert_ago(&mut store, &[aged("a", "old", "", 60)], 60);
+        insert_ago(&mut store, &[aged("a", "older", "", 90)], 90);
+        store.prune_items(Utc::now() - Duration::days(30)).unwrap();
+        // The feed now lists nothing, so its pruned keys are forgotten later on...
+        store.prune_items(Utc::now() + Duration::days(1)).unwrap();
+        // ...but the source did publish 60 days ago: it still has a newest item date.
+        let latest = store.latest_item_dates().unwrap();
+        assert_eq!((Utc::now() - latest["a"]).num_days(), 60);
+    }
+
+    #[test]
     fn pruning_a_story_takes_its_duplicates_along() {
         let mut store = Store::open_in_memory().unwrap();
         let primary = insert_ago(&mut store, &[aged("a", "1", "godot 4 8", 5)], 5);
@@ -1421,11 +1443,19 @@ mod tests {
     fn pruned_items_no_feed_lists_any_more_are_forgotten() {
         let mut store = Store::open_in_memory().unwrap();
         insert_ago(&mut store, &[aged("a", "old", "", 400)], 400);
+        insert_ago(&mut store, &[aged("a", "newest", "", 380)], 380);
         store.prune_items(Utc::now() - Duration::days(365)).unwrap();
-        // A year on, the feed stopped listing the entry long ago: its key goes too.
+        // A year on, the feed stopped listing the entries long ago: their keys go too,
+        // except the source's newest, which keeps its newest item date.
         store.prune_items(Utc::now() + Duration::days(1)).unwrap();
-        let back = store.insert_items(&[aged("a", "old", "", 400)]).unwrap();
-        assert_eq!(back.len(), 1, "the key no longer blocks the entry");
+        let back = store
+            .insert_items(&[aged("a", "old", "", 400), aged("a", "newest", "", 380)])
+            .unwrap();
+        assert_eq!(
+            back.iter().map(|i| i.guid.as_str()).collect::<Vec<_>>(),
+            ["old"],
+            "the forgotten key no longer blocks its entry"
+        );
     }
 
     #[test]
