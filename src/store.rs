@@ -168,7 +168,7 @@ ALTER TABLE pruned_items ADD COLUMN sort_date TEXT;
 "#,
     r#"
 -- When the pruned item's feed last listed it, so keys no feed lists any more can go.
--- Existing keys count as listed now (in the format rusqlite writes chrono times).
+-- Existing keys count as listed now (written like rusqlite's chrono times, to the ms).
 ALTER TABLE pruned_items ADD COLUMN last_listed TEXT;
 UPDATE pruned_items SET last_listed = strftime('%Y-%m-%d %H:%M:%f+00:00', 'now');
 "#,
@@ -480,12 +480,12 @@ impl Store {
         let mut inserted = Vec::new();
         for it in items {
             // A pruned entry its feed still lists stays pruned; note that it's still listed.
-            let pruned = tx
+            let still_pruned = tx
                 .prepare_cached(
                     "UPDATE pruned_items SET last_listed = ?3 WHERE source_id = ?1 AND guid = ?2",
                 )?
                 .execute(params![it.source_id, it.guid, now])?;
-            if pruned > 0 {
+            if still_pruned > 0 {
                 continue;
             }
             // Future dates (feed typos) would otherwise pin an item to the top.
@@ -568,7 +568,8 @@ impl Store {
         const EXPIRED: &str = "(sort_date < ?1 AND first_seen < ?1)
             OR duplicate_of IN (SELECT id FROM items WHERE sort_date < ?1 AND first_seen < ?1)";
         // Keys no feed has listed since the cutoff can't bring an entry back any more. Each
-        // source's newest one stays, as its newest item date.
+        // source's newest one stays, as its newest item date. This runs before the keys of
+        // items pruned now are added, so those (listed as of now) are never dropped at once.
         tx.execute(
             "DELETE FROM pruned_items
              WHERE last_listed < ?1
@@ -1075,6 +1076,46 @@ mod tests {
 
         let store = Store::init(conn).unwrap();
         assert_eq!(search(&store, "bevy"), ["1"]);
+    }
+
+    #[test]
+    fn upgrading_counts_existing_pruned_items_as_listed_now() {
+        // A database from before pruned keys had a last-listed time, with two pruned keys.
+        let before = MIGRATIONS
+            .iter()
+            .position(|sql| sql.contains("ADD COLUMN last_listed"))
+            .unwrap();
+        let conn = Connection::open_in_memory().unwrap();
+        for sql in &MIGRATIONS[..before] {
+            conn.execute_batch(sql).unwrap();
+        }
+        conn.pragma_update(None, "user_version", before as i64)
+            .unwrap();
+        for (guid, days) in [("old", 400), ("newest", 380)] {
+            conn.execute(
+                "INSERT INTO pruned_items (source_id, guid, sort_date) VALUES ('a', ?1, ?2)",
+                params![guid, Utc::now() - Duration::days(days)],
+            )
+            .unwrap();
+        }
+        let mut store = Store::init(conn).unwrap();
+        // Listed as of the upgrade, so a prune just after it keeps them...
+        store.prune_items(Utc::now() - Duration::days(1)).unwrap();
+        assert!(
+            store
+                .insert_items(&[aged("a", "old", "", 400)])
+                .unwrap()
+                .is_empty()
+        );
+        // ...and one past it forgets the one that isn't the source's newest.
+        store.prune_items(Utc::now() + Duration::days(1)).unwrap();
+        assert_eq!(
+            store
+                .insert_items(&[aged("a", "old", "", 400)])
+                .unwrap()
+                .len(),
+            1
+        );
     }
 
     #[test]
