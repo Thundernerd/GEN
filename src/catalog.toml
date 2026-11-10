@@ -593,6 +593,33 @@ aliases = ["jitter physics", "jitterphysics"]
   repo = "notgiven688/jitterphysics2"
   category = "release"
 
+# Unity networking libraries. No bare "mirror" alias: the word is too common.
+[[engine]]
+id = "mirror"
+name = "Mirror"
+tier = 2
+csharp = "native (Unity C# networking library)"
+homepage = "https://mirror-networking.com"
+icon = "https://avatars.githubusercontent.com/u/65781588?s=128&v=4"
+aliases = ["mirror networking"]
+  [[engine.source]]
+  kind = "github"
+  repo = "MirrorNetworking/Mirror"
+  category = "release"
+
+[[engine]]
+id = "fishnet"
+name = "FishNet"
+tier = 2
+csharp = "native (Unity C# networking library)"
+homepage = "https://github.com/FirstGearGames/FishNet"
+icon = "https://avatars.githubusercontent.com/u/27169134?s=128&v=4"
+aliases = ["fishnet", "fish-networking", "fish networking"]
+  [[engine.source]]
+  kind = "github"
+  repo = "FirstGearGames/FishNet"
+  category = "release"
+
 [[engine]]
 id = "box2dnet"
 name = "Box2D.NET"
