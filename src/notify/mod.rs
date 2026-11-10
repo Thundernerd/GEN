@@ -689,17 +689,10 @@ pub(crate) mod tests {
         use crate::model::NewItem;
         use ItemKind::*;
         let new = |guid: &str, kind, title: &str| NewItem {
-            source_id: "godot-blog".into(),
-            guid: guid.into(),
-            engines: vec!["godot".into()],
             kind,
             title: title.into(),
-            url: None,
-            summary: None,
-            published: Some(Utc::now()),
-            image_url: None,
-            story_key: guid.into(),
             notify: true,
+            ..NewItem::test("godot-blog", guid)
         };
         let mut store = Store::open_in_memory().unwrap();
         let items = store

@@ -944,17 +944,11 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(5)).await;
         store
             .insert_items(&[crate::model::NewItem {
-                source_id: "godot:github:godotengine/godot".into(),
-                guid: "4.8".into(),
-                engines: vec!["godot".into()],
-                kind: crate::model::ItemKind::Release,
                 title: "Godot 4.8".into(),
-                url: None,
-                summary: None,
-                published: None,
                 story_key: "godot 4 8".into(),
                 notify: true,
-                image_url: None,
+                published: None,
+                ..crate::model::NewItem::test("godot:github:godotengine/godot", "4.8")
             }])
             .unwrap();
         let notifier = test_notifier(store, None);
@@ -984,17 +978,12 @@ mod tests {
         store.add_channel("phone", &channel).unwrap();
         tokio::time::sleep(Duration::from_millis(5)).await;
         let item = |guid: &str, title: &str, summary: Option<&str>| crate::model::NewItem {
-            source_id: format!("x:feed:{guid}"),
-            guid: guid.into(),
-            engines: vec!["godot".into()],
             kind: crate::model::ItemKind::News,
             title: title.into(),
-            url: None,
             summary: summary.map(Into::into),
             published: None,
-            story_key: guid.into(),
             notify: true,
-            image_url: None,
+            ..crate::model::NewItem::test(&format!("x:feed:{guid}"), guid)
         };
         store
             .insert_items(&[
@@ -1039,17 +1028,12 @@ mod tests {
         store.add_channel("discord-godot", channel).unwrap();
         tokio::time::sleep(Duration::from_millis(5)).await;
         let item = |guid: &str, engines: &[&str], kind, title: &str| crate::model::NewItem {
-            source_id: format!("x:feed:{guid}"),
-            guid: guid.into(),
             engines: engines.iter().map(|e| e.to_string()).collect(),
             kind,
             title: title.into(),
-            url: None,
-            summary: None,
             published: None,
-            story_key: guid.into(),
             notify: true,
-            image_url: None,
+            ..crate::model::NewItem::test(&format!("x:feed:{guid}"), guid)
         };
         use crate::model::ItemKind::{News, Release};
         store
@@ -1102,17 +1086,12 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(5)).await;
         let stored = store
             .insert_items(&[crate::model::NewItem {
-                source_id: "x:feed:https://example.org/feed".into(),
-                guid: "a".into(),
-                engines: vec!["godot".into()],
                 kind: crate::model::ItemKind::News,
                 title: "Godot news".into(),
                 url: Some(format!("http://{addr}/post")),
-                summary: None,
                 published: None,
-                story_key: "a".into(),
                 notify: true,
-                image_url: None,
+                ..crate::model::NewItem::test("x:feed:https://example.org/feed", "a")
             }])
             .unwrap();
         let notifier = test_notifier(store, None);
@@ -1183,17 +1162,10 @@ mod tests {
         let mut store = crate::store::Store::open_in_memory().unwrap();
         let registry = crate::registry::SourceRegistry::load(&store).unwrap();
         let item = |guid: &str, days: i64| crate::model::NewItem {
-            source_id: "godot:feed".into(),
-            guid: guid.into(),
-            engines: vec!["godot".into()],
             kind: crate::model::ItemKind::News,
-            title: guid.into(),
-            url: None,
-            summary: None,
             published: Some(chrono::Utc::now() - chrono::Duration::days(days)),
             story_key: String::new(),
-            notify: false,
-            image_url: None,
+            ..crate::model::NewItem::test("godot:feed", guid)
         };
         let ago = |days| chrono::Utc::now() - chrono::Duration::days(days);
         store

@@ -56,17 +56,13 @@ const BEVY_CATALOG_SRC: &str = "bevy:feed:https://bevy.org/atom.xml";
 
 fn item(source: &str, guid: &str, engines: &[&str], kind: ItemKind, title: &str) -> NewItem {
     NewItem {
-        source_id: source.into(),
-        guid: guid.into(),
         engines: engines.iter().map(|e| e.to_string()).collect(),
         kind,
         title: title.into(),
         url: Some(format!("https://example.com/{guid}")),
         summary: Some(format!("Summary of {title} <b>bold</b>")),
         published: Some(Utc::now() - Duration::hours(3)),
-        story_key: guid.into(),
-        notify: false,
-        image_url: None,
+        ..NewItem::test(source, guid)
     }
 }
 
