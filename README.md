@@ -42,7 +42,7 @@ docker pull ghcr.io/thundernerd/gen:latest      # or pin: :1 (latest 1.x), :1.0 
 docker run -d --name gen -p 8080:8080 -v gen-data:/data ghcr.io/thundernerd/gen:latest
 ```
 
-The Proxmox installer can build a release too: set `GEN_REF` to its tag, e.g. `GEN_REF=v1.0.0`.
+The [Proxmox VE script](#proxmox-ve-container) installs the latest release in an LXC container.
 
 ## Quick start (local)
 
@@ -134,36 +134,30 @@ journalctl -u gen -f
 
 ## Proxmox VE container
 
-`deploy/proxmox/gen.sh` works like the [community-scripts.org](https://community-scripts.org) helper scripts. Run it as root on a Proxmox VE node. It creates an unprivileged Debian LXC container (Debian 13, or 12 when 13 isn't offered) and builds GEN from source inside it. Then it installs GEN as the systemd service from "Home server with systemd". GEN listens on port 8080, so it is reachable on the container's IP right away.
+`deploy/proxmox/ct/gen.sh` is a [community-scripts.org](https://community-scripts.org) script. It runs on their shared engine ([community-scripts/core](https://github.com/community-scripts/core)), so the GEN container is set up like every other community-scripts container: the same Default/Advanced wizard (container ID, storage, network, VLAN, SSH, password and so on), console auto-login when no root password is set, the community-scripts MOTD, the container notes in the Proxmox UI, and the `update` command. Only GEN's own two files come from this repository: `ct/gen.sh` and `install/gen-install.sh`.
 
-Run this in the node's shell:
-
-```sh
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/Thundernerd/GEN/main/deploy/proxmox/gen.sh)"
-```
-
-This builds GEN from this GitHub repository. Under **Advanced** you can pick another repository or a branch, or preset `GEN_REPO` and `GEN_REF` in the environment. To build your own local changes instead, copy the checkout to the node and run the script from it. It then builds from that checkout:
+Run this in the Proxmox VE node's shell:
 
 ```sh
-rsync -a --exclude target --exclude data --exclude .env ./ root@pve:/root/GEN/
-ssh root@pve bash /root/GEN/deploy/proxmox/gen.sh
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Thundernerd/GEN/main/deploy/proxmox/ct/gen.sh)"
 ```
 
-**Default** uses 2 cores, 2 GiB RAM, an 8 GiB disk and DHCP on `vmbr0`. Compiling needs about 2 GiB of RAM; the Rust toolchain and build cache take about 4 GiB of disk. **Advanced** asks for each of these, and also for:
-- a static IP and VLAN
-- a root password
-- the port
-- the public URL
-- a GitHub token
-- a Discord bot token
+The defaults are an unprivileged Debian 13 container with 1 core, 512 MiB RAM and a 4 GiB disk, on x86_64 or arm64. GEN is installed from the latest [release](https://github.com/Thundernerd/GEN/releases), so nothing is compiled in the container. Presets work like in any community script, e.g. `var_ram=1024 var_disk=8 bash -c "$(curl …)"`.
 
-Every setting can also be preset in the environment, e.g. `CT_ID=120 CT_IP=192.168.1.50/24 CT_GW=192.168.1.1`; the top of the script lists them.
+GEN listens on port 8080 of the container's IP. Inside the container:
+- `/etc/gen/gen.toml` holds the settings and `/etc/gen/gen.env` the secrets: the generated admin token, an optional `GITHUB_TOKEN` and an optional Discord bot token. Run `systemctl restart gen` after changes.
+- `~/gen.creds` has the admin token and the login URL.
+- The database is `/var/lib/gen/gen.db`, and `/opt/gen` holds the release files.
 
-The first build takes several minutes. At the end, the script prints GEN's URL and a generated admin token. In the container:
-- `/opt/gen/config/gen.toml` holds the settings, and `/etc/gen/gen.env` the secrets.
-- The database is `/var/lib/gen/gen.db`.
+To update, run `update` in the container. When a newer release exists, it backs up the database to `gen.db.bak`, replaces `/opt/gen` and restarts GEN. Settings and data are kept.
 
-To update, run `update` inside the container when GEN was installed from git. When it was installed from a checkout, update the checkout and run `bash deploy/proxmox/gen.sh update <CTID>` on the node. Either way, GEN is rebuilt, the database is backed up to `gen.db.bak`, and the settings are kept.
+**Containers from the old installer.** Before 1.0.0, `deploy/proxmox/gen.sh` built GEN from source. Their `update` still rebuilds from source, so switch them once by running the new script inside the container:
+
+```sh
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/Thundernerd/GEN/main/deploy/proxmox/ct/gen.sh)"
+```
+
+It moves the settings from `/opt/gen/config` to `/etc/gen`, installs the release, removes the Rust toolchain and source tree, and replaces `update`. Data and secrets are kept. The old one-liner for `deploy/proxmox/gen.sh` still works: it now runs `ct/gen.sh`.
 
 ## Configuration
 
