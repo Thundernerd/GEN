@@ -40,6 +40,9 @@ pub struct FetchReport {
     pub new_items: usize,
     pub not_modified: bool,
     pub error: Option<String>,
+    /// Why the source wasn't fetched, when it was skipped rather than failed (its host is
+    /// cooling down from a rate limit).
+    pub skipped: Option<String>,
 }
 
 impl FetchReport {
@@ -48,6 +51,16 @@ impl FetchReport {
             new_items: 0,
             not_modified: false,
             error: Some(error.into()),
+            skipped: None,
+        }
+    }
+
+    fn skipped(why: impl Into<String>) -> Self {
+        FetchReport {
+            new_items: 0,
+            not_modified: false,
+            error: None,
+            skipped: Some(why.into()),
         }
     }
 }
@@ -77,6 +90,8 @@ pub struct BatchProgress {
     pub done: usize,
     pub new_items: usize,
     pub failed: usize,
+    /// Sources skipped because their host is cooling down from a rate limit.
+    pub skipped: usize,
     #[serde(skip)]
     id: u64,
 }
@@ -102,6 +117,7 @@ impl Batch<'_> {
         if let Some(b) = activity.batch.as_mut().filter(|b| b.id == self.id) {
             b.done += 1;
             match report {
+                Some(r) if r.skipped.is_some() => b.skipped += 1,
                 Some(r) if r.error.is_none() => b.new_items += r.new_items,
                 _ => b.failed += 1,
             }
@@ -389,6 +405,7 @@ impl Poller {
                         new_items: poll.new_items.len(),
                         not_modified: poll.not_modified,
                         error: None,
+                        skipped: None,
                     };
                     (interval, report)
                 }
@@ -397,8 +414,8 @@ impl Poller {
                     // sent before the host's reset.
                     Some(FetchError::CoolingDown { retry_after, .. }) => {
                         let delay = (*retry_after).max(interval).min(MAX_BACKOFF);
-                        tracing::debug!(source = %source.id, failures, requested, retry_in = ?delay, "poll skipped: {err:#}");
-                        (delay, FetchReport::failed(format!("{err:#}")))
+                        tracing::debug!(source = %source.id, failures, requested, took_ms, retry_in = ?delay, "poll skipped: {err:#}");
+                        (delay, FetchReport::skipped(format!("{err:#}")))
                     }
                     fetch_err => {
                         failures += 1;
@@ -786,7 +803,8 @@ mod tests {
         let first = fetch(&sources[0].id).await;
         assert!(first.error.is_some(), "the refused request fails");
         let second = fetch(&sources[1].id).await;
-        let why = second.error.expect("a skip still reports why");
+        assert_eq!(second.error, None, "a skip isn't a failure");
+        let why = second.skipped.expect("a skip still reports why");
         assert!(why.contains("rate-limiting"), "{why}");
 
         let state = |id: String| pipeline.with_store(move |s| s.source_state(&id));
@@ -818,13 +836,15 @@ mod tests {
         assert_eq!(fetches.snapshot().fetching, ["c"]);
 
         let old = fetches.start_batch(5);
-        let batch = fetches.start_batch(3);
+        let batch = fetches.start_batch(4);
         batch.finished(Some(&FetchReport {
             new_items: 2,
             not_modified: false,
             error: None,
+            skipped: None,
         }));
         batch.finished(Some(&FetchReport::failed("HTTP 503")));
+        batch.finished(Some(&FetchReport::skipped("host is cooling down")));
         batch.finished(None);
         old.finished(None);
         let progress = fetches.snapshot().batch.unwrap();
@@ -833,9 +853,10 @@ mod tests {
                 progress.total,
                 progress.done,
                 progress.new_items,
-                progress.failed
+                progress.failed,
+                progress.skipped
             ),
-            (3, 3, 2, 2),
+            (4, 4, 2, 2, 1),
             "an older batch counts nothing"
         );
         drop(old);

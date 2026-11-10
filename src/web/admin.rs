@@ -406,6 +406,9 @@ pub(super) async fn fetch_source(
 }
 
 fn report_notice(label: &str, report: &FetchReport) -> serde_json::Value {
+    if let Some(why) = &report.skipped {
+        return json!({"ok": true, "message": format!("Didn't fetch {label}: {why}.")});
+    }
     let message = match (&report.error, report.new_items, report.not_modified) {
         (Some(err), _, _) => {
             return json!({"ok": false, "message": format!("Fetching {label} failed: {err}")});
@@ -447,12 +450,13 @@ pub(super) async fn fetch_all(State(st): State<AppState>, headers: HeaderMap) ->
             .map(|(source, rx)| async move { (source, rx.await.ok()) })
             .collect();
         let deadline = tokio::time::Instant::now() + FETCH_ALL_WAIT;
-        let (mut new_items, mut failed) = (0, Vec::new());
+        let (mut new_items, mut failed, mut skipped) = (0, Vec::new(), 0);
         while let Ok(Some((source, report))) =
             tokio::time::timeout_at(deadline, pending.next()).await
         {
             batch.finished(report.as_ref());
             match report {
+                Some(r) if r.skipped.is_some() => skipped += 1,
                 Some(r) if r.error.is_none() => new_items += r.new_items,
                 _ => failed.push(source.owner_name.clone()),
             }
@@ -463,6 +467,7 @@ pub(super) async fn fetch_all(State(st): State<AppState>, headers: HeaderMap) ->
             fetched = requested - running,
             new = new_items,
             failed = failed.len(),
+            skipped,
             still_running = running,
             "fetch all finished"
         );
@@ -477,6 +482,11 @@ pub(super) async fn fetch_all(State(st): State<AppState>, headers: HeaderMap) ->
                 ", {} failed ({})",
                 failed.len(),
                 failed.join(", ")
+            ));
+        }
+        if skipped > 0 {
+            message.push_str(&format!(
+                ", {skipped} skipped while a rate-limited host cools down"
             ));
         }
         if running > 0 {

@@ -30,9 +30,9 @@ pub enum FetchError {
         url: String,
         retry_after: Option<Duration>,
     },
-    /// Not sent: another source on the same host was rate-limited and the host is still
-    /// cooling down. A skip, not a failure of this source.
-    #[error("skipped: the host of {url} is rate-limiting; retrying in {}s", retry_after.as_secs())]
+    /// Not sent: an earlier request to the same host was rate-limited and the host is
+    /// still cooling down. A skip, not a failure of the source that asked.
+    #[error("the host of {url} is rate-limiting; it is left alone for another {}s", retry_after.as_secs())]
     CoolingDown { url: String, retry_after: Duration },
     #[error("parse error: {0}")]
     Parse(String),
@@ -459,7 +459,9 @@ mod tests {
 
     /// Once a host rate-limits one source, the other sources on that host wait out the
     /// same reset instead of each spending a request to find out (GitHub's limit is per
-    /// IP, shared by every GitHub source). Other hosts are unaffected.
+    /// IP, shared by every GitHub source). Other hosts are unaffected. The refused request
+    /// is a rate limit; the ones never sent are skips (`CoolingDown`), so callers don't
+    /// count them as failures of those sources.
     #[tokio::test]
     async fn a_rate_limited_host_cools_down_for_every_source() {
         use std::sync::atomic::Ordering;
@@ -493,25 +495,6 @@ mod tests {
             1,
             "another host is unaffected"
         );
-    }
-
-    /// A request that the host refused is a rate limit; one never sent because the host is
-    /// cooling down is a skip, so callers don't count it as a failure of that source.
-    #[tokio::test]
-    async fn a_cooldown_skip_is_told_apart_from_a_refused_request() {
-        let (addr, _) = rate_limiting_server("600").await;
-        let http = Http::new("gen-test", None).unwrap();
-
-        let first = get(&http, format!("http://{addr}/a.atom")).await;
-        assert!(
-            matches!(first, Err(FetchError::RateLimited { .. })),
-            "the refused request"
-        );
-        let second = get(&http, format!("http://{addr}/b.atom")).await;
-        let Err(FetchError::CoolingDown { retry_after, .. }) = second else {
-            panic!("expected CoolingDown, got {:?}", second.err());
-        };
-        assert!(retry_after > Duration::from_secs(590), "{retry_after:?}");
     }
 
     /// GitHub's own signal (403, no requests left, a reset time) cools the host down until

@@ -183,7 +183,7 @@ async fn fetch_once(app: &AppConfig, filter: Option<&str>) -> anyhow::Result<()>
         .collect()
         .await;
 
-    let (mut ok, mut failed, mut new_total) = (0, 0, 0);
+    let (mut ok, mut failed, mut skipped, mut new_total) = (0, 0, 0, 0);
     for (source, res) in results {
         match res {
             Ok(r) if r.not_modified => {
@@ -208,13 +208,27 @@ async fn fetch_once(app: &AppConfig, filter: Option<&str>) -> anyhow::Result<()>
                     );
                 }
             }
+            Err(err)
+                if matches!(
+                    err.downcast_ref::<fetch::FetchError>(),
+                    Some(fetch::FetchError::CoolingDown { .. })
+                ) =>
+            {
+                skipped += 1;
+                println!("{:<60} skipped: {err:#}", source.id);
+            }
             Err(err) => {
                 failed += 1;
                 println!("{:<60} ERROR {err:#}", source.id);
             }
         }
     }
-    println!("\n{ok} ok, {failed} failed, {new_total} new items");
+    let skipped = if skipped > 0 {
+        format!(", {skipped} skipped")
+    } else {
+        String::new()
+    };
+    println!("\n{ok} ok, {failed} failed{skipped}, {new_total} new items");
     Ok(())
 }
 
