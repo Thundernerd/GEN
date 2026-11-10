@@ -419,6 +419,14 @@ mod tests {
     async fn rate_limiting_server(
         retry_after: &'static str,
     ) -> (std::net::SocketAddr, Arc<std::sync::atomic::AtomicUsize>) {
+        let status_and_headers = format!("429 Too Many Requests\r\nretry-after: {retry_after}");
+        limiting_server(status_and_headers).await
+    }
+
+    /// A server that answers every request with `status_and_headers`, counting requests.
+    async fn limiting_server(
+        status_and_headers: String,
+    ) -> (std::net::SocketAddr, Arc<std::sync::atomic::AtomicUsize>) {
         use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
         let hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
@@ -431,7 +439,7 @@ mod tests {
                 let mut buf = vec![0u8; 8 * 1024];
                 let _ = conn.read(&mut buf).await;
                 let reply = format!(
-                    "HTTP/1.1 429 Too Many Requests\r\nretry-after: {retry_after}\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
+                    "HTTP/1.1 {status_and_headers}\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
                 );
                 let _ = conn.write_all(reply.as_bytes()).await;
             }
@@ -478,6 +486,30 @@ mod tests {
             1,
             "another host is unaffected"
         );
+    }
+
+    /// GitHub's own signal (403, no requests left, a reset time) cools the host down until
+    /// the reset.
+    #[tokio::test]
+    async fn github_rate_limit_cools_down_until_the_reset() {
+        let reset = chrono::Utc::now().timestamp() + 600;
+        let (addr, hits) = limiting_server(format!(
+            "403 Forbidden\r\nx-ratelimit-remaining: 0\r\nx-ratelimit-reset: {reset}"
+        ))
+        .await;
+        let http = Http::new("gen-test", None).unwrap();
+        let _ = get(&http, format!("http://{addr}/a")).await;
+        let Err(FetchError::RateLimited { retry_after, .. }) =
+            get(&http, format!("http://{addr}/b")).await
+        else {
+            panic!("expected RateLimited");
+        };
+        let wait = retry_after.expect("time until the reset");
+        assert!(
+            wait > Duration::from_secs(590) && wait <= Duration::from_secs(600),
+            "{wait:?}"
+        );
+        assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
     }
 
     /// An absurd `retry-after` from a broken server can't overflow the cooldown.
