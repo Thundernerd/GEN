@@ -966,7 +966,9 @@ mod tests {
         let notifier = notifier(store, None);
         notifier.run_once().await;
 
-        let request = requests.lock().unwrap()[0].clone();
+        let requests = requests.lock().unwrap().clone();
+        assert_eq!(requests.len(), 1, "{requests:?}");
+        let request = &requests[0];
         assert!(request.starts_with("POST /gen-test "), "{request}");
         assert!(request.contains("Godot 4.8"), "{request}");
         let channels = notify::load_channels(&notifier.pipeline.store.lock().unwrap()).unwrap();
