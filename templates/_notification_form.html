@@ -130,6 +130,7 @@
     </fieldset>
     {%- endif %}
 
+    <label class="check"><input type="checkbox" name="health_alerts" value="1"{% if f.health_alerts %} checked{% endif %}> Health alerts: also send a message when a source starts failing</label>
     <label class="check"><input type="checkbox" name="enabled" value="1"{% if f.enabled %} checked{% endif %}> Enabled</label>
     <div class="dialog-actions">
       <button type="button" class="btn-small btn-quiet" commandfor="{{ id }}" command="close">Cancel</button>

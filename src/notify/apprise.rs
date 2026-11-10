@@ -5,7 +5,7 @@
 use reqwest::StatusCode;
 use serde_json::{Value, json};
 
-use super::{NotifyContext, NotifyError, kind_emoji, prefixed_title};
+use super::{NotifyContext, NotifyError, TextMessage, kind_emoji, prefixed_title};
 use crate::config::SourcesConfig;
 use crate::fetch::truncate;
 use crate::model::{Item, ItemKind};
@@ -28,38 +28,62 @@ pub async fn send(
     target: &Target<'_>,
     items: &[Item],
 ) -> Result<(), NotifyError> {
-    let url = notify_url(target.server, target.key)?;
     for item in items {
-        let mut payload = build_payload(ctx.sources, item);
-        match (target.key, target.urls) {
-            (Some(_), _) => {
-                if let Some(tag) = target.tag.filter(|t| !t.is_empty()) {
-                    payload["tag"] = json!(tag);
-                }
+        post(ctx, target, build_payload(ctx.sources, item)).await?;
+    }
+    Ok(())
+}
+
+/// Sends a plain message, such as a health alert, as a warning.
+pub async fn send_text(
+    ctx: &NotifyContext<'_>,
+    target: &Target<'_>,
+    message: &TextMessage,
+) -> Result<(), NotifyError> {
+    let payload = json!({
+        "title": message.title,
+        "body": truncate(&format!("{}\n\n{}", message.text, message.link), MAX_BODY),
+        "type": "warning",
+        "format": "text",
+    });
+    post(ctx, target, payload).await
+}
+
+/// POSTs one notification to the target's configuration or URLs.
+async fn post(
+    ctx: &NotifyContext<'_>,
+    target: &Target<'_>,
+    mut payload: Value,
+) -> Result<(), NotifyError> {
+    let url = notify_url(target.server, target.key)?;
+    match (target.key, target.urls) {
+        (Some(_), _) => {
+            if let Some(tag) = target.tag.filter(|t| !t.is_empty()) {
+                payload["tag"] = json!(tag);
             }
-            (None, Some(urls)) => payload["urls"] = json!(urls),
-            (None, None) => return Err(NotifyError::Other("no Apprise key or URLs".into())),
         }
-        let mut req = ctx.http.client.post(url.clone()).json(&payload);
-        if target.username.is_some() || target.password.is_some() {
-            req = req.basic_auth(target.username.unwrap_or_default(), target.password);
-        }
-        let resp = req.send().await?;
-        let status = resp.status();
-        if !status.is_success() {
-            let body = resp.text().await.unwrap_or_default();
-            let hint = match status {
-                StatusCode::UNAUTHORIZED => " (check the username and password)",
-                StatusCode::NOT_FOUND => " (no configuration saved under this key?)",
-                StatusCode::FAILED_DEPENDENCY => " (a service failed, or the tag matched nothing)",
-                StatusCode::TOO_MANY_REQUESTS => " (rate limited)",
-                _ => "",
-            };
-            return Err(NotifyError::Other(format!(
-                "Apprise returned {status}{hint}: {}",
-                truncate(body.trim(), 500)
-            )));
-        }
+        (None, Some(urls)) => payload["urls"] = json!(urls),
+        (None, None) => return Err(NotifyError::Other("no Apprise key or URLs".into())),
+    }
+    let mut req = ctx.http.client.post(url).json(&payload);
+    if target.username.is_some() || target.password.is_some() {
+        req = req.basic_auth(target.username.unwrap_or_default(), target.password);
+    }
+    let resp = req.send().await?;
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        let hint = match status {
+            StatusCode::UNAUTHORIZED => " (check the username and password)",
+            StatusCode::NOT_FOUND => " (no configuration saved under this key?)",
+            StatusCode::FAILED_DEPENDENCY => " (a service failed, or the tag matched nothing)",
+            StatusCode::TOO_MANY_REQUESTS => " (rate limited)",
+            _ => "",
+        };
+        return Err(NotifyError::Other(format!(
+            "Apprise returned {status}{hint}: {}",
+            truncate(body.trim(), 500)
+        )));
     }
     Ok(())
 }
