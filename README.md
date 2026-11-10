@@ -274,7 +274,7 @@ The `check-config` and `fetch` commands only see the sources stored in the datab
    cargo run -- --config data/scratch.toml fetch --source <id>   # prints the first fetch's items
    ```
 
-   `add` fails if `<id>` isn't in the catalog or the database already has it. A later `fetch` prints only the items that are new since then (usually none, or `not modified`). Editing `src/catalog.toml` doesn't change an entry a database already has. To try a changed entry, delete `data/scratch.db` (with its `-wal` and `-shm` files) and repeat step 3.
+   `fetch --source` polls every source whose id contains the text, so a short id can pull in other entries' sources too. `add` lists sources added switched off as `(switched off)`; `fetch` skips them. `add` fails if `<id>` isn't in the catalog or the database already has it. A new database already has the seeded engines (Unity, Unreal Engine and Godot), so for those skip `add` and just `fetch`. A later `fetch` prints only the items that are new since then (usually none, or `not modified`). Editing `src/catalog.toml` doesn't change an entry a database already has. To try a changed entry, delete `data/scratch.db` (with its `-wal` and `-shm` files) and repeat step 3.
 4. Rebuild and restart the real server. The new entry shows under **Suggestions** on the real server's Sources page. You can also add it from the command line: stop the server, run `add <id>` with the real config, and start it again (a running server doesn't see what `add` stores until it restarts).
 
 New sources fill the database silently on their first successful fetch.
