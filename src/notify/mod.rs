@@ -712,6 +712,7 @@ pub(crate) mod tests {
         let channel = |search: Option<&str>| ChannelConfig {
             name: "phone".into(),
             enabled: true,
+            health_alerts: false,
             rules: NotifyRules {
                 search: search.map(str::to_string),
                 ..rules(&[], &[Release], &[], &[], false)
