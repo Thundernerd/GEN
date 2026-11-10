@@ -636,6 +636,22 @@ mod tests {
     use super::*;
     use crate::config::{Owner, SourceSpec};
 
+    /// A pipeline over `store` and `registry`, with every other part fresh and default.
+    fn test_pipeline(
+        store: crate::store::Store,
+        registry: crate::registry::SourceRegistry,
+    ) -> Pipeline {
+        Pipeline {
+            http: crate::fetch::Http::new("gen-test", None).unwrap(),
+            store: Arc::new(Mutex::new(store)),
+            registry: Arc::new(registry),
+            toggles: Arc::new(crate::toggles::SourceToggles::default()),
+            notify_wake: Arc::new(Notify::new()),
+            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
+            fetches: Arc::new(FetchRequests::default()),
+        }
+    }
+
     fn source(id: &str, interval: Option<u64>) -> ResolvedSource {
         ResolvedSource {
             id: id.into(),
@@ -690,15 +706,7 @@ mod tests {
         );
         let registry = crate::registry::SourceRegistry::with_owners(&mut store, &config);
         let source = registry.current().config.all_sources().remove(0);
-        let pipeline = Pipeline {
-            http: crate::fetch::Http::new("gen-test", None).unwrap(),
-            store: Arc::new(Mutex::new(store)),
-            registry: Arc::new(registry),
-            toggles: Arc::new(crate::toggles::SourceToggles::default()),
-            notify_wake: Arc::new(Notify::new()),
-            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
-            fetches: Arc::new(FetchRequests::default()),
-        };
+        let pipeline = test_pipeline(store, registry);
         let poller = Poller {
             pipeline: pipeline.clone(),
             permits: Arc::new(Semaphore::new(1)),
@@ -781,15 +789,7 @@ mod tests {
         let registry = crate::registry::SourceRegistry::with_owners(&mut store, &config);
         let sources = registry.current().config.all_sources();
         assert_eq!(sources.len(), 2);
-        let pipeline = Pipeline {
-            http: crate::fetch::Http::new("gen-test", None).unwrap(),
-            store: Arc::new(Mutex::new(store)),
-            registry: Arc::new(registry),
-            toggles: Arc::new(crate::toggles::SourceToggles::default()),
-            notify_wake: Arc::new(Notify::new()),
-            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
-            fetches: Arc::new(FetchRequests::default()),
-        };
+        let pipeline = test_pipeline(store, registry);
         let mut tasks = Vec::new();
         for source in &sources {
             let poller = Poller {
@@ -924,15 +924,7 @@ mod tests {
                 image_url: None,
             }])
             .unwrap();
-        let pipeline = Pipeline {
-            http: crate::fetch::Http::new("gen-test", None).unwrap(),
-            store: Arc::new(Mutex::new(store)),
-            registry: Arc::new(registry),
-            toggles: Arc::new(crate::toggles::SourceToggles::default()),
-            notify_wake: Arc::new(Notify::new()),
-            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
-            fetches: Arc::new(FetchRequests::default()),
-        };
+        let pipeline = test_pipeline(store, registry);
         let notifier = Notifier {
             pipeline: pipeline.clone(),
             bot: None,
@@ -1003,15 +995,7 @@ mod tests {
                 item("d", "Unity shader graph", None),
             ])
             .unwrap();
-        let pipeline = Pipeline {
-            http: crate::fetch::Http::new("gen-test", None).unwrap(),
-            store: Arc::new(Mutex::new(store)),
-            registry: Arc::new(registry),
-            toggles: Arc::new(crate::toggles::SourceToggles::default()),
-            notify_wake: Arc::new(Notify::new()),
-            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
-            fetches: Arc::new(FetchRequests::default()),
-        };
+        let pipeline = test_pipeline(store, registry);
         let notifier = Notifier {
             pipeline: pipeline.clone(),
             bot: None,
@@ -1092,15 +1076,7 @@ mod tests {
                 item("c", &["bevy"], Release, "Bevy release, not subscribed"),
             ])
             .unwrap();
-        let pipeline = Pipeline {
-            http: crate::fetch::Http::new("gen-test", None).unwrap(),
-            store: Arc::new(Mutex::new(store)),
-            registry: Arc::new(registry),
-            toggles: Arc::new(crate::toggles::SourceToggles::default()),
-            notify_wake: Arc::new(Notify::new()),
-            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
-            fetches: Arc::new(FetchRequests::default()),
-        };
+        let pipeline = test_pipeline(store, registry);
         let notifier = Notifier {
             pipeline: pipeline.clone(),
             bot: Some(BotApi {
@@ -1178,15 +1154,7 @@ mod tests {
                 image_url: None,
             }])
             .unwrap();
-        let pipeline = Pipeline {
-            http: crate::fetch::Http::new("gen-test", None).unwrap(),
-            store: Arc::new(Mutex::new(store)),
-            registry: Arc::new(registry),
-            toggles: Arc::new(crate::toggles::SourceToggles::default()),
-            notify_wake: Arc::new(Notify::new()),
-            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
-            fetches: Arc::new(FetchRequests::default()),
-        };
+        let pipeline = test_pipeline(store, registry);
         let notifier = Notifier {
             pipeline: pipeline.clone(),
             bot: None,
@@ -1278,15 +1246,7 @@ mod tests {
         store
             .insert_items_at(&[item("recent", 10)], ago(10))
             .unwrap();
-        let pipeline = Pipeline {
-            http: crate::fetch::Http::new("gen-test", None).unwrap(),
-            store: Arc::new(Mutex::new(store)),
-            registry: Arc::new(registry),
-            toggles: Arc::new(crate::toggles::SourceToggles::default()),
-            notify_wake: Arc::new(Notify::new()),
-            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
-            fetches: Arc::new(FetchRequests::default()),
-        };
+        let pipeline = test_pipeline(store, registry);
         let mut app = AppConfig::default();
         app.database.retention_days = Some(365);
         let _tasks = spawn(pipeline.clone(), Arc::new(app));
