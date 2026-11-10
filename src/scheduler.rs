@@ -684,7 +684,7 @@ mod tests {
 
     /// A notifier, and its pipeline, over `store` and the sources it holds. `bot` is the
     /// Discord bot that posts to bot channels.
-    fn notifier(store: crate::store::Store, bot: Option<BotApi>) -> Notifier {
+    fn test_notifier(store: crate::store::Store, bot: Option<BotApi>) -> Notifier {
         let registry = crate::registry::SourceRegistry::load(&store).unwrap();
         let pipeline = Pipeline {
             http: crate::fetch::Http::new("gen-test", None).unwrap(),
@@ -963,7 +963,7 @@ mod tests {
                 image_url: None,
             }])
             .unwrap();
-        let notifier = notifier(store, None);
+        let notifier = test_notifier(store, None);
         notifier.run_once().await;
 
         let requests = requests.lock().unwrap().clone();
@@ -1009,7 +1009,7 @@ mod tests {
                 item("d", "Unity shader graph", None),
             ])
             .unwrap();
-        let notifier = notifier(store, None);
+        let notifier = test_notifier(store, None);
         notifier.run_once().await;
 
         let requests = requests.lock().unwrap().clone();
@@ -1066,7 +1066,7 @@ mod tests {
             token: "t0ken".into(),
             api_base: format!("http://{addr}"),
         };
-        let notifier = notifier(store, Some(bot));
+        let notifier = test_notifier(store, Some(bot));
         notifier.run_once().await;
         notifier.run_once().await;
 
@@ -1117,7 +1117,7 @@ mod tests {
                 image_url: None,
             }])
             .unwrap();
-        let notifier = notifier(store, None);
+        let notifier = test_notifier(store, None);
         notifier.run_once().await;
 
         let hero = format!("http://{addr}/hero.png");
