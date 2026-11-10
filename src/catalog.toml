@@ -918,7 +918,8 @@ aliases = ["excalibur.js", "excaliburjs"]
   repo = "excaliburjs/Excalibur"
   category = "release"
 
-# ebitengine.org has no RSS/Atom feed; its blog mostly announces the GitHub releases.
+# ebitengine.org has no RSS/Atom feed (checked 2026-11-10); its blog posts a few times a
+# year (releases, game jams, yearly reviews), so only GitHub releases are tracked.
 [[engine]]
 id = "ebitengine"
 name = "Ebitengine"
