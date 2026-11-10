@@ -179,8 +179,8 @@ UPDATE pruned_items SET last_listed = strftime('%Y-%m-%d %H:%M:%f+00:00', 'now')
 CREATE TABLE health_alerts (
     id         INTEGER PRIMARY KEY,
     channel    TEXT NOT NULL,
-    source_id  TEXT NOT NULL,
-    source     TEXT NOT NULL,
+    source_id    TEXT NOT NULL,
+    source_label TEXT NOT NULL,
     reason     TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
@@ -205,7 +205,7 @@ pub struct StoredHealthAlert {
     pub id: i64,
     pub source_id: String,
     /// The source as people know it, e.g. "Godot feed https://godotengine.org/rss.xml".
-    pub source: String,
+    pub source_label: String,
     /// Why it is failing, e.g. "3 failures in a row, last OK 2 days ago: HTTP 404".
     pub reason: String,
     pub created_at: DateTime<Utc>,
@@ -838,14 +838,14 @@ impl Store {
         &self,
         channel: &str,
         source_id: &str,
-        source: &str,
+        source_label: &str,
         reason: &str,
         created_at: DateTime<Utc>,
     ) -> anyhow::Result<()> {
         self.conn.execute(
-            "INSERT INTO health_alerts (channel, source_id, source, reason, created_at)
+            "INSERT INTO health_alerts (channel, source_id, source_label, reason, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![channel, source_id, source, reason, created_at],
+            params![channel, source_id, source_label, reason, created_at],
         )?;
         Ok(())
     }
@@ -862,14 +862,14 @@ impl Store {
             params![channel, since],
         )?;
         let mut stmt = self.conn.prepare_cached(
-            "SELECT id, source_id, source, reason, created_at FROM health_alerts
+            "SELECT id, source_id, source_label, reason, created_at FROM health_alerts
              WHERE channel = ?1 ORDER BY created_at, id",
         )?;
         let rows = stmt.query_map([channel], |r| {
             Ok(StoredHealthAlert {
                 id: r.get(0)?,
                 source_id: r.get(1)?,
-                source: r.get(2)?,
+                source_label: r.get(2)?,
                 reason: r.get(3)?,
                 created_at: r.get(4)?,
             })

@@ -90,7 +90,7 @@ pub async fn deliver(
 pub fn message(base_url: &str, alert: &StoredHealthAlert) -> TextMessage {
     TextMessage {
         title: "GEN: a source is failing".into(),
-        text: format!("GEN: {} is failing ({})", alert.source, alert.reason),
+        text: format!("{} is failing ({})", alert.source_label, alert.reason),
         link: format!(
             "{}/sources?health=unhealthy",
             base_url.trim_end_matches('/')

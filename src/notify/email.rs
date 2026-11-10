@@ -53,6 +53,7 @@ pub fn build_text_email(message: &TextMessage) -> Email {
     }
 }
 
+/// Sends the emails over the channel's SMTP server.
 async fn deliver(target: &ChannelTarget, emails: Vec<Email>) -> Result<(), NotifyError> {
     let ChannelTarget::Email {
         smtp_host,

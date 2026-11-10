@@ -36,6 +36,7 @@ pub async fn send_text(
     publish(ctx, &url, token, build_text_message(message)).await
 }
 
+/// POSTs one message to the topic.
 async fn publish(
     ctx: &NotifyContext<'_>,
     url: &str,

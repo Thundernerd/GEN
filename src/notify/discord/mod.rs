@@ -100,13 +100,7 @@ pub async fn send_bot(
     style: MessageStyle,
     items: &[Item],
 ) -> Result<(), NotifyError> {
-    let bot = ctx.discord_bot.ok_or_else(|| {
-        NotifyError::Other(
-            "the Discord bot is not set up: add a [discord] section to gen.toml".into(),
-        )
-    })?;
-    let url = format!("{}/channels/{channel_id}/messages", bot.api_base);
-    let auth = format!("Bot {}", bot.token);
+    let (url, auth) = bot_endpoint(ctx, channel_id)?;
     for message in build_messages(ctx.sources, ctx.base_url, style, items) {
         post(ctx, &url, Some(&auth), &message.payload).await?;
     }
@@ -128,14 +122,21 @@ pub async fn send_bot_text(
     channel_id: u64,
     message: &TextMessage,
 ) -> Result<(), NotifyError> {
+    let (url, auth) = bot_endpoint(ctx, channel_id)?;
+    Ok(post(ctx, &url, Some(&auth), &text_payload(message)).await?)
+}
+
+/// The URL to post a channel's messages to as the bot, and its authorization header.
+fn bot_endpoint(ctx: &NotifyContext<'_>, channel_id: u64) -> Result<(String, String), NotifyError> {
     let bot = ctx.discord_bot.ok_or_else(|| {
         NotifyError::Other(
             "the Discord bot is not set up: add a [discord] section to gen.toml".into(),
         )
     })?;
-    let url = format!("{}/channels/{channel_id}/messages", bot.api_base);
-    let auth = format!("Bot {}", bot.token);
-    Ok(post(ctx, &url, Some(&auth), &text_payload(message)).await?)
+    Ok((
+        format!("{}/channels/{channel_id}/messages", bot.api_base),
+        format!("Bot {}", bot.token),
+    ))
 }
 
 /// A plain message: the title in bold, the text and the link, mentioning nobody.

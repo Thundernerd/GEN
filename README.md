@@ -484,8 +484,8 @@ Layout of `src/`:
 | `store.rs` | SQLite storage: items, source state, engines/outlets/sources and queries for the web UI. |
 | `catalog.rs` | The built-in catalog (`catalog.toml`): seeding a new database and the suggestions. |
 | `registry.rs` | The live set of sources stored in the database, published to the web UI, pipeline and scheduler. |
-| `pipeline.rs` | Polls a source: fetch, classify, dedupe and store. |
-| `notify/` | Rule matching and delivery: `discord` (webhooks and bot channels), `ntfy`, `email`, `apprise`. |
+| `pipeline.rs` | Polls a source: fetch, classify, dedupe and store, and queue a health alert when it starts failing. |
+| `notify/` | Rule matching and delivery: `discord` (webhooks and bot channels), `ntfy`, `email`, `apprise`; `alert` for health alerts. |
 | `discord_bot/` | The Discord bot: gateway connection, `/gen` commands, channel layout for `/gen setup`, and subscriptions stored as notification channels. |
 | `web/` | axum router: HTML pages (minijinja templates), Atom feed, JSON API. |
 

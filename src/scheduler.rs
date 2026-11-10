@@ -505,16 +505,21 @@ impl Notifier {
             }
         }
     }
+
+    /// What senders need to render and post messages.
+    fn context<'a>(&'a self, sources: &'a crate::config::SourcesConfig) -> NotifyContext<'a> {
+        NotifyContext {
+            http: &self.pipeline.http,
+            sources,
+            base_url: &self.app.server.base_url,
+            discord_bot: self.bot.as_ref(),
+        }
+    }
+
     /// Sends one channel's queued health alerts. Returns whether anything was sent.
     async fn deliver_alerts(&self, channel: &ChannelConfig) -> anyhow::Result<bool> {
         let snapshot = self.pipeline.registry.current();
-        let ctx = NotifyContext {
-            http: &self.pipeline.http,
-            sources: &snapshot.config,
-            base_url: &self.app.server.base_url,
-            discord_bot: self.bot.as_ref(),
-        };
-        notify::alert::deliver(&self.pipeline, &ctx, channel).await
+        notify::alert::deliver(&self.pipeline, &self.context(&snapshot.config), channel).await
     }
 
     /// Sends one channel's pending items. Each item is marked as handled right after it is
@@ -562,12 +567,7 @@ impl Notifier {
         }
 
         let snapshot = self.pipeline.registry.current();
-        let ctx = NotifyContext {
-            http: &self.pipeline.http,
-            sources: &snapshot.config,
-            base_url: &self.app.server.base_url,
-            discord_bot: self.bot.as_ref(),
-        };
+        let ctx = self.context(&snapshot.config);
         let digest = matches!(channel.target, ChannelTarget::Email { digest: true, .. });
         let batches: Vec<&[Item]> = if digest {
             vec![matching.as_slice()]
