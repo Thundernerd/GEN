@@ -348,42 +348,20 @@ impl SourceRegistry {
                 Ok(Vec::new())
             }
             SourceEdit::SetEngineIcon { engine_id, icon } => {
-                let Some(NewOwner::Engine(engine)) =
-                    stored.owners.iter_mut().find(|o| o.id() == engine_id)
-                else {
-                    return Err(EditError::Invalid(format!(
-                        "There is no engine “{engine_id}”."
-                    )));
-                };
-                engine.icon = icon;
-                let owner = NewOwner::Engine(engine.clone());
-                owner.check().map_err(EditError::Invalid)?;
-                let json = owner.to_json().map_err(anyhow::Error::from)?;
-                self.commit(stored, || store.update_owner(&engine_id, &json))?;
-                Ok(Vec::new())
+                self.edit_engine(store, stored, &engine_id, |engine| engine.icon = icon)
             }
             SourceEdit::AddEngineExcludes { engine_id, phrases } => {
-                let Some(NewOwner::Engine(engine)) =
-                    stored.owners.iter_mut().find(|o| o.id() == engine_id)
-                else {
-                    return Err(EditError::Invalid(format!(
-                        "There is no engine “{engine_id}”."
-                    )));
-                };
-                for phrase in phrases {
-                    if !engine
-                        .exclude
-                        .iter()
-                        .any(|p| p.eq_ignore_ascii_case(&phrase))
-                    {
-                        engine.exclude.push(phrase);
+                self.edit_engine(store, stored, &engine_id, |engine| {
+                    for phrase in phrases {
+                        if !engine
+                            .exclude
+                            .iter()
+                            .any(|p| p.eq_ignore_ascii_case(&phrase))
+                        {
+                            engine.exclude.push(phrase);
+                        }
                     }
-                }
-                let owner = NewOwner::Engine(engine.clone());
-                owner.check().map_err(EditError::Invalid)?;
-                let json = owner.to_json().map_err(anyhow::Error::from)?;
-                self.commit(stored, || store.update_owner(&engine_id, &json))?;
-                Ok(Vec::new())
+                })
             }
             SourceEdit::RemoveOwner(id) => {
                 let is_engine = current.config.engine(&id).is_some();
@@ -406,6 +384,28 @@ impl SourceRegistry {
                 Ok(source_ids)
             }
         }
+    }
+
+    /// Applies `change` to the stored engine `engine_id`, checks it and stores it.
+    fn edit_engine(
+        &self,
+        store: &mut Store,
+        mut stored: StoredSources,
+        engine_id: &str,
+        change: impl FnOnce(&mut EngineConfig),
+    ) -> Result<Vec<String>, EditError> {
+        let Some(NewOwner::Engine(engine)) = stored.owners.iter_mut().find(|o| o.id() == engine_id)
+        else {
+            return Err(EditError::Invalid(format!(
+                "There is no engine “{engine_id}”."
+            )));
+        };
+        change(engine);
+        let owner = NewOwner::Engine(engine.clone());
+        owner.check().map_err(EditError::Invalid)?;
+        let json = owner.to_json().map_err(anyhow::Error::from)?;
+        self.commit(stored, || store.update_owner(engine_id, &json))?;
+        Ok(Vec::new())
     }
 
     /// Builds the snapshot for `stored` (so nothing is stored if it is invalid), stores the
