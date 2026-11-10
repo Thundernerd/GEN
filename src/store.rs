@@ -970,21 +970,14 @@ mod tests {
         assert_eq!(dups[&first[0].id], vec!["b".to_string()]);
     }
 
-    fn published_days_ago(source: &str, guid: &str, story: &str, days: i64) -> NewItem {
-        NewItem {
-            published: Some(Utc::now() - Duration::days(days)),
-            ..new_item(source, guid, story)
-        }
-    }
-
     #[test]
     fn backfilled_story_merges_with_one_published_at_the_same_time() {
         let mut store = Store::open_in_memory().unwrap();
         let first = store
-            .insert_items(&[published_days_ago("a", "1", "godot 4 7 stable", 30)])
+            .insert_items(&[aged("a", "1", "godot 4 7 stable", 30)])
             .unwrap();
         let backfilled = store
-            .insert_items(&[published_days_ago("b", "x", "godot 4 7 stable", 30)])
+            .insert_items(&[aged("b", "x", "godot 4 7 stable", 30)])
             .unwrap();
         assert_eq!(backfilled[0].duplicate_of, Some(first[0].id));
     }
@@ -993,14 +986,14 @@ mod tests {
     fn same_story_key_published_weeks_apart_is_not_merged() {
         let mut store = Store::open_in_memory().unwrap();
         store
-            .insert_items(&[published_days_ago("a", "1", "godot showreel", 0)])
+            .insert_items(&[aged("a", "1", "godot showreel", 0)])
             .unwrap();
         let older = store
-            .insert_items(&[published_days_ago("b", "x", "godot showreel", 30)])
+            .insert_items(&[aged("b", "x", "godot showreel", 30)])
             .unwrap();
         assert_eq!(older[0].duplicate_of, None);
         let newer = store
-            .insert_items(&[published_days_ago("c", "y", "godot showreel", 60)])
+            .insert_items(&[aged("c", "y", "godot showreel", 60)])
             .unwrap();
         assert_eq!(newer[0].duplicate_of, None);
     }
