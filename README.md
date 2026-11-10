@@ -29,6 +29,7 @@ Requires Rust 1.96 or newer (edition 2024). You don't need OpenSSL or a system S
 cargo run -- check-config     # validate config/gen.toml, list the sources, the unhealthy ones and warnings
 cargo run -- fetch            # poll every source once and print what's new (no notifications)
 cargo run -- fetch --source godot   # only sources whose id contains "godot"
+cargo run -- add bevy         # add a catalog engine or outlet, with its sources
 cargo run -- serve            # web server + background polling
 ```
 
@@ -255,25 +256,26 @@ All source kinds also accept these fields:
 
 The tier only groups engines; it doesn't decide whether they are polled. Every catalog engine and outlet the database doesn't have, of any tier, is offered as a suggestion, and its sources are polled once you add it (see "Adding and removing sources, engines and outlets"). Catalog engines and outlets are always enabled; the catalog tests check this. A single catalog source with `enabled = false` is added switched off; switch it on from the Sources page (see "Switching sources on and off").
 
-The `check-config` and `fetch` commands only see the sources stored in the database, so a new catalog entry is invisible to them until it has been added from the suggestions. To add an engine or outlet to the catalog and try it out:
+The `check-config` and `fetch` commands only see the sources stored in the database, so a new catalog entry is invisible to them until it has been added, from the suggestions or with `add`. To add an engine or outlet to the catalog and try it out:
 
 1. Add the `[[engine]]` or `[[outlet]]` block (or an `[[engine.source]]` / `[[outlet.source]]` entry under an existing one) to `src/catalog.toml`.
 2. Run `cargo test catalog`, which checks that the catalog parses, is valid and has no Hacker News sources and no YouTube, Reddit or Discourse (`/latest.rss`) URLs.
 3. Try it on a scratch database, so your real one stays untouched. Write a scratch config, e.g. `data/scratch.toml` (`data/` is ignored by git):
 
    ```toml
-   [server]
-   bind = "127.0.0.1:8081"
-   base_url = "http://localhost:8081"
-   admin_token = "scratch"
-
    [database]
    path = "data/scratch.db"
    ```
 
-   Run `cargo run -- --config data/scratch.toml serve`, open <http://localhost:8081/sources>, log in with the token, and click **Add** next to the new entry under **Suggestions**. GEN polls its sources straight away: the log shows `fetched source=<source id> new=<count>` for each, and an engine's page, `/engine/<id>`, lists its items.
-4. After that, `cargo run -- --config data/scratch.toml fetch --source <id>` polls them again and prints the items that are new since then (usually none, or `not modified`). Editing `src/catalog.toml` doesn't change an entry a database already has. To try a changed entry, stop the server, delete `data/scratch.db` (with its `-wal` and `-shm` files) and repeat step 3.
-5. Rebuild and restart the real server. The new entry shows under **Suggestions** on the real server's Sources page.
+   Then add the entry and poll its sources once:
+
+   ```sh
+   cargo run -- --config data/scratch.toml add <id>              # prints the sources it added
+   cargo run -- --config data/scratch.toml fetch --source <id>   # prints the first fetch's items
+   ```
+
+   `add` fails if `<id>` isn't in the catalog or the database already has it. A later `fetch` prints only the items that are new since then (usually none, or `not modified`). Editing `src/catalog.toml` doesn't change an entry a database already has. To try a changed entry, delete `data/scratch.db` (with its `-wal` and `-shm` files) and repeat step 3.
+4. Rebuild and restart the real server. The new entry shows under **Suggestions** on the real server's Sources page. You can also add it from the command line: stop the server, run `add <id>` with the real config, and start it again (a running server doesn't see what `add` stores until it restarts).
 
 New sources fill the database silently on their first successful fetch.
 
@@ -471,7 +473,7 @@ Layout of `src/`:
 
 | Module | Responsibility |
 |---|---|
-| `main.rs` | CLI (`serve`, `fetch`, `check-config`, `notify-test`) and wiring. |
+| `main.rs` | CLI (`serve`, `fetch`, `check-config`, `add`, `notify-test`) and wiring. |
 | `config.rs` | `gen.toml` and engine/outlet/source schema, validation and `${ENV}` expansion. |
 | `model.rs` | Shared types: `ItemKind`, `Topic`, `RawItem`, `NewItem`, `Item`, `SourceState`. |
 | `fetch/` | HTTP client and one fetcher per source kind: `feed`, `github`, `unity`, `hn`, `html`. |
