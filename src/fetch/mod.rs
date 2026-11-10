@@ -419,37 +419,19 @@ pub fn truncate(s: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_server::{TestServer, respond, serve};
 
-    /// A server that answers every request with 429 and `retry-after`, counting requests.
-    async fn rate_limiting_server(
-        retry_after: &'static str,
-    ) -> (std::net::SocketAddr, Arc<std::sync::atomic::AtomicUsize>) {
-        let status_and_headers = format!("429 Too Many Requests\r\nretry-after: {retry_after}");
-        limiting_server(status_and_headers).await
+    /// A server that answers every request with 429 and `retry-after`.
+    async fn rate_limiting_server(retry_after: &'static str) -> TestServer {
+        limiting_server(format!(
+            "429 Too Many Requests\r\nretry-after: {retry_after}"
+        ))
+        .await
     }
 
-    /// A server that answers every request with `status_and_headers`, counting requests.
-    async fn limiting_server(
-        status_and_headers: String,
-    ) -> (std::net::SocketAddr, Arc<std::sync::atomic::AtomicUsize>) {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-        let hits = Arc::new(std::sync::atomic::AtomicUsize::new(0));
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let counter = hits.clone();
-        tokio::spawn(async move {
-            while let Ok((mut conn, _)) = listener.accept().await {
-                counter.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
-                let mut buf = vec![0u8; 8 * 1024];
-                let _ = conn.read(&mut buf).await;
-                let reply = format!(
-                    "HTTP/1.1 {status_and_headers}\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
-                );
-                let _ = conn.write_all(reply.as_bytes()).await;
-            }
-        });
-        (addr, hits)
+    /// A server that answers every request with `status_and_headers`.
+    async fn limiting_server(status_and_headers: String) -> TestServer {
+        serve(move |_, _| respond(&status_and_headers, "")).await
     }
 
     async fn get(http: &Http, url: String) -> Result<Conditional, FetchError> {
@@ -464,10 +446,9 @@ mod tests {
     /// count them as failures of those sources.
     #[tokio::test]
     async fn a_rate_limited_host_cools_down_for_every_source() {
-        use std::sync::atomic::Ordering;
-
-        let (addr, hits) = rate_limiting_server("600").await;
-        let (other, other_hits) = rate_limiting_server("600").await;
+        let server = rate_limiting_server("600").await;
+        let other_server = rate_limiting_server("600").await;
+        let (addr, other) = (server.addr, other_server.addr);
         let http = Http::new("gen-test", None).unwrap();
 
         let first = get(&http, format!("http://{addr}/a.atom")).await;
@@ -484,14 +465,14 @@ mod tests {
             "{wait:?}"
         );
         assert_eq!(
-            hits.load(Ordering::SeqCst),
+            server.requests().len(),
             1,
             "second source didn't hit the host"
         );
 
         let _ = get(&http, format!("http://{other}/c.atom")).await;
         assert_eq!(
-            other_hits.load(Ordering::SeqCst),
+            other_server.requests().len(),
             1,
             "another host is unaffected"
         );
@@ -502,10 +483,11 @@ mod tests {
     #[tokio::test]
     async fn github_rate_limit_cools_down_until_the_reset() {
         let reset = chrono::Utc::now().timestamp() + 600;
-        let (addr, hits) = limiting_server(format!(
+        let server = limiting_server(format!(
             "403 Forbidden\r\nx-ratelimit-remaining: 0\r\nx-ratelimit-reset: {reset}"
         ))
         .await;
+        let addr = server.addr;
         let http = Http::new("gen-test", None).unwrap();
         let _ = get(&http, format!("http://{addr}/a")).await;
         let Err(FetchError::CoolingDown {
@@ -518,13 +500,13 @@ mod tests {
             wait > Duration::from_secs(590) && wait <= Duration::from_secs(600),
             "{wait:?}"
         );
-        assert_eq!(hits.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(server.requests().len(), 1);
     }
 
     /// An absurd `retry-after` from a broken server can't overflow the cooldown.
     #[tokio::test]
     async fn survives_a_huge_retry_after() {
-        let (addr, _) = rate_limiting_server("18446744073709551615").await;
+        let addr = rate_limiting_server("18446744073709551615").await.addr;
         let http = Http::new("gen-test", None).unwrap();
         let first = get(&http, format!("http://{addr}/a.atom")).await;
         assert!(matches!(first, Err(FetchError::RateLimited { .. })));

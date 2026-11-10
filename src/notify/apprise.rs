@@ -137,6 +137,7 @@ pub fn build_payload(sources: &SourcesConfig, item: &Item) -> Value {
 mod tests {
     use super::*;
     use crate::notify::tests::{item, sources};
+    use crate::test_server::{TestServer, respond, serve};
 
     #[test]
     fn builds_markdown_payloads() {
@@ -159,27 +160,15 @@ mod tests {
         assert_eq!(p["type"], "info");
     }
 
-    /// Serves one request with `status` and returns the raw request it received.
-    async fn sink(status: &'static str) -> (String, tokio::task::JoinHandle<String>) {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let task = tokio::spawn(async move {
-            let (mut conn, _) = listener.accept().await.unwrap();
-            let mut buf = vec![0u8; 16 * 1024];
-            let n = conn.read(&mut buf).await.unwrap();
-            let reply = format!(
-                "HTTP/1.1 {status}\r\ncontent-length: 9\r\nconnection: close\r\n\r\nno tagged"
-            );
-            conn.write_all(reply.as_bytes()).await.unwrap();
-            String::from_utf8_lossy(&buf[..n]).into_owned()
-        });
-        (format!("http://{addr}"), task)
+    /// A server that answers every request with `status`.
+    async fn sink(status: &'static str) -> TestServer {
+        serve(move |_, _| respond(status, "no tagged")).await
     }
 
     #[tokio::test]
     async fn posts_to_a_saved_configuration() {
-        let (server, request) = sink("200 OK").await;
+        let sink = sink("200 OK").await;
+        let server = sink.url();
         let http = crate::fetch::Http::new("gen-test", None).unwrap();
         let ctx = NotifyContext {
             http: &http,
@@ -197,7 +186,9 @@ mod tests {
         };
         let release = item(&["godot"], ItemKind::Release, "Godot 4.8", Some("Notes"));
         send(&ctx, &target, &[release]).await.unwrap();
-        let request = request.await.unwrap();
+        let requests = sink.requests();
+        assert_eq!(requests.len(), 1, "{requests:#?}");
+        let request = &requests[0];
         assert!(request.starts_with("POST /notify/gen "), "{request}");
         // "gen:pw" in base64.
         assert!(
@@ -212,7 +203,8 @@ mod tests {
 
     #[tokio::test]
     async fn reports_failed_deliveries() {
-        let (server, _request) = sink("424 Failed Dependency").await;
+        let sink = sink("424 Failed Dependency").await;
+        let server = sink.url();
         let http = crate::fetch::Http::new("gen-test", None).unwrap();
         let ctx = NotifyContext {
             http: &http,
@@ -236,6 +228,7 @@ mod tests {
             err.contains("424") && err.contains("tag matched nothing"),
             "{err}"
         );
+        assert_eq!(sink.requests().len(), 1);
     }
 
     #[test]

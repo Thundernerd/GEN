@@ -114,7 +114,6 @@ pub fn describe(source: &ResolvedSource) -> String {
 mod tests {
     use std::sync::{Arc, Mutex};
 
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::sync::Notify;
 
     use super::*;
@@ -122,56 +121,25 @@ mod tests {
     use crate::notify::{NotifyContext, load_channels};
     use crate::pipeline::{Pipeline, PollSettings};
     use crate::store::Store;
+    use crate::test_server::{TestServer, ok, respond, serve};
 
     /// A feed that answers its first request and returns 404 after that.
     async fn feed_that_breaks() -> std::net::SocketAddr {
         let feed = include_str!("../../tests/fixtures/feed/godot.xml");
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move {
-            for n in 0.. {
-                let Ok((mut conn, _)) = listener.accept().await else {
-                    return;
-                };
-                let mut buf = vec![0u8; 8 * 1024];
-                let _ = conn.read(&mut buf).await;
-                let reply = if n == 0 {
-                    format!(
-                        "HTTP/1.1 200 OK\r\ncontent-type: application/rss+xml\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{feed}",
-                        feed.len()
-                    )
-                } else {
-                    "HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\nconnection: close\r\n\r\n"
-                        .into()
-                };
-                let _ = conn.write_all(reply.as_bytes()).await;
+        serve(move |n, _| {
+            if n == 0 {
+                respond("200 OK\r\ncontent-type: application/rss+xml", feed)
+            } else {
+                respond("404 Not Found", "")
             }
-        });
-        addr
+        })
+        .await
+        .addr
     }
 
     /// An ntfy server that accepts everything and records each request it got.
-    async fn recording_ntfy() -> (String, Arc<Mutex<Vec<String>>>) {
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let seen = Arc::new(Mutex::new(Vec::new()));
-        let record = seen.clone();
-        tokio::spawn(async move {
-            loop {
-                let Ok((mut conn, _)) = listener.accept().await else {
-                    return;
-                };
-                let mut buf = vec![0u8; 16 * 1024];
-                let n = conn.read(&mut buf).await.unwrap_or(0);
-                record
-                    .lock()
-                    .unwrap()
-                    .push(String::from_utf8_lossy(&buf[..n]).into_owned());
-                let reply = "HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\n{}";
-                let _ = conn.write_all(reply.as_bytes()).await;
-            }
-        });
-        (format!("http://{addr}"), seen)
+    async fn recording_ntfy() -> TestServer {
+        serve(|_, _| ok("{}")).await
     }
 
     fn feed_source() -> ResolvedSource {
@@ -233,7 +201,8 @@ mod tests {
     #[tokio::test]
     async fn the_third_failure_in_a_row_alerts_opted_in_channels_once() {
         let feed = feed_that_breaks().await;
-        let (ntfy, requests) = recording_ntfy().await;
+        let ntfy_server = recording_ntfy().await;
+        let ntfy = ntfy_server.url();
         let mut store = Store::open_in_memory().unwrap();
         let config = format!(
             r#"
@@ -293,10 +262,7 @@ mod tests {
             pipeline.poll(&source).await.unwrap_err();
         }
         deliver_all().await;
-        assert!(
-            requests.lock().unwrap().is_empty(),
-            "retrying doesn't alert"
-        );
+        assert!(ntfy_server.requests().is_empty(), "retrying doesn't alert");
 
         // The third failure: the source starts failing.
         pipeline.poll(&source).await.unwrap_err();
@@ -305,7 +271,7 @@ mod tests {
         pipeline.poll(&source).await.unwrap_err();
         deliver_all().await;
 
-        let requests = requests.lock().unwrap().clone();
+        let requests = ntfy_server.requests();
         assert_eq!(requests.len(), 1, "{requests:#?}");
         let alert = &requests[0];
         assert!(alert.starts_with("POST /admin "), "{alert}");

@@ -644,6 +644,7 @@ fn worth_an_image_lookup(item: &Item, url: &str) -> bool {
 mod tests {
     use super::*;
     use crate::config::{Owner, SourceSpec};
+    use crate::test_server::{ok, respond, serve};
 
     /// A pipeline over `store` and `registry`, with every other part fresh and default.
     fn test_pipeline(
@@ -674,49 +675,6 @@ mod tests {
         }
     }
 
-    /// A local HTTP server, running until the test ends.
-    struct TestServer {
-        addr: std::net::SocketAddr,
-        requests: Arc<Mutex<Vec<String>>>,
-    }
-
-    impl TestServer {
-        /// Every request received so far, oldest first.
-        fn requests(&self) -> Vec<String> {
-            self.requests.lock().unwrap().clone()
-        }
-    }
-
-    /// Starts a local server that answers each request with the raw HTTP response
-    /// `reply` gives for it, and records the requests.
-    async fn serve(reply: impl Fn(&str) -> String + Send + 'static) -> TestServer {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let requests = Arc::new(Mutex::new(Vec::new()));
-        let seen = requests.clone();
-        tokio::spawn(async move {
-            while let Ok((mut conn, _)) = listener.accept().await {
-                let mut buf = vec![0u8; 32 * 1024];
-                let n = conn.read(&mut buf).await.unwrap_or(0);
-                let request = String::from_utf8_lossy(&buf[..n]).into_owned();
-                let response = reply(&request);
-                seen.lock().unwrap().push(request);
-                let _ = conn.write_all(response.as_bytes()).await;
-            }
-        });
-        TestServer { addr, requests }
-    }
-
-    /// A `200 OK` response carrying `body`.
-    fn ok(body: &str) -> String {
-        format!(
-            "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-            body.len()
-        )
-    }
-
     fn source(id: &str, interval: Option<u64>) -> ResolvedSource {
         ResolvedSource {
             id: id.into(),
@@ -736,14 +694,9 @@ mod tests {
     #[tokio::test]
     async fn fetches_on_request() {
         let feed = include_str!("../tests/fixtures/feed/godot.xml");
-        let addr = serve(move |_| {
-            format!(
-                "HTTP/1.1 200 OK\r\ncontent-type: application/rss+xml\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{feed}",
-                feed.len()
-            )
-        })
-        .await
-        .addr;
+        let addr = serve(move |_, _| respond("200 OK\r\ncontent-type: application/rss+xml", feed))
+            .await
+            .addr;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
         let config = format!(
@@ -807,11 +760,9 @@ mod tests {
     /// "Fetch now" on it still says why it didn't fetch.
     #[tokio::test]
     async fn a_cooldown_skip_is_not_a_failure() {
-        let addr = serve(|_| {
-            "HTTP/1.1 429 Too Many Requests\r\nretry-after: 600\r\ncontent-length: 0\r\nconnection: close\r\n\r\n".into()
-        })
-        .await
-        .addr;
+        let addr = serve(|_, _| respond("429 Too Many Requests\r\nretry-after: 600", ""))
+            .await
+            .addr;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
         let config = format!(
@@ -932,7 +883,7 @@ mod tests {
     #[tokio::test]
     async fn delivers_to_channels_from_the_store() {
         // An HTTP sink that records the request.
-        let sink = serve(|_| ok("")).await;
+        let sink = serve(|_, _| ok("")).await;
         let addr = sink.addr;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
@@ -973,7 +924,7 @@ mod tests {
     /// site's search would; the others are marked handled so they aren't looked at again.
     #[tokio::test]
     async fn delivers_only_items_matching_a_channel_search() {
-        let sink = serve(|_| ok("")).await;
+        let sink = serve(|_, _| ok("")).await;
         let addr = sink.addr;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
@@ -1030,7 +981,7 @@ mod tests {
     #[tokio::test]
     async fn delivers_subscribed_items_to_bot_channels() {
         // An HTTP sink that records every request until the test ends.
-        let sink = serve(|_| ok("{}")).await;
+        let sink = serve(|_, _| ok("{}")).await;
         let addr = sink.addr;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
@@ -1084,7 +1035,7 @@ mod tests {
     /// og:image once and stores it; the message carries it.
     #[tokio::test]
     async fn looks_up_preview_images_once() {
-        let server = serve(|request| {
+        let server = serve(|_, request| {
             if request.starts_with("GET /post") {
                 ok(r#"<head><meta property="og:image" content="/hero.png"></head>"#)
             } else {

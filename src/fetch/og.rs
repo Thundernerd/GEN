@@ -64,6 +64,7 @@ pub fn absolute_url(base: &str, url: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::test_server::{respond, serve};
 
     #[test]
     fn finds_og_then_twitter_images() {
@@ -87,30 +88,17 @@ mod tests {
 
     #[tokio::test]
     async fn fetches_the_page_and_stops_at_the_size_limit() {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move {
-            for page in [
-                r#"<head><meta property="og:image" content="/a.png"></head>"#.to_string(),
-                // The tag comes after the limit, so it isn't read.
-                format!(
-                    "<head>{}<meta property=\"og:image\" content=\"/late.png\"></head>",
-                    " ".repeat(MAX_BYTES + 10)
-                ),
-            ] {
-                let (mut conn, _) = listener.accept().await.unwrap();
-                let mut buf = vec![0u8; 4096];
-                let _ = conn.read(&mut buf).await.unwrap();
-                let head = format!(
-                    "HTTP/1.1 200 OK\r\ncontent-type: text/html\r\ncontent-length: {}\r\nconnection: close\r\n\r\n",
-                    page.len()
-                );
-                conn.write_all(head.as_bytes()).await.unwrap();
-                let _ = conn.write_all(page.as_bytes()).await;
-            }
-        });
+        let pages = [
+            r#"<head><meta property="og:image" content="/a.png"></head>"#.to_string(),
+            // The tag comes after the limit, so it isn't read.
+            format!(
+                "<head>{}<meta property=\"og:image\" content=\"/late.png\"></head>",
+                " ".repeat(MAX_BYTES + 10)
+            ),
+        ];
+        let server =
+            serve(move |n, _| respond("200 OK\r\ncontent-type: text/html", &pages[n])).await;
+        let addr = server.addr;
         let http = Http::new("gen-test", None).unwrap();
         let url = format!("http://{addr}/post");
         assert_eq!(
@@ -118,5 +106,6 @@ mod tests {
             Some(format!("http://{addr}/a.png"))
         );
         assert_eq!(og_image(&http, &url).await, None);
+        assert_eq!(server.requests().len(), 2);
     }
 }
