@@ -459,9 +459,10 @@ impl Store {
 
     /// Inserts items, skipping ones already stored (or pruned) for the same source. Returns
     /// the newly stored items; ones whose story was already stored from another source, dated
-    /// within `DUPLICATE_WINDOW_DAYS` of the new item, come back with `duplicate_of` set. The
-    /// window is measured between the two items' dates, so a first fetch's backfill of old
-    /// releases still merges with the same releases stored from another source.
+    /// within `DUPLICATE_WINDOW_DAYS` of the new item, come back with `duplicate_of` set to the
+    /// stored story dated closest to it. The window is measured between the two items' dates,
+    /// so a first fetch's backfill of old releases still merges with the same releases stored
+    /// from another source.
     pub fn insert_items(&mut self, items: &[NewItem]) -> anyhow::Result<Vec<Item>> {
         self.insert_items_at(items, Utc::now())
     }
@@ -491,12 +492,13 @@ impl Store {
                     "SELECT id FROM items
                      WHERE story_key = ?1 AND source_id != ?2 AND duplicate_of IS NULL
                        AND sort_date BETWEEN ?3 AND ?4
-                     ORDER BY id LIMIT 1",
+                     ORDER BY ABS(julianday(sort_date) - julianday(?5)), id LIMIT 1",
                     params![
                         it.story_key,
                         it.source_id,
                         sort_date - window,
-                        sort_date + window
+                        sort_date + window,
+                        sort_date
                     ],
                     |r| r.get(0),
                 )
@@ -996,6 +998,25 @@ mod tests {
             .insert_items(&[aged("c", "y", "godot showreel", 60)])
             .unwrap();
         assert_eq!(newer[0].duplicate_of, None);
+    }
+
+    #[test]
+    fn duplicate_joins_the_story_published_closest_to_it() {
+        let mut store = Store::open_in_memory().unwrap();
+        // Two separate stories with the same key, published eight days apart.
+        let earlier = store
+            .insert_items(&[aged("a", "1", "godot 4 7", 20)])
+            .unwrap();
+        let later = store
+            .insert_items(&[aged("b", "2", "godot 4 7", 12)])
+            .unwrap();
+        assert_eq!(later[0].duplicate_of, None);
+        // Within the window of both, but closer to the later one.
+        let dup = store
+            .insert_items(&[aged("c", "3", "godot 4 7", 14)])
+            .unwrap();
+        assert_ne!(dup[0].duplicate_of, Some(earlier[0].id));
+        assert_eq!(dup[0].duplicate_of, Some(later[0].id));
     }
 
     #[test]
