@@ -515,23 +515,11 @@ impl Notifier {
         if pending.is_empty() {
             return Ok(false);
         }
-        // The search rule needs the search index, so the store answers it for all pending
-        // items at once; `notify::accepts` checks the other rules.
-        let found = match &channel.rules.search {
-            Some(search) => {
-                let ids: Vec<i64> = pending.iter().map(|i| i.id).collect();
-                let search = search.clone();
-                Some(
-                    self.pipeline
-                        .with_store(move |s| s.matching_search(&ids, &search))
-                        .await?,
-                )
-            }
-            None => None,
-        };
-        let (mut matching, skipped): (Vec<Item>, Vec<Item>) = pending.into_iter().partition(|i| {
-            notify::accepts(channel, i) && found.as_ref().is_none_or(|f| f.contains(&i.id))
-        });
+        let config = channel.clone();
+        let (mut matching, skipped) = self
+            .pipeline
+            .with_store(move |s| notify::partition(s, &config, pending))
+            .await?;
         self.mark(channel, &skipped).await?;
         let style = match &channel.target {
             ChannelTarget::Discord { style, .. } | ChannelTarget::DiscordBot { style, .. } => {
