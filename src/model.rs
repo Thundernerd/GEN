@@ -133,7 +133,7 @@ impl NewItem {
     /// published now, with `guid` as its story key, no URL, summary or image, and not
     /// to be notified. Tests change what they care about with struct update syntax:
     /// `NewItem { kind: ItemKind::News, ..NewItem::test("a", "1") }`.
-    pub fn test(source: &str, guid: &str) -> Self {
+    pub(crate) fn test(source: &str, guid: &str) -> Self {
         Self {
             source_id: source.into(),
             guid: guid.into(),
