@@ -173,6 +173,26 @@ mod tests {
     }
 
     #[test]
+    fn offers_gamingonlinux_as_an_engine_match_only_outlet() {
+        let Some(NewOwner::Outlet(outlet)) = owner("gamingonlinux") else {
+            panic!("gamingonlinux is not a catalog outlet");
+        };
+        assert_eq!(outlet.name, "GamingOnLinux");
+        assert!(outlet.require_engine_match);
+        let feeds: Vec<_> = CATALOG
+            .all_sources()
+            .into_iter()
+            .filter(|s| s.owner_name == "GamingOnLinux")
+            .map(|s| s.spec)
+            .collect();
+        assert!(
+            matches!(&feeds[..], [SourceSpec::Feed { url, .. }]
+                if url == "https://www.gamingonlinux.com/article_rss.php"),
+            "{feeds:?}"
+        );
+    }
+
+    #[test]
     fn seeds_once_and_purges_unconfigured_sources() {
         let mut store = Store::open_in_memory().unwrap();
         let item = |source: &str| crate::model::NewItem {
