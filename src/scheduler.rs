@@ -1042,8 +1042,12 @@ mod tests {
             notify: false,
             image_url: None,
         };
+        let ago = |days| chrono::Utc::now() - chrono::Duration::days(days);
         store
-            .insert_items(&[item("old", 400), item("recent", 10)])
+            .insert_items_at(&[item("old", 400)], ago(400))
+            .unwrap();
+        store
+            .insert_items_at(&[item("recent", 10)], ago(10))
             .unwrap();
         let pipeline = Pipeline {
             http: crate::fetch::Http::new("gen-test", None).unwrap(),

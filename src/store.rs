@@ -416,7 +416,15 @@ impl Store {
     /// stored items; ones whose story was already stored from another source within
     /// `DUPLICATE_WINDOW_DAYS` come back with `duplicate_of` set.
     pub fn insert_items(&mut self, items: &[NewItem]) -> anyhow::Result<Vec<Item>> {
-        let now = Utc::now();
+        self.insert_items_at(items, Utc::now())
+    }
+
+    /// `insert_items` as if it ran at `now`.
+    pub(crate) fn insert_items_at(
+        &mut self,
+        items: &[NewItem],
+        now: DateTime<Utc>,
+    ) -> anyhow::Result<Vec<Item>> {
         let window_start = now - Duration::days(DUPLICATE_WINDOW_DAYS);
         let tx = self.conn.transaction()?;
         let mut inserted = Vec::new();
@@ -500,8 +508,10 @@ impl Store {
     pub fn prune_items(&mut self, cutoff: DateTime<Utc>) -> anyhow::Result<usize> {
         let tx = self.conn.transaction()?;
         // Duplicates go with their story, even when dated later than it.
-        const EXPIRED: &str = "sort_date < ?1
-            OR duplicate_of IN (SELECT id FROM items WHERE sort_date < ?1)";
+        // An item is only pruned once it was also first seen before the cutoff, so a
+        // backdated entry that just arrived is still notified.
+        const EXPIRED: &str = "(sort_date < ?1 AND first_seen < ?1)
+            OR duplicate_of IN (SELECT id FROM items WHERE sort_date < ?1 AND first_seen < ?1)";
         tx.execute(
             &format!(
                 "INSERT OR IGNORE INTO pruned_items (source_id, guid)
@@ -1109,6 +1119,13 @@ mod tests {
         assert!(listed[0].published.unwrap() > Utc::now());
     }
 
+    /// Inserts items as if fetched `days` ago.
+    fn insert_ago(store: &mut Store, items: &[NewItem], days: i64) -> Vec<Item> {
+        store
+            .insert_items_at(items, Utc::now() - Duration::days(days))
+            .unwrap()
+    }
+
     fn aged(source: &str, guid: &str, story: &str, days: i64) -> NewItem {
         let mut item = new_item(source, guid, story);
         item.published = Some(Utc::now() - Duration::days(days));
@@ -1118,9 +1135,8 @@ mod tests {
     #[test]
     fn prunes_items_older_than_the_cutoff() {
         let mut store = Store::open_in_memory().unwrap();
-        store
-            .insert_items(&[aged("a", "old", "", 400), aged("a", "new", "", 10)])
-            .unwrap();
+        insert_ago(&mut store, &[aged("a", "old", "", 400)], 400);
+        insert_ago(&mut store, &[aged("a", "new", "", 10)], 10);
         let pruned = store.prune_items(Utc::now() - Duration::days(365)).unwrap();
         assert_eq!(pruned, 1);
         let left = store.query_items(&ItemQuery::default()).unwrap();
@@ -1133,7 +1149,7 @@ mod tests {
     #[test]
     fn pruned_items_still_in_their_feed_are_not_stored_again() {
         let mut store = Store::open_in_memory().unwrap();
-        store.insert_items(&[aged("a", "old", "", 400)]).unwrap();
+        insert_ago(&mut store, &[aged("a", "old", "", 400)], 400);
         store.record_fetch_ok("a", None, None).unwrap();
         store.prune_items(Utc::now() - Duration::days(365)).unwrap();
         // The next poll still sees the old entry: it isn't new, so it's never notified.
@@ -1147,10 +1163,8 @@ mod tests {
     #[test]
     fn pruning_a_story_takes_its_duplicates_along() {
         let mut store = Store::open_in_memory().unwrap();
-        let primary = store
-            .insert_items(&[aged("a", "1", "godot 4 8", 5)])
-            .unwrap();
-        // Another source's copy, dated later than the primary.
+        let primary = insert_ago(&mut store, &[aged("a", "1", "godot 4 8", 5)], 5);
+        // Another source's copy, dated later than the primary and seen just now.
         let dup = store
             .insert_items(&[aged("b", "x", "godot 4 8", 1)])
             .unwrap();
@@ -1175,7 +1189,7 @@ mod tests {
     fn removing_a_source_forgets_its_pruned_items() {
         let mut store = Store::open_in_memory().unwrap();
         store.add_source("a", "godot", "{}").unwrap();
-        store.insert_items(&[aged("a", "old", "", 400)]).unwrap();
+        insert_ago(&mut store, &[aged("a", "old", "", 400)], 400);
         store.prune_items(Utc::now() - Duration::days(365)).unwrap();
         store.remove_source("a").unwrap();
         // Added again later, it starts from scratch (its first fetch stays silent).
@@ -1186,5 +1200,16 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    #[test]
+    fn keeps_old_dated_items_until_they_were_seen_long_enough_ago() {
+        let mut store = Store::open_in_memory().unwrap();
+        // A backdated post that only just showed up may still be waiting to be notified.
+        let mut backdated = aged("a", "backdated", "", 400);
+        backdated.notify = true;
+        store.insert_items(&[backdated]).unwrap();
+        let pruned = store.prune_items(Utc::now() - Duration::days(365)).unwrap();
+        assert_eq!(pruned, 0);
     }
 }
