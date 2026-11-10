@@ -1352,4 +1352,26 @@ mod tests {
         let pruned = store.prune_items(Utc::now() - Duration::days(365)).unwrap();
         assert_eq!(pruned, 0);
     }
+
+    #[test]
+    fn pruned_items_drop_out_of_search_and_the_index_survives_vacuum() {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut old = aged("a", "old", "", 400);
+        old.title = "Bevy 0.1 released".into();
+        let mut recent = aged("a", "recent", "", 10);
+        recent.title = "Bevy 0.15 released".into();
+        insert_ago(&mut store, &[old], 400);
+        insert_ago(&mut store, &[recent], 10);
+        assert_eq!(search(&store, "bevy"), ["old", "recent"]);
+
+        store.prune_items(Utc::now() - Duration::days(365)).unwrap();
+        assert_eq!(search(&store, "bevy"), ["recent"]);
+        // The README suggests VACUUM to shrink the file; the search index must stay in step.
+        // With rank 1, FTS5 checks the index against the items table itself.
+        let check = "INSERT INTO items_fts (items_fts, rank) VALUES ('integrity-check', 1)";
+        store.conn().execute_batch(check).unwrap();
+        store.conn().execute_batch("VACUUM").unwrap();
+        store.conn().execute_batch(check).unwrap();
+        assert_eq!(search(&store, "bevy"), ["recent"]);
+    }
 }
