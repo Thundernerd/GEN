@@ -876,6 +876,38 @@ async fn admin_manages_notification_channels() {
 }
 
 #[tokio::test]
+async fn channels_switch_health_alerts_on_and_off() {
+    let st = state();
+    let cookie = login(&st).await;
+    let form = format!(
+        "name=chat&kind=discord&webhook_url={HOOK}&kinds=release&health_alerts=1&enabled=1"
+    );
+    let (status, _, _) = send(&st, post_form("/notifications/add", &form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert!(stored_channels(&st)[0].health_alerts);
+    let (_, body) = get_as(&st, "/notifications", &cookie).await;
+    assert!(
+        body.contains(r#"name="health_alerts" value="1" checked"#),
+        "{body}"
+    );
+    assert!(
+        body.contains("release · all engines · health alerts"),
+        "{body}"
+    );
+
+    let form = "original_name=chat&kind=discord&webhook_url=&kinds=release&enabled=1";
+    let (status, _, _) = send(&st, post_form("/notifications/edit", form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert!(!stored_channels(&st)[0].health_alerts);
+    let (_, body) = get_as(&st, "/notifications", &cookie).await;
+    assert!(
+        body.contains(r#"name="health_alerts" value="1">"#),
+        "{body}"
+    );
+    assert!(!body.contains("· health alerts"), "{body}");
+}
+
+#[tokio::test]
 async fn invalid_channels_reopen_their_dialog() {
     let st = state();
     let cookie = login(&st).await;

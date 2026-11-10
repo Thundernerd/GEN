@@ -76,7 +76,7 @@ async fn render(st: &AppState, feedback: Option<Value>, notice: Option<Value>) -
                 Some(f) if failed == Some(dialog.as_str()) => f["form"].clone(),
                 _ => form_values(&c.config),
             };
-            let rules = match &c.config.target {
+            let mut rules = match &c.config.target {
                 ChannelTarget::DiscordBot { subscriptions, .. } => {
                     let subscribed = subscriptions_summary(st, subscriptions);
                     form["subscriptions"] = json!(subscribed);
@@ -86,6 +86,9 @@ async fn render(st: &AppState, feedback: Option<Value>, notice: Option<Value>) -
                 }
                 _ => rules_summary(st, &c.config.rules),
             };
+            if c.config.health_alerts {
+                rules.push_str(" · health alerts");
+            }
             let style = style_of(&c.config.target);
             json!({
                 "name": c.config.name,
@@ -364,6 +367,7 @@ fn form_values(c: &ChannelConfig) -> Value {
         "keywords": c.rules.keywords.join(", "),
         "search": c.rules.search,
         "include_untagged": c.rules.include_untagged,
+        "health_alerts": c.health_alerts,
         "ntfy_server": "https://ntfy.sh",
         "smtp_port": 587,
         "style": style_of(&c.target).unwrap_or_default().key(),
@@ -438,6 +442,7 @@ impl Posted {
             "kinds": self.all("kinds"),
             "enabled": self.checked("enabled"),
             "include_untagged": self.checked("include_untagged"),
+            "health_alerts": self.checked("health_alerts"),
             "digest": self.checked("digest"),
         });
         for key in [
@@ -576,6 +581,7 @@ impl Posted {
             name,
             enabled: self.checked("enabled"),
             rules,
+            health_alerts: self.checked("health_alerts"),
             target,
         };
         channel.check()?;
@@ -596,6 +602,7 @@ impl Posted {
         };
         let mut channel = existing.clone();
         channel.enabled = self.checked("enabled");
+        channel.health_alerts = self.checked("health_alerts");
         channel.rules.keywords = split_list(self.get("keywords"));
         channel.rules.search = self.search();
         if let ChannelTarget::DiscordBot { style, .. } = &mut channel.target {

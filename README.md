@@ -29,6 +29,7 @@ Requires Rust 1.96 or newer (edition 2024). You don't need OpenSSL or a system S
 cargo run -- check-config     # validate config/gen.toml, list the sources, the unhealthy ones and warnings
 cargo run -- fetch            # poll every source once and print what's new (no notifications)
 cargo run -- fetch --source godot   # only sources whose id contains "godot"
+cargo run -- add bevy         # add a catalog engine or outlet, with its sources
 cargo run -- serve            # web server + background polling
 ```
 
@@ -184,7 +185,7 @@ Without `retention_days`, the database keeps every item and grows without bound.
 
 Engines, outlets and their sources live in the database and are managed on the Sources page (see "Managing sources from the web"). The first start on a database adds the engines in `catalog::SEEDED` (Unity, Unreal Engine and Godot) with their sources, once. On a database from before sources moved into it, that first start also deletes the items and fetch state of sources that are no longer configured.
 
-Everything else in the built-in catalog, `src/catalog.toml`, is offered as a suggestion on the Sources page. It includes the other C# engines and frameworks (tiers 1 and 2), notable engines without C# (tier 3) and general news outlets. It has no YouTube, forum, Reddit or Hacker News sources. To change the catalog, edit `src/catalog.toml` and rebuild; existing databases keep what they have.
+Everything else in the built-in catalog, `src/catalog.toml`, is offered as a suggestion on the Sources page. It includes the other C# engines and frameworks (tiers 1 and 2), notable engines without C# (tier 3) and general news outlets. It has no YouTube, forum, Reddit or Hacker News sources. To change the catalog, edit `src/catalog.toml` and rebuild; existing databases keep what they have, except that on every start each stored engine gets the catalog `exclude` phrases it lacks (phrases are only added, never removed, and engines that aren't in the catalog are left alone).
 
 There are two kinds of owners, and each has one or more `source` entries:
 
@@ -255,25 +256,26 @@ All source kinds also accept these fields:
 
 The tier only groups engines; it doesn't decide whether they are polled. Every catalog engine and outlet the database doesn't have, of any tier, is offered as a suggestion, and its sources are polled once you add it (see "Adding and removing sources, engines and outlets"). Catalog engines and outlets are always enabled; the catalog tests check this. A single catalog source with `enabled = false` is added switched off; switch it on from the Sources page (see "Switching sources on and off").
 
-The `check-config` and `fetch` commands only see the sources stored in the database, so a new catalog entry is invisible to them until it has been added from the suggestions. To add an engine or outlet to the catalog and try it out:
+The `check-config` and `fetch` commands only see the sources stored in the database, so a new catalog entry is invisible to them until it has been added, from the suggestions or with `add`. To add an engine or outlet to the catalog and try it out:
 
 1. Add the `[[engine]]` or `[[outlet]]` block (or an `[[engine.source]]` / `[[outlet.source]]` entry under an existing one) to `src/catalog.toml`.
 2. Run `cargo test catalog`, which checks that the catalog parses, is valid and has no Hacker News sources and no YouTube, Reddit or Discourse (`/latest.rss`) URLs.
 3. Try it on a scratch database, so your real one stays untouched. Write a scratch config, e.g. `data/scratch.toml` (`data/` is ignored by git):
 
    ```toml
-   [server]
-   bind = "127.0.0.1:8081"
-   base_url = "http://localhost:8081"
-   admin_token = "scratch"
-
    [database]
    path = "data/scratch.db"
    ```
 
-   Run `cargo run -- --config data/scratch.toml serve`, open <http://localhost:8081/sources>, log in with the token, and click **Add** next to the new entry under **Suggestions**. GEN polls its sources straight away: the log shows `fetched source=<source id> new=<count>` for each, and an engine's page, `/engine/<id>`, lists its items.
-4. After that, `cargo run -- --config data/scratch.toml fetch --source <id>` polls them again and prints the items that are new since then (usually none, or `not modified`). Editing `src/catalog.toml` doesn't change an entry a database already has. To try a changed entry, stop the server, delete `data/scratch.db` (with its `-wal` and `-shm` files) and repeat step 3.
-5. Rebuild and restart the real server. The new entry shows under **Suggestions** on the real server's Sources page.
+   Then add the entry and poll its sources once:
+
+   ```sh
+   cargo run -- --config data/scratch.toml add <id>              # prints the sources it added
+   cargo run -- --config data/scratch.toml fetch --source <id>   # prints the first fetch's items
+   ```
+
+   `fetch --source` polls every source whose id contains the text, so a short id can pull in other entries' sources too. `add` lists sources added switched off as `(switched off)`; `fetch` skips them. `add` fails if `<id>` isn't in the catalog or the database already has it. A new database already has the seeded engines (Unity, Unreal Engine and Godot), so for those skip `add` and just `fetch`. A later `fetch` prints only the items that are new since then (usually none, or `not modified`). Editing `src/catalog.toml` doesn't change an entry a database already has, apart from new `exclude` phrases, which are added on the next start. To try a changed entry, delete `data/scratch.db` (with its `-wal` and `-shm` files) and repeat step 3.
+4. Rebuild and restart the real server. The new entry shows under **Suggestions** on the real server's Sources page. You can also add it from the command line: stop the server, run `add <id>` with the real config, and start it again (a running server doesn't see what `add` stores until it restarts).
 
 New sources fill the database silently on their first successful fetch.
 
@@ -286,6 +288,8 @@ Channels are managed on the **Notifications** page (`/notifications`), which sho
 - **Also news-outlet items that mention no engine:** off by default.
 - **Keywords:** the title or summary must contain at least one (case-insensitive).
 - **Search:** works like the site's search box: every word must match the start of a word in the title or summary, ignoring case and accents. `godot shader` gets "Godot shaders explained" but not "Godot 4.8 released". Use it to have new items of a search you built on the timeline pushed to the channel.
+
+**Health alerts** (off by default) also sends the channel a message when a source starts failing (see "Source health"), whatever its rules, e.g. "GEN: Godot feed https://godotengine.org/rss.xml is failing (3 failures in a row, last OK 2 days ago: unexpected status 404 Not Found from …)", with a link to the unhealthy sources on `/sources`. A source alerts once, when it goes from working (`ok`, `stale` or `retrying`) to `failing`; it doesn't alert again while it stays failing, nor when it recovers. A new source that fails on its first fetch doesn't alert either. A source that last fetched fine but wasn't fetched for days (GEN was stopped, or the source switched off) alerts on its next failed fetch. Alerts that can't be sent are retried like items, for up to three days.
 
 Each channel shows its last delivery or error. **Send test** sends it something right away, ignoring its rules, so you can see how notifications look there: one of several examples (a release, a prerelease, a news post, an outlet article about two engines, one with no engine, summary or link, and one long enough to be cut short), all examples at once (one digest mail for a digest channel), or one of the newest real items. Changes take effect on the notifier's next run, which starts right after a change. A new channel only gets items that arrive after it was added, and switching a channel off keeps its place, so it catches up on items from the last three days when switched back on.
 
@@ -323,6 +327,7 @@ kind = "ntfy"                    # or "discord" (webhook_url), "email" (smtp_hos
 server = "https://ntfy.sh"       #   username, password, from, to = [...], digest) or "apprise"
                                  #   (server, key or urls, tag, username, password)
 topic = "${GEN_NTFY_TOPIC}"
+health_alerts = true             # also a message when a source starts failing
   [notify.channel.rules]
   engines = ["godot", "stride"]
   kinds = ["release", "news"]
@@ -431,7 +436,7 @@ Each source on `/sources` and on the engine pages has a status:
 | `stale` | Fetches fine, but its newest item is over six months old, or it has no items at all, e.g. an abandoned blog or a scraper whose selector no longer matches. Items deleted by `retention_days` still count for their source's newest item. |
 | `disabled` | Switched off. |
 
-Failing and stale sources count as unhealthy. The summary above the table counts each status, and **Show only unhealthy** lists just those sources. Admins also see how many sources need attention next to the page title. `gen check-config` lists the unhealthy sources with the reason, e.g. `failing  unity:feed:…  (3 failures in a row, never OK: HTTP 404)`.
+Failing and stale sources count as unhealthy. The summary above the table counts each status, and **Show only unhealthy** lists just those sources. Admins also see how many sources need attention next to the page title. `gen check-config` lists the unhealthy sources with the reason, e.g. `failing  unity:feed:…  (3 failures in a row, never OK: HTTP 404)`. Channels with **health alerts** on get a message when a source starts failing (see "Notifications").
 
 ### Switching sources on and off
 
@@ -471,7 +476,7 @@ Layout of `src/`:
 
 | Module | Responsibility |
 |---|---|
-| `main.rs` | CLI (`serve`, `fetch`, `check-config`, `notify-test`) and wiring. |
+| `main.rs` | CLI (`serve`, `fetch`, `check-config`, `add`, `notify-test`) and wiring. |
 | `config.rs` | `gen.toml` and engine/outlet/source schema, validation and `${ENV}` expansion. |
 | `model.rs` | Shared types: `ItemKind`, `Topic`, `RawItem`, `NewItem`, `Item`, `SourceState`. |
 | `fetch/` | HTTP client and one fetcher per source kind: `feed`, `github`, `unity`, `hn`, `html`. |
@@ -479,10 +484,10 @@ Layout of `src/`:
 | `health.rs` | Source health (ok, retrying, failing, stale …) from fetch state and newest item. |
 | `time_ago.rs` | Relative times such as "3 hours ago", for the web UI and `check-config`. |
 | `store.rs` | SQLite storage: items, source state, engines/outlets/sources and queries for the web UI. |
-| `catalog.rs` | The built-in catalog (`catalog.toml`): seeding a new database and the suggestions. |
+| `catalog.rs` | The built-in catalog (`catalog.toml`): seeding a new database, merging catalog excludes into stored engines, and the suggestions. |
 | `registry.rs` | The live set of sources stored in the database, published to the web UI, pipeline and scheduler. |
-| `pipeline.rs` | Polls a source: fetch, classify, dedupe and store. |
-| `notify/` | Rule matching and delivery: `discord` (webhooks and bot channels), `ntfy`, `email`, `apprise`. |
+| `pipeline.rs` | Polls a source: fetch, classify, dedupe and store, and queue a health alert when it starts failing. |
+| `notify/` | Rule matching and delivery: `discord` (webhooks and bot channels), `ntfy`, `email`, `apprise`; `alert` for health alerts. |
 | `discord_bot/` | The Discord bot: gateway connection, `/gen` commands, channel layout for `/gen setup`, and subscriptions stored as notification channels. |
 | `web/` | axum router: HTML pages (minijinja templates), Atom feed, JSON API. |
 
