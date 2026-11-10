@@ -38,11 +38,11 @@ cd gen-<version>-x86_64-unknown-linux-gnu
 Every release is also a multi-arch Docker image (amd64 and arm64):
 
 ```sh
-docker pull ghcr.io/thundernerd/gen:latest      # or a version: ghcr.io/thundernerd/gen:0.1.0
+docker pull ghcr.io/thundernerd/gen:latest      # or pin: :1 (latest 1.x), :1.0 or :1.0.0
 docker run -d --name gen -p 8080:8080 -v gen-data:/data ghcr.io/thundernerd/gen:latest
 ```
 
-The Proxmox installer can build a release too: set `GEN_REF` to its tag, e.g. `GEN_REF=v0.1.0`.
+The Proxmox installer can build a release too: set `GEN_REF` to its tag, e.g. `GEN_REF=v1.0.0`.
 
 ## Quick start (local)
 
@@ -186,7 +186,7 @@ path = "data/gen.db"               # SQLite file; parent dir must be writable
 [polling]
 default_interval_minutes = 60      # until changed on the Sources page; per source: interval_minutes
 concurrency = 8                    # max sources fetched at the same time
-# user_agent = "GEN/0.1.0 (Game Engine News aggregator)"
+# user_agent = "GEN/1.0.0 (Game Engine News aggregator)"
 # github_token = "${GITHUB_TOKEN}" # optional; the GITHUB_TOKEN env var is used automatically
 
 # [[notify.channel]]               # imported once, then managed on the website; see "Notifications"
@@ -530,4 +530,4 @@ To release, bump `version` in `Cargo.toml` (and the `user_agent` example above),
 git tag -a v0.2.0 -m "GEN 0.2.0" && git push origin v0.2.0
 ```
 
-`.github/workflows/release.yml` checks that the tag matches `Cargo.toml`, runs CI, builds the archives, publishes the Docker image to `ghcr.io/thundernerd/gen` (tags `0.2.0`, `0.2` and `latest`) and creates the GitHub release with generated notes. A tag with a suffix, such as `v0.2.0-rc.1`, becomes a prerelease and doesn't move `latest`.
+`.github/workflows/release.yml` checks that the tag matches `Cargo.toml`, runs CI, builds the archives, publishes the Docker image to `ghcr.io/thundernerd/gen` (tags `0.2.0`, `0.2`, `latest`, and the major version from 1.0 on) and creates the GitHub release with generated notes. A tag with a suffix, such as `v0.2.0-rc.1`, becomes a prerelease and doesn't move `latest`.
