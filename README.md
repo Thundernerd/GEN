@@ -1,5 +1,8 @@
 # GEN — Game Engine News
 
+[![CI](https://github.com/Thundernerd/GEN/actions/workflows/ci.yml/badge.svg)](https://github.com/Thundernerd/GEN/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/Thundernerd/GEN)](https://github.com/Thundernerd/GEN/releases/latest)
+
 GEN tracks new releases and news for game engines and collects them on one page, in one feed and in your notification channels. It focuses on engines you can script in C#:
 
 - **Tracked engines:** Unity, Unreal, Godot, Stride, Flax, S&Box, Prowl, LODZERO and OpenEngine, plus other C#-capable and notable engines.
@@ -20,6 +23,26 @@ GEN is a single Rust binary. It contains a web server and a background poller, a
 ### How it works
 
 `gen serve` loads `gen.toml` for app settings and reads the engines, outlets and sources from the database; a new database starts with Unity, Unreal Engine and Godot from the built-in catalog. It then starts an axum HTTP server and a scheduler. The scheduler polls each enabled source on its interval, with a limit on how many fetches run at once. Fetchers turn responses into raw items. The classifier assigns a kind and engine tags, and computes a normalized story key for deduplication. New items go into SQLite, and each item that matches a channel's rules is sent to that channel. The web UI and the feeds read from the same database.
+
+## Download a release
+
+Each [release](https://github.com/Thundernerd/GEN/releases) has prebuilt archives for Linux (x86_64 and arm64, glibc 2.35 or newer, so Debian 12 and Ubuntu 22.04 work) and macOS (Apple silicon), with a `SHA256SUMS` file. An archive contains the `gen` binary, the `templates/` and `static/` folders it serves, a default `config/gen.toml` and the systemd unit. Run it from the extracted folder:
+
+```sh
+tar -xzf gen-<version>-x86_64-unknown-linux-gnu.tar.gz
+cd gen-<version>-x86_64-unknown-linux-gnu
+./gen check-config
+./gen serve
+```
+
+Every release is also a multi-arch Docker image (amd64 and arm64):
+
+```sh
+docker pull ghcr.io/thundernerd/gen:latest      # or a version: ghcr.io/thundernerd/gen:0.1.0
+docker run -d --name gen -p 8080:8080 -v gen-data:/data ghcr.io/thundernerd/gen:latest
+```
+
+The Proxmox installer can build a release too: set `GEN_REF` to its tag, e.g. `GEN_REF=v0.1.0`.
 
 ## Quick start (local)
 
@@ -492,3 +515,19 @@ Layout of `src/`:
 | `web/` | axum router: HTML pages (minijinja templates), Atom feed, JSON API. |
 
 Runtime assets are in `templates/` (minijinja) and `static/` (CSS and other static files). Deployment files are in `deploy/`, `Dockerfile` and `docker-compose.yml`.
+
+### CI and releases
+
+Every pull request and push to `main` runs `.github/workflows/ci.yml`: `cargo fmt --check`, `cargo clippy -D warnings`, `cargo test`, `gen check-config`, and a Docker build. Run the same checks locally before pushing:
+
+```sh
+cargo fmt --all --check && cargo clippy --all-targets --locked -- -D warnings && cargo test --locked
+```
+
+To release, bump `version` in `Cargo.toml` (and the `user_agent` example above), merge that to `main`, then push a matching tag:
+
+```sh
+git tag -a v0.2.0 -m "GEN 0.2.0" && git push origin v0.2.0
+```
+
+`.github/workflows/release.yml` checks that the tag matches `Cargo.toml`, runs CI, builds the archives, publishes the Docker image to `ghcr.io/thundernerd/gen` (tags `0.2.0`, `0.2` and `latest`) and creates the GitHub release with generated notes. A tag with a suffix, such as `v0.2.0-rc.1`, becomes a prerelease and doesn't move `latest`.
