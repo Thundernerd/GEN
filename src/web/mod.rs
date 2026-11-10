@@ -466,12 +466,7 @@ async fn index_page(
         })
         .collect();
     let csharp_link = link("csharp", (!filter.csharp).then(|| "1".to_string()));
-    // The feed takes the engine, kind and search filters.
-    let feed_pairs: Vec<_> = pairs
-        .iter()
-        .filter(|(k, _)| matches!(*k, "engine" | "kind" | "q"))
-        .cloned()
-        .collect();
+    let feed_pairs = filter_pairs(&filter.clone().for_feed());
     st.render(
         "index.html",
         json!({
@@ -1121,13 +1116,7 @@ async fn feed(State(st): State<AppState>, Query(params): Query<ListParams>) -> R
 }
 
 async fn feed_response(st: &AppState, params: ListParams) -> PageResult {
-    let full = params.filter();
-    let filter = ItemFilter {
-        engine: full.engine,
-        kind: full.kind,
-        q: full.q,
-        ..Default::default()
-    };
+    let filter = params.filter().for_feed();
     let (items, _) = st.items_with_dups(filter.clone(), FEED_SIZE, 0).await?;
     let lookup = &st.registry.current().lookup;
     let mut title = "GEN — Game Engine News".to_string();

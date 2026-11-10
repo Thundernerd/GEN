@@ -27,6 +27,16 @@ pub struct ItemFilter {
 }
 
 impl ItemFilter {
+    /// The part of the filter `/feed.xml` takes: engine, kind and search.
+    pub fn for_feed(self) -> ItemFilter {
+        ItemFilter {
+            engine: self.engine,
+            kind: self.kind,
+            q: self.q,
+            ..Default::default()
+        }
+    }
+
     fn needs_scan(&self) -> bool {
         self.tier.is_some() || self.csharp
     }
