@@ -92,11 +92,10 @@ impl Pipeline {
                 let interval = source
                     .interval_minutes
                     .unwrap_or_else(|| self.settings.default_interval());
-                let (source, before) = (source.clone(), state);
+                let source = source.clone();
                 let alerted = self
                     .with_store(move |s| {
-                        s.record_fetch_error(&source.id, &msg)?;
-                        alert::after_fetch_error(s, &source, &before, enabled, interval, Utc::now())
+                        alert::after_fetch_error(s, &source, &msg, enabled, interval, Utc::now())
                     })
                     .await?;
                 if alerted {

@@ -10,20 +10,19 @@ use chrono::{DateTime, Duration, Utc};
 use super::{NotifyContext, TextMessage};
 use crate::config::{ChannelConfig, ResolvedSource, SourceSpec};
 use crate::health::{Health, SourceHistory, starts_failing};
-use crate::model::SourceState;
 use crate::pipeline::Pipeline;
 use crate::store::{Store, StoredHealthAlert};
 
 /// Alerts that couldn't be sent for this long are given up on.
 const MAX_AGE: Duration = Duration::days(3);
 
-/// After a failed fetch has been recorded: queues an alert for every enabled channel with
-/// health alerts on, if the fetch moved the source into `failing`. `before` is the
-/// source's state before the fetch. Returns whether any alert was queued.
+/// Records a failed fetch of `source` and, if it moved the source into `failing`, queues
+/// an alert for every enabled channel with health alerts on. Returns whether any alert
+/// was queued.
 pub fn after_fetch_error(
     store: &Store,
     source: &ResolvedSource,
-    before: &SourceState,
+    error: &str,
     enabled: bool,
     interval_minutes: u64,
     now: DateTime<Utc>,
@@ -33,8 +32,17 @@ pub fn after_fetch_error(
         state,
         latest_item: None,
     };
+    let before = store.source_state(&source.id)?;
+    store.record_fetch_error(&source.id, error)?;
     let after = history(store.source_state(&source.id)?);
-    let health_before = history(before.clone()).health(enabled, interval_minutes, now);
+    let health_before = match history(before.clone()).health(enabled, interval_minutes, now) {
+        // Its last fetch worked; it only looks failing because nothing fetched it for days
+        // (GEN was down, or the source switched off).
+        Health::Failing if before.consecutive_failures == 0 && before.last_ok.is_some() => {
+            Health::Ok
+        }
+        health => health,
+    };
     let health_after = after.health(enabled, interval_minutes, now);
     if !starts_failing(health_before, health_after) {
         return Ok(false);
@@ -45,7 +53,7 @@ pub fn after_fetch_error(
     for channel in super::load_channels(store)? {
         let channel = channel.config;
         if channel.enabled && channel.health_alerts {
-            store.add_health_alert(&channel.name, &source.id, &label, &reason)?;
+            store.add_health_alert(&channel.name, &source.id, &label, &reason, now)?;
             queued = true;
         }
     }
@@ -164,6 +172,62 @@ mod tests {
             }
         });
         (format!("http://{addr}"), seen)
+    }
+
+    fn feed_source() -> ResolvedSource {
+        let config: crate::config::SourcesConfig = toml::from_str(
+            r#"
+            [[engine]]
+            id = "godot"
+            name = "Godot"
+            tier = 1
+            csharp = "first-class"
+              [[engine.source]]
+              kind = "feed"
+              url = "https://godotengine.org/rss.xml"
+            "#,
+        )
+        .unwrap();
+        config.all_sources().remove(0)
+    }
+
+    fn store_with_alert_channel() -> Store {
+        let store = Store::open_in_memory().unwrap();
+        let channel: ChannelConfig = toml::from_str(
+            r#"
+            name = "admin"
+            kind = "ntfy"
+            topic = "admin"
+            health_alerts = true
+            "#,
+        )
+        .unwrap();
+        let json = serde_json::to_string(&channel).unwrap();
+        store.add_channel("admin", &json).unwrap();
+        store
+    }
+
+    /// GEN was down (or the source switched off) for days: the source last fetched fine
+    /// days ago and only looks failing because nothing fetched it since. Its first real
+    /// failure is a change to failing.
+    #[test]
+    fn the_first_failure_after_a_pause_alerts() {
+        let store = store_with_alert_channel();
+        let source = feed_source();
+        store.record_fetch_ok(&source.id, None, None).unwrap();
+        let later = Utc::now() + Duration::days(5);
+        assert!(after_fetch_error(&store, &source, "HTTP 404", true, 60, later).unwrap());
+        let alerts = store
+            .pending_health_alerts("admin", Utc::now() - Duration::days(1))
+            .unwrap();
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(
+            alerts[0].reason,
+            "1 failure in a row, last OK 5 days ago: HTTP 404"
+        );
+
+        // It stays failing.
+        assert!(!after_fetch_error(&store, &source, "HTTP 404", true, 60, later).unwrap());
     }
 
     #[tokio::test]

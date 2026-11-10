@@ -840,11 +840,12 @@ impl Store {
         source_id: &str,
         source: &str,
         reason: &str,
+        created_at: DateTime<Utc>,
     ) -> anyhow::Result<()> {
         self.conn.execute(
             "INSERT INTO health_alerts (channel, source_id, source, reason, created_at)
              VALUES (?1, ?2, ?3, ?4, ?5)",
-            params![channel, source_id, source, reason, Utc::now()],
+            params![channel, source_id, source, reason, created_at],
         )?;
         Ok(())
     }
