@@ -297,6 +297,20 @@ mod tests {
     }
 
     #[test]
+    fn game_titles_containing_unity_do_not_tag_unity() {
+        let classifier = crate::classify::Classifier::new(&CATALOG);
+        let cases: &[(&str, &[&str])] = &[
+            ("Assassin's Creed Unity gets a Linux port", &[]),
+            ("Assassin’s Creed Unity runs well on Proton", &[]),
+            ("Unity of Command II DLC out now", &[]),
+            ("Unity 6.3 LTS released", &["unity"]),
+        ];
+        for (title, expected) in cases {
+            assert_eq!(classifier.match_engines(title), *expected, "{title}");
+        }
+    }
+
+    #[test]
     fn unity_networking_libraries_are_tier_2_with_icons() {
         for id in ["mirror", "fishnet"] {
             let engine = CATALOG.engine(id).expect(id);
