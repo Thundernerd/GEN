@@ -7,7 +7,8 @@
 //!
 //! Titles that are just a version (e.g. Godot's `4.7.2-stable`, S&Box's `26.10.13`) are
 //! prefixed with the repository name so they make sense out of context
-//! (`godot 4.7.2-stable`); descriptive names such as `Stride 4.4.1` are kept as is.
+//! (`godot 4.7.2-stable`); a `-builds` suffix is dropped from that name. Descriptive names
+//! such as `Stride 4.4.1` are kept as is.
 
 use chrono::{DateTime, Utc};
 use reqwest::header::{self, HeaderMap, HeaderValue};
@@ -179,7 +180,9 @@ fn has_prefix(tag: &str, prefix: Option<&str>) -> bool {
     prefix.is_none_or(|p| tag.starts_with(p))
 }
 
-/// Prefixes bare version names (`4.7.2-stable`, `v1.2`) with the repository name.
+/// Prefixes bare version names (`4.7.2-stable`, `v1.2`) with the repository name, without a
+/// `-builds` suffix: `godotengine/godot-builds` publishes the same releases as `godot` (plus
+/// the prereleases), and equal titles let the story key merge them.
 fn release_title(repo: &str, name: &str) -> String {
     let mut chars = name.chars();
     let bare_version = match chars.next() {
@@ -189,6 +192,7 @@ fn release_title(repo: &str, name: &str) -> String {
     };
     if bare_version {
         let short = repo.rsplit('/').next().unwrap_or(repo);
+        let short = short.strip_suffix("-builds").unwrap_or(short);
         format!("{short} {name}")
     } else {
         name.to_string()
@@ -226,6 +230,16 @@ mod tests {
             "godot 4.7.2-stable"
         );
         assert_eq!(release_title("x/flax", "v1.13"), "flax v1.13");
+        // Build repos are named after their project, so a stable release published in both
+        // godot and godot-builds gets the same title (and story key).
+        assert_eq!(
+            release_title("godotengine/godot-builds", "4.7.2-stable"),
+            "godot 4.7.2-stable"
+        );
+        assert_eq!(
+            release_title("godotengine/godot-builds", "4.8-beta3"),
+            "godot 4.8-beta3"
+        );
         assert_eq!(
             release_title("stride3d/stride", "Stride 4.4.1"),
             "Stride 4.4.1"
