@@ -618,6 +618,7 @@ impl Store {
             "SELECT rowid FROM items_fts WHERE items_fts MATCH ?1
              AND rowid IN (SELECT value FROM json_each(?2))",
         )?;
+        // The ids go in as one JSON array, so any number of them fit one cached statement.
         let ids = serde_json::to_string(ids)?;
         let rows = stmt.query_map(params![fts, ids], |r| r.get::<_, i64>(0))?;
         Ok(rows.collect::<Result<_, _>>()?)

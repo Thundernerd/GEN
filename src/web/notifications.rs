@@ -81,12 +81,7 @@ async fn render(st: &AppState, feedback: Option<Value>, notice: Option<Value>) -
                     let subscribed = subscriptions_summary(st, subscriptions);
                     form["subscriptions"] = json!(subscribed);
                     let mut parts = vec![subscribed.join(", ")];
-                    if !c.config.rules.keywords.is_empty() {
-                        parts.push(format!("keywords: {}", c.config.rules.keywords.join(", ")));
-                    }
-                    if let Some(search) = &c.config.rules.search {
-                        parts.push(format!("search: {search}"));
-                    }
+                    text_rules_summary(&c.config.rules, &mut parts);
                     parts.join(" · ")
                 }
                 _ => rules_summary(st, &c.config.rules),
@@ -306,13 +301,18 @@ fn rules_summary(st: &AppState, rules: &NotifyRules) -> String {
     if rules.include_untagged {
         parts.push("untagged outlet news".to_string());
     }
+    text_rules_summary(rules, &mut parts);
+    parts.join(" · ")
+}
+
+/// The keywords and search rules, which every kind of channel can have.
+fn text_rules_summary(rules: &NotifyRules, parts: &mut Vec<String>) {
     if !rules.keywords.is_empty() {
         parts.push(format!("keywords: {}", rules.keywords.join(", ")));
     }
     if let Some(search) = &rules.search {
         parts.push(format!("search: {search}"));
     }
-    parts.join(" · ")
 }
 
 /// The kinds a channel is sent: `kinds` (or all when empty) minus `exclude_kinds`.

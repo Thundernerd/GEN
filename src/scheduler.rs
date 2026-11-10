@@ -489,14 +489,17 @@ impl Notifier {
         if pending.is_empty() {
             return Ok(false);
         }
-        let found = match channel.rules.search.clone() {
+        // The search rule needs the search index, so the store answers it for all pending
+        // items at once; `notify::accepts` checks the other rules.
+        let found = match &channel.rules.search {
             Some(search) => {
                 let ids: Vec<i64> = pending.iter().map(|i| i.id).collect();
-                let found = self
-                    .pipeline
-                    .with_store(move |s| s.matching_search(&ids, &search))
-                    .await?;
-                Some(found)
+                let search = search.clone();
+                Some(
+                    self.pipeline
+                        .with_store(move |s| s.matching_search(&ids, &search))
+                        .await?,
+                )
             }
             None => None,
         };

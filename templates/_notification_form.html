@@ -22,6 +22,11 @@
 </label>
 {%- endmacro %}
 
+{%- macro text_rules(f) %}
+<label><span>Keywords (optional, comma-separated: only items mentioning one)</span><input name="keywords" value="{{ f.keywords or "" }}"></label>
+<label><span>Search (optional: every word must match, like the site's search box)</span><input type="search" name="search" value="{{ f.search or "" }}"></label>
+{%- endmacro %}
+
 {%- macro channel_dialog(id, title, action, f, engines, kinds, feedback, secrets=none, edit=false, styles=[]) %}
 {%- set failed = feedback and feedback.dialog == id %}
 <dialog id="{{ id }}" class="form-dialog" aria-labelledby="{{ id }}-title"{% if failed %} open data-reopen{% endif %}>
@@ -57,8 +62,7 @@
       <p class="form-hint">{{ (f.subscriptions or []) | join(", ") }}</p>
       {{ style_select(f, styles, true) }}
       <p class="form-hint">Change these in Discord with <code>/gen subscribe</code>, <code>/gen unsubscribe</code> and <code>/gen remove</code>.</p>
-      <label><span>Keywords (optional, comma-separated: only items mentioning one)</span><input name="keywords" value="{{ f.keywords or "" }}"></label>
-      <label><span>Search (optional: every word must match, like the site's search box)</span><input type="search" name="search" value="{{ f.search or "" }}"></label>
+      {{ text_rules(f) }}
     </fieldset>
     {%- else %}
     <p class="form-hint">Secrets can be written as <code>${VARIABLE}</code> to read them from GEN's environment instead of storing them.</p>
@@ -122,8 +126,7 @@
         {%- endfor %}
       </div>
       <label class="check"><input type="checkbox" name="include_untagged" value="1"{% if f.include_untagged %} checked{% endif %}> Also news-outlet items that mention no engine</label>
-      <label><span>Keywords (optional, comma-separated: only items mentioning one)</span><input name="keywords" value="{{ f.keywords or "" }}"></label>
-      <label><span>Search (optional: every word must match, like the site's search box)</span><input type="search" name="search" value="{{ f.search or "" }}"></label>
+      {{ text_rules(f) }}
     </fieldset>
     {%- endif %}
 
