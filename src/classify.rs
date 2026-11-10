@@ -6,7 +6,9 @@
 //! Every enabled engine gets one compiled regex built from its `aliases` and one from its
 //! `exclude` phrases. Matching is whole-word with explicit boundaries (a neighbouring char
 //! must not be a letter, digit or `_`), so aliases containing symbols such as `s&box`, `c#`
-//! or `.net` work, and whitespace inside an alias matches any run of whitespace.
+//! or `.net` work, and whitespace inside an alias matches any run of whitespace. An
+//! apostrophe matches a straight (`'`) or typographic (`’`) one, or none, so
+//! `"assassin's creed unity"` also matches "Assassin’s Creed Unity" and "Assassins Creed Unity".
 //!
 //! Case rule: an all-lowercase alias matches case-insensitively, while an alias containing
 //! an uppercase letter matches case-sensitively. This is how the curator avoids false
@@ -146,7 +148,8 @@ fn phrase_regex(phrases: &[String], case_by_alias: bool) -> Option<Regex> {
         .map(|p| {
             let body = p
                 .split_whitespace()
-                .map(regex::escape)
+                // An apostrophe matches a straight or typographic one, or none.
+                .map(|w| regex::escape(w).replace(['\'', '’'], "['’]?"))
                 .collect::<Vec<_>>()
                 .join(r"\s+");
             if case_by_alias && p.chars().any(char::is_uppercase) {

@@ -176,7 +176,7 @@ Relative paths resolve against the working directory.
 
 **Set a GitHub token.** It is optional, but recommended: with a token, `github` sources in `releases` mode use the GitHub API, which marks prereleases. Without one they read the public `releases.atom` feed, which has no prerelease flag (only a title such as `-beta` marks one), and every GitHub source polls github.com anonymously. A fine-grained token with no permissions is enough; put it in the `GITHUB_TOKEN` env var or `polling.github_token`. `gen check-config` warns, and `gen serve` logs a warning at startup, when GitHub releases sources are switched on without a token, with an estimate of the requests per hour they make. Tags and commits always use the Atom feeds.
 
-When a host answers with a rate limit (HTTP 429, or GitHub's 403 with `x-ratelimit-remaining: 0`) and says when it resets (`Retry-After` or `x-ratelimit-reset`), every source on that host waits until then instead of retrying on its own.
+When a host answers with a rate limit (HTTP 429, or GitHub's 403 with `x-ratelimit-remaining: 0`) and says when it resets (`Retry-After` or `x-ratelimit-reset`), every source on that host waits until then instead of retrying on its own. Only the source that got the rate limit counts as failing; the others are skipped, not failed: they keep their health on the Sources page, their skips are logged at `debug`, and "Fetch now", "Fetch all now" and `gen fetch` report them as skipped.
 
 Without `retention_days`, the database keeps every item and grows without bound. With it, GEN deletes items that are dated, and were first fetched, more than that many days ago. It does so at startup and then once a day, and deletes their cross-source duplicates with them. It must be at least 7, the window in which the same story from different sources is merged. GEN remembers each deleted item's source and id, so a feed that still lists an old entry doesn't bring it back as new or notify it again. It forgets them once the feed hasn't listed the entry for `retention_days`, keeping only each source's newest, so this record stays about as large as what your feeds currently list. An entry a feed drops for that long and then lists again comes back as new. SQLite reuses the freed space; the file doesn't shrink unless you run `sqlite3 gen.db VACUUM` while GEN is stopped.
 
@@ -251,16 +251,29 @@ All source kinds also accept these fields:
 
 - Tier 1 covers major or very active engines with C# support, plus Unreal (C# via plugins only): Unity, Unreal, Godot (.NET), Stride, Flax, S&Box, Prowl, OpenEngine, MonoGame, FNA, NeoAxis, Evergine, UNIGINE, Silk.NET and BRUTAL.
 - Tier 2 covers niche C# engines, frameworks and libraries, such as LODZERO, KNI, Murder, Raylib-cs, Foster, MonoGame.Extended, Myra, Arch and BEPUphysics.
-- Tier 3 covers notable engines without C# support, such as Bevy, Defold, O3DE and GameMaker. Tier-3 engines ship with `enabled = false`, so they are listed but not polled. Set `enabled = true` on any you want to follow.
+- Tier 3 covers notable engines without C# support, such as Bevy, Defold, O3DE and GameMaker.
 
-You can disable a whole engine or outlet, or a single source, with `enabled = false`. Run `gen check-config` after editing.
+The tier only groups engines; it doesn't decide whether they are polled. Every catalog engine and outlet the database doesn't have, of any tier, is offered as a suggestion, and its sources are polled once you add it (see "Adding and removing sources, engines and outlets"). Catalog engines and outlets are always enabled; the catalog tests check this. A single catalog source with `enabled = false` is added switched off; switch it on from the Sources page (see "Switching sources on and off").
 
-To add an engine or outlet:
+The `check-config` and `fetch` commands only see the sources stored in the database, so a new catalog entry is invisible to them until it has been added from the suggestions. To add an engine or outlet to the catalog and try it out:
 
-1. Add the `[[engine]]` or `[[outlet]]` block.
-2. Run `cargo run -- check-config`.
-3. Run `cargo run -- fetch --source <id>` to see what it produces.
-4. Restart the server.
+1. Add the `[[engine]]` or `[[outlet]]` block (or an `[[engine.source]]` / `[[outlet.source]]` entry under an existing one) to `src/catalog.toml`.
+2. Run `cargo test catalog`, which checks that the catalog parses, is valid and has no Hacker News sources and no YouTube, Reddit or Discourse (`/latest.rss`) URLs.
+3. Try it on a scratch database, so your real one stays untouched. Write a scratch config, e.g. `data/scratch.toml` (`data/` is ignored by git):
+
+   ```toml
+   [server]
+   bind = "127.0.0.1:8081"
+   base_url = "http://localhost:8081"
+   admin_token = "scratch"
+
+   [database]
+   path = "data/scratch.db"
+   ```
+
+   Run `cargo run -- --config data/scratch.toml serve`, open <http://localhost:8081/sources>, log in with the token, and click **Add** next to the new entry under **Suggestions**. GEN polls its sources straight away: the log shows `fetched source=<source id> new=<count>` for each, and an engine's page, `/engine/<id>`, lists its items.
+4. After that, `cargo run -- --config data/scratch.toml fetch --source <id>` polls them again and prints the items that are new since then (usually none, or `not modified`). Editing `src/catalog.toml` doesn't change an entry a database already has. To try a changed entry, stop the server, delete `data/scratch.db` (with its `-wal` and `-shm` files) and repeat step 3.
+5. Rebuild and restart the real server. The new entry shows under **Suggestions** on the real server's Sources page.
 
 New sources fill the database silently on their first successful fetch.
 
