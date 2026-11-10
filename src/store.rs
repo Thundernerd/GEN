@@ -13,7 +13,8 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use crate::model::{Item, ItemKind, NewItem, SourceState};
 
-/// Items with the same `story_key` within this window are treated as the same story.
+/// Items from different sources with the same `story_key` whose dates lie within this many
+/// days of each other are treated as the same story, however long ago they were published.
 pub const DUPLICATE_WINDOW_DAYS: i64 = 7;
 
 /// Index in `MIGRATIONS` of the migration that adds full-text search.
@@ -457,8 +458,10 @@ impl Store {
     // -- items --------------------------------------------------------------
 
     /// Inserts items, skipping ones already stored (or pruned) for the same source. Returns
-    /// the newly stored items; ones whose story was already stored from another source within
-    /// `DUPLICATE_WINDOW_DAYS` come back with `duplicate_of` set.
+    /// the newly stored items; ones whose story was already stored from another source, dated
+    /// within `DUPLICATE_WINDOW_DAYS` of the new item, come back with `duplicate_of` set. The
+    /// window is measured between the two items' dates, so a first fetch's backfill of old
+    /// releases still merges with the same releases stored from another source.
     pub fn insert_items(&mut self, items: &[NewItem]) -> anyhow::Result<Vec<Item>> {
         self.insert_items_at(items, Utc::now())
     }
@@ -469,7 +472,7 @@ impl Store {
         items: &[NewItem],
         now: DateTime<Utc>,
     ) -> anyhow::Result<Vec<Item>> {
-        let window_start = now - Duration::days(DUPLICATE_WINDOW_DAYS);
+        let window = Duration::days(DUPLICATE_WINDOW_DAYS);
         let tx = self.conn.transaction()?;
         let mut inserted = Vec::new();
         for it in items {
@@ -487,9 +490,14 @@ impl Store {
                 tx.query_row(
                     "SELECT id FROM items
                      WHERE story_key = ?1 AND source_id != ?2 AND duplicate_of IS NULL
-                       AND sort_date >= ?3
+                       AND sort_date BETWEEN ?3 AND ?4
                      ORDER BY id LIMIT 1",
-                    params![it.story_key, it.source_id, window_start],
+                    params![
+                        it.story_key,
+                        it.source_id,
+                        sort_date - window,
+                        sort_date + window
+                    ],
                     |r| r.get(0),
                 )
                 .optional()?
@@ -960,6 +968,41 @@ mod tests {
         assert_eq!(listed[0].engines, vec!["godot".to_string()]);
         let dups = store.duplicate_sources(&[first[0].id]).unwrap();
         assert_eq!(dups[&first[0].id], vec!["b".to_string()]);
+    }
+
+    fn published_days_ago(source: &str, guid: &str, story: &str, days: i64) -> NewItem {
+        NewItem {
+            published: Some(Utc::now() - Duration::days(days)),
+            ..new_item(source, guid, story)
+        }
+    }
+
+    #[test]
+    fn backfilled_story_merges_with_one_published_at_the_same_time() {
+        let mut store = Store::open_in_memory().unwrap();
+        let first = store
+            .insert_items(&[published_days_ago("a", "1", "godot 4 7 stable", 30)])
+            .unwrap();
+        let backfilled = store
+            .insert_items(&[published_days_ago("b", "x", "godot 4 7 stable", 30)])
+            .unwrap();
+        assert_eq!(backfilled[0].duplicate_of, Some(first[0].id));
+    }
+
+    #[test]
+    fn same_story_key_published_weeks_apart_is_not_merged() {
+        let mut store = Store::open_in_memory().unwrap();
+        store
+            .insert_items(&[published_days_ago("a", "1", "godot showreel", 0)])
+            .unwrap();
+        let older = store
+            .insert_items(&[published_days_ago("b", "x", "godot showreel", 30)])
+            .unwrap();
+        assert_eq!(older[0].duplicate_of, None);
+        let newer = store
+            .insert_items(&[published_days_ago("c", "y", "godot showreel", 60)])
+            .unwrap();
+        assert_eq!(newer[0].duplicate_of, None);
     }
 
     #[test]
