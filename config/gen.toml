@@ -8,6 +8,7 @@ base_url = "http://localhost:8080"
 
 [database]
 path = "data/gen.db"
+# retention_days = 365            # delete items older than this, daily; unset keeps everything
 
 [polling]
 default_interval_minutes = 60

@@ -157,6 +157,7 @@ static_dir = "static"              # default
 
 [database]
 path = "data/gen.db"               # SQLite file; parent dir must be writable
+# retention_days = 365             # delete older items once a day; unset (default) keeps everything
 
 [polling]
 default_interval_minutes = 60      # until changed on the Sources page; per source: interval_minutes
@@ -176,6 +177,8 @@ Relative paths resolve against the working directory.
 **Set a GitHub token.** It is optional, but recommended: with a token, `github` sources in `releases` mode use the GitHub API, which marks prereleases. Without one they read the public `releases.atom` feed, which has no prerelease flag (only a title such as `-beta` marks one), and every GitHub source polls github.com anonymously. A fine-grained token with no permissions is enough; put it in the `GITHUB_TOKEN` env var or `polling.github_token`. `gen check-config` warns, and `gen serve` logs a warning at startup, when GitHub releases sources are switched on without a token, with an estimate of the requests per hour they make. Tags and commits always use the Atom feeds.
 
 When a host answers with a rate limit (HTTP 429, or GitHub's 403 with `x-ratelimit-remaining: 0`) and says when it resets (`Retry-After` or `x-ratelimit-reset`), every source on that host waits until then instead of retrying on its own.
+
+Without `retention_days`, the database keeps every item and grows without bound. With it, GEN deletes items that are dated, and were first fetched, more than that many days ago. It does so at startup and then once a day, and deletes their cross-source duplicates with them. It must be at least 7, the window in which the same story from different sources is merged. GEN remembers each deleted item's source and id, so a feed that still lists an old entry doesn't bring it back as new or notify it again. That record is two short strings per item, so the database still grows, but slowly. SQLite reuses the freed space; the file doesn't shrink unless you run `sqlite3 gen.db VACUUM` while GEN is stopped.
 
 ### Engines, outlets and the catalog
 

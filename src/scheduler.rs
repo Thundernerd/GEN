@@ -1,7 +1,7 @@
 //! Background polling: one task per source, each polling on its own interval, with a global
 //! concurrency limit and exponential backoff on errors. A single notifier task delivers
 //! pending notifications from the store, so failed sends are retried and nothing is lost
-//! across restarts.
+//! across restarts. With `[database] retention_days` set, a third task prunes old items daily.
 
 use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
@@ -29,6 +29,8 @@ const DISABLED_RECHECK: Duration = Duration::from_secs(5 * 60);
 const NOTIFY_RETRY_INTERVAL: Duration = Duration::from_secs(5 * 60);
 /// Pending notifications older than this are given up on.
 const NOTIFY_MAX_AGE: chrono::TimeDelta = chrono::TimeDelta::days(3);
+/// How often items past `[database] retention_days` are deleted.
+const PRUNE_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
 /// Items handled per channel per notifier run.
 const NOTIFY_BATCH: u32 = 100;
 
@@ -188,6 +190,10 @@ impl FetchRequests {
 /// stops them, and with the supervisor every polling task.
 pub fn spawn(pipeline: Pipeline, app: Arc<AppConfig>) -> JoinSet<()> {
     let wake = pipeline.notify_wake.clone();
+    let mut tasks = JoinSet::new();
+    if let Some(retention) = app.database.retention() {
+        tasks.spawn(prune(pipeline.clone(), retention));
+    }
     let poller = Poller {
         pipeline: pipeline.clone(),
         permits: Arc::new(Semaphore::new(app.polling.concurrency.max(1))),
@@ -199,10 +205,22 @@ pub fn spawn(pipeline: Pipeline, app: Arc<AppConfig>) -> JoinSet<()> {
         app,
         wake,
     };
-    let mut tasks = JoinSet::new();
     tasks.spawn(supervise(poller));
     tasks.spawn(async move { notifier.run().await });
     tasks
+}
+
+/// Deletes items older than `retention`, at startup and then once a day.
+async fn prune(pipeline: Pipeline, retention: chrono::TimeDelta) {
+    loop {
+        let cutoff = chrono::Utc::now() - retention;
+        match pipeline.with_store(move |s| s.prune_items(cutoff)).await {
+            Ok(0) => {}
+            Ok(pruned) => tracing::info!(pruned, "pruned items past retention"),
+            Err(err) => tracing::warn!("pruning items failed: {err:#}"),
+        }
+        tokio::time::sleep(PRUNE_INTERVAL).await;
+    }
 }
 
 /// Keeps one polling task per source of an enabled owner (disabled sources wait until
@@ -1004,5 +1022,57 @@ mod tests {
         assert_eq!(started, ["changed", "new"]);
         assert_eq!(stop, ["changed", "removed"]);
         assert_eq!(start[0].interval_minutes, Some(5));
+    }
+
+    /// With `retention_days` set, the scheduler prunes old items (at startup, then daily).
+    #[tokio::test]
+    async fn prunes_items_past_retention() {
+        let mut store = crate::store::Store::open_in_memory().unwrap();
+        let registry = crate::registry::SourceRegistry::load(&store).unwrap();
+        let item = |guid: &str, days: i64| crate::model::NewItem {
+            source_id: "godot:feed".into(),
+            guid: guid.into(),
+            engines: vec!["godot".into()],
+            kind: crate::model::ItemKind::News,
+            title: guid.into(),
+            url: None,
+            summary: None,
+            published: Some(chrono::Utc::now() - chrono::Duration::days(days)),
+            story_key: String::new(),
+            notify: false,
+            image_url: None,
+        };
+        let ago = |days| chrono::Utc::now() - chrono::Duration::days(days);
+        store
+            .insert_items_at(&[item("old", 400)], ago(400))
+            .unwrap();
+        store
+            .insert_items_at(&[item("recent", 10)], ago(10))
+            .unwrap();
+        let pipeline = Pipeline {
+            http: crate::fetch::Http::new("gen-test", None).unwrap(),
+            store: Arc::new(Mutex::new(store)),
+            registry: Arc::new(registry),
+            toggles: Arc::new(crate::toggles::SourceToggles::default()),
+            notify_wake: Arc::new(Notify::new()),
+            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
+            fetches: Arc::new(FetchRequests::default()),
+        };
+        let mut app = AppConfig::default();
+        app.database.retention_days = Some(365);
+        let _tasks = spawn(pipeline.clone(), Arc::new(app));
+
+        let guids = || {
+            let store = pipeline.store.lock().unwrap();
+            let items = store.query_items(&Default::default()).unwrap();
+            items.into_iter().map(|i| i.guid).collect::<Vec<_>>()
+        };
+        for _ in 0..200 {
+            if guids().len() == 1 {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+        assert_eq!(guids(), ["recent"]);
     }
 }
