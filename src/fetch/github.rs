@@ -15,7 +15,7 @@ use reqwest::header::{self, HeaderMap, HeaderValue};
 use serde::Deserialize;
 
 use super::{Conditional, FetchError, FetchOutcome, Http, feed, text_to_lines, truncate};
-use crate::config::GithubMode;
+use crate::config::{GithubMode, ResolvedSource, SourceSpec};
 use crate::model::{RawItem, SourceState};
 
 /// Max chars kept from a release body.
@@ -63,6 +63,51 @@ pub async fn fetch(
         etag: resp.etag,
         last_modified: resp.last_modified,
     })
+}
+
+/// A warning for when GitHub releases sources are polled without a token, or `None`.
+/// Without one, releases come from the public `releases.atom` feed, which has no
+/// prerelease flag (only the title can mark a prerelease) and is polled anonymously; a
+/// token changes nothing for tags and commits. `default_interval_minutes` applies to sources
+/// without their own interval.
+pub fn token_warning(
+    sources: &[ResolvedSource],
+    default_interval_minutes: u64,
+    has_token: bool,
+) -> Option<String> {
+    if has_token {
+        return None;
+    }
+    let mut releases = 0;
+    let mut per_hour = 0.0;
+    for s in sources {
+        let SourceSpec::Github { mode, .. } = &s.spec else {
+            continue;
+        };
+        if *mode == GithubMode::Releases {
+            releases += 1;
+        }
+        per_hour += 60.0
+            / s.interval_minutes
+                .unwrap_or(default_interval_minutes)
+                .max(1) as f64;
+    }
+    if releases == 0 {
+        return None;
+    }
+    Some(format!(
+        "{releases} GitHub releases {} polled without a GitHub token: they use the public \
+         releases.atom feed, which has no prerelease flag, and all GitHub sources \
+         together make about {} requests/hour to github.com anonymously. Set the GITHUB_TOKEN \
+         env var or [polling] github_token (a fine-grained token with no permissions is \
+         enough) to use the GitHub API instead.",
+        if releases == 1 {
+            "source is"
+        } else {
+            "sources are"
+        },
+        per_hour.round() as u64
+    ))
 }
 
 /// Headers for an authenticated REST API call.
@@ -202,6 +247,54 @@ fn release_title(repo: &str, name: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Owner;
+
+    fn source(repo: &str, mode: GithubMode, interval: Option<u64>) -> ResolvedSource {
+        ResolvedSource {
+            id: format!("e:github:{repo}"),
+            owner: Owner::Engine("e".into()),
+            owner_name: "E".into(),
+            enabled: true,
+            category: None,
+            interval_minutes: interval,
+            keywords: Vec::new(),
+            require_engine_match: false,
+            spec: SourceSpec::Github {
+                repo: repo.into(),
+                mode,
+                tag_prefix: None,
+            },
+        }
+    }
+
+    /// Without a token, releases come from the Atom feed (no prerelease flag), so
+    /// `check-config` and `serve` say so, with the github.com polling load.
+    #[test]
+    fn warns_about_releases_without_a_token() {
+        let hn = ResolvedSource {
+            spec: SourceSpec::Hn { query: "x".into() },
+            ..source("a/hn", GithubMode::Releases, None)
+        };
+        let sources = vec![
+            source("a/one", GithubMode::Releases, None),
+            source("a/two", GithubMode::Releases, Some(30)),
+            source("a/three", GithubMode::Tags, Some(15)),
+            hn,
+        ];
+        // 60-minute default: 1 + 2 + 4 requests an hour.
+        let warning = token_warning(&sources, 60, false).expect("warns");
+        assert!(warning.contains("2 GitHub releases sources"), "{warning}");
+        assert!(warning.contains("about 7 requests/hour"), "{warning}");
+        assert!(warning.contains("GITHUB_TOKEN"), "{warning}");
+
+        assert_eq!(token_warning(&sources, 60, true), None, "token set");
+        let tags_only = vec![source("a/three", GithubMode::Tags, None)];
+        assert_eq!(
+            token_warning(&tags_only, 60, false),
+            None,
+            "a token doesn't change tags or commits"
+        );
+    }
 
     macro_rules! fixture {
         ($name:literal) => {

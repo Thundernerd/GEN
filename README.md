@@ -49,7 +49,7 @@ The image is multi-stage. It builds on `rust:1.96-slim-bookworm` and runs on `de
 ### Compose (recommended)
 
 ```sh
-cp deploy/.env.example .env      # optional: tokens and notification secrets
+cp deploy/.env.example .env      # GITHUB_TOKEN (recommended), other tokens and secrets
 $EDITOR deploy/gen.docker.toml   # base_url, admin token
 docker compose up -d --build
 docker compose logs -f gen
@@ -171,7 +171,11 @@ concurrency = 8                    # max sources fetched at the same time
 # dev_guild_id = 123456789012345678 # optional: register commands on this server only (instant)
 ```
 
-Relative paths resolve against the working directory. A GitHub token is optional, but without one the GitHub API allows only 60 requests per hour.
+Relative paths resolve against the working directory.
+
+**Set a GitHub token.** It is optional, but recommended: with a token, `github` sources in `releases` mode use the GitHub API, which marks prereleases. Without one they read the public `releases.atom` feed, which has no prerelease flag (only a title such as `-beta` marks one), and every GitHub source polls github.com anonymously. A fine-grained token with no permissions is enough; put it in the `GITHUB_TOKEN` env var or `polling.github_token`. `gen check-config` warns, and `gen serve` logs a warning at startup, when GitHub releases sources are switched on without a token, with an estimate of the requests per hour they make. Tags and commits always use the Atom feeds.
+
+When a host answers with a rate limit (HTTP 429, or GitHub's 403 with `x-ratelimit-remaining: 0`) and says when it resets (`Retry-After` or `x-ratelimit-reset`), every source on that host waits until then instead of retrying on its own.
 
 ### Engines, outlets and the catalog
 
