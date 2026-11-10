@@ -64,7 +64,7 @@ pub fn absolute_url(base: &str, url: &str) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_server::{respond, serve};
+    use crate::test_server::{respond, serve, unexpected};
 
     #[test]
     fn finds_og_then_twitter_images() {
@@ -96,8 +96,11 @@ mod tests {
                 " ".repeat(MAX_BYTES + 10)
             ),
         ];
-        let server =
-            serve(move |n, _| respond("200 OK\r\ncontent-type: text/html", &pages[n])).await;
+        let server = serve(move |n, _| match pages.get(n) {
+            Some(page) => respond("200 OK", &[("content-type", "text/html")], page),
+            None => unexpected(),
+        })
+        .await;
         let addr = server.addr;
         let http = Http::new("gen-test", None).unwrap();
         let url = format!("http://{addr}/post");

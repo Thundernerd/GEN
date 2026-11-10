@@ -694,9 +694,10 @@ mod tests {
     #[tokio::test]
     async fn fetches_on_request() {
         let feed = include_str!("../tests/fixtures/feed/godot.xml");
-        let addr = serve(move |_, _| respond("200 OK\r\ncontent-type: application/rss+xml", feed))
-            .await
-            .addr;
+        let addr =
+            serve(move |_, _| respond("200 OK", &[("content-type", "application/rss+xml")], feed))
+                .await
+                .addr;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
         let config = format!(
@@ -760,7 +761,7 @@ mod tests {
     /// "Fetch now" on it still says why it didn't fetch.
     #[tokio::test]
     async fn a_cooldown_skip_is_not_a_failure() {
-        let addr = serve(|_, _| respond("429 Too Many Requests\r\nretry-after: 600", ""))
+        let addr = serve(|_, _| respond("429 Too Many Requests", &[("retry-after", "600")], ""))
             .await
             .addr;
 

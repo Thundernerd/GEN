@@ -423,15 +423,8 @@ mod tests {
 
     /// A server that answers every request with 429 and `retry-after`.
     async fn rate_limiting_server(retry_after: &'static str) -> TestServer {
-        limiting_server(format!(
-            "429 Too Many Requests\r\nretry-after: {retry_after}"
-        ))
-        .await
-    }
-
-    /// A server that answers every request with `status_and_headers`.
-    async fn limiting_server(status_and_headers: String) -> TestServer {
-        serve(move |_, _| respond(&status_and_headers, "")).await
+        serve(move |_, _| respond("429 Too Many Requests", &[("retry-after", retry_after)], ""))
+            .await
     }
 
     async fn get(http: &Http, url: String) -> Result<Conditional, FetchError> {
@@ -448,7 +441,7 @@ mod tests {
     async fn a_rate_limited_host_cools_down_for_every_source() {
         let server = rate_limiting_server("600").await;
         let other_server = rate_limiting_server("600").await;
-        let (addr, other) = (server.addr, other_server.addr);
+        let (addr, other_addr) = (server.addr, other_server.addr);
         let http = Http::new("gen-test", None).unwrap();
 
         let first = get(&http, format!("http://{addr}/a.atom")).await;
@@ -470,7 +463,7 @@ mod tests {
             "second source didn't hit the host"
         );
 
-        let _ = get(&http, format!("http://{other}/c.atom")).await;
+        let _ = get(&http, format!("http://{other_addr}/c.atom")).await;
         assert_eq!(
             other_server.requests().len(),
             1,
@@ -482,10 +475,17 @@ mod tests {
     /// the reset.
     #[tokio::test]
     async fn github_rate_limit_cools_down_until_the_reset() {
-        let reset = chrono::Utc::now().timestamp() + 600;
-        let server = limiting_server(format!(
-            "403 Forbidden\r\nx-ratelimit-remaining: 0\r\nx-ratelimit-reset: {reset}"
-        ))
+        let reset = (chrono::Utc::now().timestamp() + 600).to_string();
+        let server = serve(move |_, _| {
+            respond(
+                "403 Forbidden",
+                &[
+                    ("x-ratelimit-remaining", "0"),
+                    ("x-ratelimit-reset", &reset),
+                ],
+                "",
+            )
+        })
         .await;
         let addr = server.addr;
         let http = Http::new("gen-test", None).unwrap();

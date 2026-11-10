@@ -311,7 +311,7 @@ mod tests {
     use super::*;
     use crate::model::ItemKind;
     use crate::notify::tests::{item, sources};
-    use crate::test_server::{TestServer, respond, serve};
+    use crate::test_server::{TestServer, respond, serve, unexpected};
 
     const BASE: &str = "https://gen.example.org/";
 
@@ -470,8 +470,8 @@ mod tests {
 
     #[tokio::test]
     async fn posts_as_the_bot() {
-        let sink = sink(&["200 OK"]).await;
-        let addr = sink.addr;
+        let server = sink(&["200 OK"]).await;
+        let addr = server.addr;
         let http = crate::fetch::Http::new("gen-test", None).unwrap();
         let bot = BotApi {
             token: "bot-token".into(),
@@ -486,7 +486,7 @@ mod tests {
         let i = item(&["godot"], ItemKind::Release, "Godot 4.8", None);
         send_bot(&ctx, 42, MessageStyle::Card, &[i]).await.unwrap();
 
-        let requests = sink.requests();
+        let requests = server.requests();
         assert_eq!(requests.len(), 1, "{requests:#?}");
         let request = &requests[0];
         assert!(
@@ -505,8 +505,8 @@ mod tests {
 
     #[tokio::test]
     async fn webhooks_fall_back_when_components_are_refused() {
-        let sink = sink(&["400 Bad Request", "204 No Content"]).await;
-        let addr = sink.addr;
+        let server = sink(&["400 Bad Request", "204 No Content"]).await;
+        let addr = server.addr;
         let http = crate::fetch::Http::new("gen-test", None).unwrap();
         let ctx = NotifyContext {
             http: &http,
@@ -518,7 +518,7 @@ mod tests {
         let hook = format!("http://{addr}/api/webhooks/1/x");
         send(&ctx, &hook, MessageStyle::Card, &[i]).await.unwrap();
 
-        let requests = sink.requests();
+        let requests = server.requests();
         assert_eq!(requests.len(), 2, "{requests:#?}");
         assert!(requests[0].starts_with("POST /api/webhooks/1/x?with_components=true "));
         assert!(requests[0].contains(r#""flags":32768"#));
@@ -527,10 +527,15 @@ mod tests {
         assert!(!requests[1].contains(r#""components""#));
     }
 
-    /// A server that answers its Nth request with the Nth of `statuses`.
+    /// A server that answers its Nth request with the Nth of `statuses`, and any
+    /// request after those with a 500.
     async fn sink(statuses: &[&'static str]) -> TestServer {
         let statuses = statuses.to_vec();
-        serve(move |n, _| respond(statuses[n], "{}")).await
+        serve(move |n, _| match statuses.get(n) {
+            Some(status) => respond(status, &[], "{}"),
+            None => unexpected(),
+        })
+        .await
     }
 
     #[tokio::test]

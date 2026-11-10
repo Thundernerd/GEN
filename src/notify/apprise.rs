@@ -162,13 +162,13 @@ mod tests {
 
     /// A server that answers every request with `status`.
     async fn sink(status: &'static str) -> TestServer {
-        serve(move |_, _| respond(status, "no tagged")).await
+        serve(move |_, _| respond(status, &[], "no tagged")).await
     }
 
     #[tokio::test]
     async fn posts_to_a_saved_configuration() {
-        let sink = sink("200 OK").await;
-        let server = sink.url();
+        let server = sink("200 OK").await;
+        let url = server.url();
         let http = crate::fetch::Http::new("gen-test", None).unwrap();
         let ctx = NotifyContext {
             http: &http,
@@ -177,7 +177,7 @@ mod tests {
             discord_bot: None,
         };
         let target = Target {
-            server: &server,
+            server: &url,
             key: Some("gen"),
             urls: None,
             tag: Some("releases"),
@@ -186,7 +186,7 @@ mod tests {
         };
         let release = item(&["godot"], ItemKind::Release, "Godot 4.8", Some("Notes"));
         send(&ctx, &target, &[release]).await.unwrap();
-        let requests = sink.requests();
+        let requests = server.requests();
         assert_eq!(requests.len(), 1, "{requests:#?}");
         let request = &requests[0];
         assert!(request.starts_with("POST /notify/gen "), "{request}");
@@ -203,8 +203,8 @@ mod tests {
 
     #[tokio::test]
     async fn reports_failed_deliveries() {
-        let sink = sink("424 Failed Dependency").await;
-        let server = sink.url();
+        let server = sink("424 Failed Dependency").await;
+        let url = server.url();
         let http = crate::fetch::Http::new("gen-test", None).unwrap();
         let ctx = NotifyContext {
             http: &http,
@@ -213,7 +213,7 @@ mod tests {
             discord_bot: None,
         };
         let target = Target {
-            server: &server,
+            server: &url,
             key: None,
             urls: Some("json://localhost"),
             tag: None,
@@ -228,7 +228,7 @@ mod tests {
             err.contains("424") && err.contains("tag matched nothing"),
             "{err}"
         );
-        assert_eq!(sink.requests().len(), 1);
+        assert_eq!(server.requests().len(), 1);
     }
 
     #[test]

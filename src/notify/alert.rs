@@ -121,25 +121,20 @@ mod tests {
     use crate::notify::{NotifyContext, load_channels};
     use crate::pipeline::{Pipeline, PollSettings};
     use crate::store::Store;
-    use crate::test_server::{TestServer, ok, respond, serve};
+    use crate::test_server::{ok, respond, serve};
 
     /// A feed that answers its first request and returns 404 after that.
     async fn feed_that_breaks() -> std::net::SocketAddr {
         let feed = include_str!("../../tests/fixtures/feed/godot.xml");
         serve(move |n, _| {
             if n == 0 {
-                respond("200 OK\r\ncontent-type: application/rss+xml", feed)
+                respond("200 OK", &[("content-type", "application/rss+xml")], feed)
             } else {
-                respond("404 Not Found", "")
+                respond("404 Not Found", &[], "")
             }
         })
         .await
         .addr
-    }
-
-    /// An ntfy server that accepts everything and records each request it got.
-    async fn recording_ntfy() -> TestServer {
-        serve(|_, _| ok("{}")).await
     }
 
     fn feed_source() -> ResolvedSource {
@@ -201,7 +196,8 @@ mod tests {
     #[tokio::test]
     async fn the_third_failure_in_a_row_alerts_opted_in_channels_once() {
         let feed = feed_that_breaks().await;
-        let ntfy_server = recording_ntfy().await;
+        // An ntfy server that accepts everything.
+        let ntfy_server = serve(|_, _| ok("{}")).await;
         let ntfy = ntfy_server.url();
         let mut store = Store::open_in_memory().unwrap();
         let config = format!(

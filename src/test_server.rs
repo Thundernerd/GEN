@@ -43,24 +43,32 @@ pub async fn serve(reply: impl Fn(usize, &str) -> String + Send + 'static) -> Te
             let mut buf = vec![0u8; 32 * 1024];
             let n = conn.read(&mut buf).await.unwrap_or(0);
             let request = String::from_utf8_lossy(&buf[..n]).into_owned();
+            seen.lock().unwrap().push(request.clone());
             let response = reply(index, &request);
-            seen.lock().unwrap().push(request);
             let _ = conn.write_all(response.as_bytes()).await;
         }
     });
     TestServer { addr, requests }
 }
 
-/// A response with `status_and_headers` (the status line after `HTTP/1.1 `, optionally
-/// followed by `\r\n`-separated headers) carrying `body`.
-pub fn respond(status_and_headers: &str, body: &str) -> String {
+/// A response with `status` (e.g. `"404 Not Found"`) and `headers` carrying `body`.
+pub fn respond(status: &str, headers: &[(&str, &str)], body: &str) -> String {
+    let headers: String = headers
+        .iter()
+        .map(|(name, value)| format!("{name}: {value}\r\n"))
+        .collect();
     format!(
-        "HTTP/1.1 {status_and_headers}\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+        "HTTP/1.1 {status}\r\n{headers}content-length: {}\r\nconnection: close\r\n\r\n{body}",
         body.len()
     )
 }
 
 /// A `200 OK` response carrying `body`.
 pub fn ok(body: &str) -> String {
-    respond("200 OK", body)
+    respond("200 OK", &[], body)
+}
+
+/// The answer to a request the test didn't expect, so the client fails on it.
+pub fn unexpected() -> String {
+    respond("500 Unexpected Request", &[], "")
 }
