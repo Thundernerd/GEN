@@ -1,5 +1,6 @@
 //! Notifications: rule matching per channel and delivery to Discord, ntfy and email.
 
+pub mod alert;
 pub mod apprise;
 pub mod discord;
 pub mod email;
@@ -187,24 +188,67 @@ pub async fn send(
             token,
         } => ntfy::send(ctx, server, topic, token.as_deref(), items).await,
         ChannelTarget::Email { .. } => email::send(ctx, &channel.target, items).await,
-        ChannelTarget::Apprise {
-            server,
-            key,
-            urls,
-            tag,
-            username,
-            password,
-        } => {
-            let target = apprise::Target {
-                server,
-                key: key.as_deref().filter(|k| !k.is_empty()),
-                urls: urls.as_deref().filter(|u| !u.is_empty()),
-                tag: tag.as_deref(),
-                username: username.as_deref().filter(|u| !u.is_empty()),
-                password: password.as_deref().filter(|p| !p.is_empty()),
-            };
-            apprise::send(ctx, &target, items).await
+        ChannelTarget::Apprise { .. } => {
+            apprise::send(ctx, &apprise_target(&channel.target), items).await
         }
+    }
+}
+
+/// A plain message that isn't about an item, such as a health alert.
+#[derive(Debug, Clone, PartialEq)]
+pub struct TextMessage {
+    /// Short headline: the email subject, the ntfy or Apprise title.
+    pub title: String,
+    pub text: String,
+    /// Where to look next, e.g. a page of the GEN site.
+    pub link: String,
+}
+
+/// Sends a plain message to one channel, whatever its rules.
+pub async fn send_text(
+    ctx: &NotifyContext<'_>,
+    channel: &ChannelConfig,
+    message: &TextMessage,
+) -> Result<(), NotifyError> {
+    match &channel.target {
+        ChannelTarget::Discord { webhook_url, .. } => {
+            discord::send_text(ctx, webhook_url, message).await
+        }
+        ChannelTarget::DiscordBot { channel_id, .. } => {
+            discord::send_bot_text(ctx, *channel_id, message).await
+        }
+        ChannelTarget::Ntfy {
+            server,
+            topic,
+            token,
+        } => ntfy::send_text(ctx, server, topic, token.as_deref(), message).await,
+        ChannelTarget::Email { .. } => email::send_text(&channel.target, message).await,
+        ChannelTarget::Apprise { .. } => {
+            apprise::send_text(ctx, &apprise_target(&channel.target), message).await
+        }
+    }
+}
+
+/// Where an Apprise channel sends to; empty strings count as unset.
+fn apprise_target(target: &ChannelTarget) -> apprise::Target<'_> {
+    let ChannelTarget::Apprise {
+        server,
+        key,
+        urls,
+        tag,
+        username,
+        password,
+    } = target
+    else {
+        unreachable!("only called for Apprise channels")
+    };
+    apprise::Target {
+        server,
+        key: key.as_deref().filter(|k| !k.is_empty()),
+        urls: urls.as_deref().filter(|u| !u.is_empty()),
+        tag: tag.as_deref(),
+        username: username.as_deref().filter(|u| !u.is_empty()),
+        password: password.as_deref().filter(|p| !p.is_empty()),
     }
 }
 
@@ -584,6 +628,7 @@ pub(crate) mod tests {
             name: "discord-x".into(),
             enabled: true,
             rules,
+            health_alerts: false,
             target: ChannelTarget::DiscordBot {
                 guild_id: 1,
                 channel_id: 2,

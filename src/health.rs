@@ -127,6 +127,13 @@ impl SourceHistory {
     }
 }
 
+/// Whether a poll that moved a source from `before` to `after` should alert the channels
+/// with health alerts: a source that worked (or was retrying) now fails. A source that
+/// stays failing, or fails on its first fetch, doesn't alert.
+pub fn starts_failing(before: Health, after: Health) -> bool {
+    after == Health::Failing && matches!(before, Health::Ok | Health::Retrying | Health::Stale)
+}
+
 impl Health {
     /// Whether the source needs a look: it fails, or it has gone silent.
     pub fn is_unhealthy(self) -> bool {
@@ -323,6 +330,29 @@ mod tests {
         .filter(|h| h.is_unhealthy())
         .collect();
         assert_eq!(unhealthy, [Health::Stale, Health::Failing]);
+    }
+
+    #[test]
+    fn alerts_only_when_a_working_source_starts_failing() {
+        use Health::*;
+        let cases = [
+            (Ok, Failing, true),
+            (Retrying, Failing, true),
+            (Stale, Failing, true),
+            (Failing, Failing, false),
+            // The first fetch of a new source.
+            (Pending, Failing, false),
+            (Disabled, Failing, false),
+            (Ok, Retrying, false),
+            (Failing, Ok, false),
+        ];
+        for (before, after, expected) in cases {
+            assert_eq!(
+                starts_failing(before, after),
+                expected,
+                "{before:?} -> {after:?}"
+            );
+        }
     }
 
     #[test]
