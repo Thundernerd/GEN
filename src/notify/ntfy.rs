@@ -2,7 +2,7 @@
 
 use reqwest::StatusCode;
 
-use super::{NotifyContext, NotifyError, kind_shortcode, prefixed_title};
+use super::{NotifyContext, NotifyError, TextMessage, kind_shortcode, prefixed_title};
 use crate::config::SourcesConfig;
 use crate::fetch::truncate;
 use crate::model::{Item, ItemKind};
@@ -19,28 +19,50 @@ pub async fn send(
 ) -> Result<(), NotifyError> {
     let url = topic_url(server, topic);
     for item in items {
-        let msg = build_message(ctx.sources, item);
-        let mut req = ctx.http.client.post(&url).body(msg.body);
-        for (name, value) in msg.headers {
-            req = req.header(name, value);
-        }
-        if let Some(token) = token.filter(|t| !t.is_empty()) {
-            req = req.bearer_auth(token);
-        }
-        let resp = req.send().await?;
-        let status = resp.status();
-        if !status.is_success() {
-            let body = resp.text().await.unwrap_or_default();
-            let hint = if status == StatusCode::TOO_MANY_REQUESTS {
-                " (rate limited)"
-            } else {
-                ""
-            };
-            return Err(NotifyError::Other(format!(
-                "ntfy returned {status}{hint}: {}",
-                truncate(body.trim(), 500)
-            )));
-        }
+        publish(ctx, &url, token, build_message(ctx.sources, item)).await?;
+    }
+    Ok(())
+}
+
+/// Sends a plain message, such as a health alert.
+pub async fn send_text(
+    ctx: &NotifyContext<'_>,
+    server: &str,
+    topic: &str,
+    token: Option<&str>,
+    message: &TextMessage,
+) -> Result<(), NotifyError> {
+    let url = topic_url(server, topic);
+    publish(ctx, &url, token, build_text_message(message)).await
+}
+
+/// POSTs one message to the topic.
+async fn publish(
+    ctx: &NotifyContext<'_>,
+    url: &str,
+    token: Option<&str>,
+    msg: Message,
+) -> Result<(), NotifyError> {
+    let mut req = ctx.http.client.post(url).body(msg.body);
+    for (name, value) in msg.headers {
+        req = req.header(name, value);
+    }
+    if let Some(token) = token.filter(|t| !t.is_empty()) {
+        req = req.bearer_auth(token);
+    }
+    let resp = req.send().await?;
+    let status = resp.status();
+    if !status.is_success() {
+        let body = resp.text().await.unwrap_or_default();
+        let hint = if status == StatusCode::TOO_MANY_REQUESTS {
+            " (rate limited)"
+        } else {
+            ""
+        };
+        return Err(NotifyError::Other(format!(
+            "ntfy returned {status}{hint}: {}",
+            truncate(body.trim(), 500)
+        )));
     }
     Ok(())
 }
@@ -88,6 +110,20 @@ pub fn build_message(sources: &SourcesConfig, item: &Item) -> Message {
         headers.push(("Click", encode_header(&click)));
     }
     Message { body, headers }
+}
+
+/// A plain message with a warning tag, opening `link` when tapped.
+pub fn build_text_message(message: &TextMessage) -> Message {
+    let click = url::Url::parse(&message.link).map_or_else(|_| message.link.clone(), String::from);
+    Message {
+        body: truncate(&format!("{}\n{}", message.text, message.link), MAX_BODY),
+        headers: vec![
+            ("Title", encode_header(&message.title)),
+            ("Tags", "warning".to_string()),
+            ("Priority", "4".to_string()),
+            ("Click", encode_header(&click)),
+        ],
+    }
 }
 
 /// Returns `value` unchanged when it is a valid plain header value, otherwise RFC 2047
