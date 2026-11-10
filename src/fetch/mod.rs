@@ -9,7 +9,9 @@ pub mod html;
 pub mod og;
 pub mod unity;
 
-use std::time::Duration;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use reqwest::StatusCode;
 use reqwest::header::{self, HeaderMap, HeaderValue};
@@ -83,6 +85,9 @@ pub async fn fetch_source(
 pub struct Http {
     pub client: reqwest::Client,
     pub github_token: Option<String>,
+    /// Hosts that rate-limited us, and when they may be asked again. Shared by every
+    /// source: GitHub's limits are per IP (or token), not per repository.
+    cooldowns: Arc<Mutex<HashMap<String, Instant>>>,
 }
 
 /// A response body, or a 304.
@@ -107,6 +112,7 @@ impl Http {
         Ok(Http {
             client,
             github_token,
+            cooldowns: Arc::default(),
         })
     }
 
@@ -119,6 +125,13 @@ impl Http {
         state: &SourceState,
         extra_headers: HeaderMap,
     ) -> Result<Conditional, FetchError> {
+        let host = host_of(url);
+        if let Some(wait) = host.as_deref().and_then(|h| self.cooling_down(h)) {
+            return Err(FetchError::RateLimited {
+                url: url.to_string(),
+                retry_after: Some(wait),
+            });
+        }
         let mut req = self.client.get(url).headers(extra_headers);
         if let Some(etag) = state
             .etag
@@ -156,6 +169,9 @@ impl Http {
                     Some(reset.saturating_sub(now))
                 })
                 .map(Duration::from_secs);
+            if let (Some(host), Some(wait)) = (host, retry_after) {
+                self.cool_down(host, wait);
+            }
             return Err(FetchError::RateLimited {
                 url: url.to_string(),
                 retry_after,
@@ -182,6 +198,40 @@ impl Http {
             last_modified,
         }))
     }
+}
+
+impl Http {
+    /// Time left before `host` may be asked again, if it rate-limited us.
+    fn cooling_down(&self, host: &str) -> Option<Duration> {
+        let mut cooldowns = self.cooldowns.lock().unwrap_or_else(|e| e.into_inner());
+        let until = *cooldowns.get(host)?;
+        let left = until.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            cooldowns.remove(host);
+            return None;
+        }
+        Some(left)
+    }
+
+    fn cool_down(&self, host: String, wait: Duration) {
+        if wait.is_zero() {
+            return;
+        }
+        let until = Instant::now() + wait;
+        let mut cooldowns = self.cooldowns.lock().unwrap_or_else(|e| e.into_inner());
+        let entry = cooldowns.entry(host).or_insert(until);
+        *entry = (*entry).max(until);
+    }
+}
+
+/// `host:port` of a URL, the unit a rate limit applies to.
+fn host_of(url: &str) -> Option<String> {
+    let url = url::Url::parse(url).ok()?;
+    Some(format!(
+        "{}:{}",
+        url.host_str()?,
+        url.port_or_known_default()?
+    ))
 }
 
 /// Largest response body accepted from a source.
@@ -362,6 +412,65 @@ pub fn truncate(s: &str, max: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Once a host rate-limits one source, the other sources on that host wait out the
+    /// same reset instead of each spending a request to find out (GitHub's limit is per
+    /// IP, shared by every GitHub source). Other hosts are unaffected.
+    #[tokio::test]
+    async fn a_rate_limited_host_cools_down_for_every_source() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let hits = std::sync::Arc::new(AtomicUsize::new(0));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let counter = hits.clone();
+        tokio::spawn(async move {
+            while let Ok((mut conn, _)) = listener.accept().await {
+                counter.fetch_add(1, Ordering::SeqCst);
+                let mut buf = vec![0u8; 8 * 1024];
+                let _ = conn.read(&mut buf).await;
+                let reply = "HTTP/1.1 429 Too Many Requests\r\nretry-after: 600\r\ncontent-length: 0\r\nconnection: close\r\n\r\n";
+                let _ = conn.write_all(reply.as_bytes()).await;
+            }
+        });
+
+        let http = Http::new("gen-test", None).unwrap();
+        let get = |path: &str| {
+            let url = format!("http://{addr}/{path}");
+            let http = http.clone();
+            async move {
+                http.get_conditional(&url, &SourceState::default(), HeaderMap::new())
+                    .await
+            }
+        };
+        let first = get("a.atom").await;
+        assert!(matches!(first, Err(FetchError::RateLimited { .. })));
+        let second = get("b.atom").await;
+        let Err(FetchError::RateLimited { retry_after, .. }) = second else {
+            panic!("expected RateLimited");
+        };
+        let wait = retry_after.expect("remaining cooldown");
+        assert!(
+            wait > Duration::from_secs(590) && wait <= Duration::from_secs(600),
+            "{wait:?}"
+        );
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            1,
+            "second source didn't hit the host"
+        );
+
+        let other = format!("http://localhost:{}/c.atom", addr.port());
+        let _ = http
+            .get_conditional(&other, &SourceState::default(), HeaderMap::new())
+            .await;
+        assert_eq!(
+            hits.load(Ordering::SeqCst),
+            2,
+            "another host name is unaffected"
+        );
+    }
 
     #[test]
     fn strips_html() {
