@@ -45,5 +45,9 @@
 </nav>
 {% endif %}
 {% else %}
+{% if search is defined and search.q %}
+<p class="empty">Nothing matches “{{ search.q }}”.</p>
+{% else %}
 <p class="empty">Nothing here yet. Items appear once sources have been polled.</p>
+{% endif %}
 {% endif %}

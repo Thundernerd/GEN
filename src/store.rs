@@ -16,6 +16,10 @@ use crate::model::{Item, ItemKind, NewItem, SourceState};
 /// Items with the same `story_key` within this window are treated as the same story.
 pub const DUPLICATE_WINDOW_DAYS: i64 = 7;
 
+/// Index in `MIGRATIONS` of the migration that adds full-text search.
+#[cfg(test)]
+const SEARCH_MIGRATION: usize = 7;
+
 const MIGRATIONS: &[&str] = &[
     r#"
 CREATE TABLE items (
@@ -129,6 +133,26 @@ ALTER TABLE notify_channels ADD COLUMN last_error_at TEXT;
 ALTER TABLE items ADD COLUMN image_url TEXT;
 ALTER TABLE items ADD COLUMN image_checked INTEGER NOT NULL DEFAULT 0;
 "#,
+    r#"
+-- Full-text search over item titles and summaries, kept in step with items by triggers.
+CREATE VIRTUAL TABLE items_fts USING fts5(
+    title, summary, content = 'items', content_rowid = 'id',
+    tokenize = 'unicode61 remove_diacritics 2'
+);
+CREATE TRIGGER items_fts_insert AFTER INSERT ON items BEGIN
+    INSERT INTO items_fts (rowid, title, summary) VALUES (new.id, new.title, new.summary);
+END;
+CREATE TRIGGER items_fts_delete AFTER DELETE ON items BEGIN
+    INSERT INTO items_fts (items_fts, rowid, title, summary)
+    VALUES ('delete', old.id, old.title, old.summary);
+END;
+CREATE TRIGGER items_fts_update AFTER UPDATE OF title, summary ON items BEGIN
+    INSERT INTO items_fts (items_fts, rowid, title, summary)
+    VALUES ('delete', old.id, old.title, old.summary);
+    INSERT INTO items_fts (rowid, title, summary) VALUES (new.id, new.title, new.summary);
+END;
+INSERT INTO items_fts (items_fts) VALUES ('rebuild');
+"#,
 ];
 
 /// A configured notification channel with its last delivery result.
@@ -148,6 +172,8 @@ pub struct ItemQuery {
     pub engine: Option<String>,
     pub kind: Option<ItemKind>,
     pub source_id: Option<String>,
+    /// Full-text search over title and summary: every word must match.
+    pub q: Option<String>,
     pub include_duplicates: bool,
     /// Defaults to 50 when 0.
     pub limit: u32,
@@ -503,6 +529,13 @@ impl Store {
             args.push(Box::new(source_id.clone()));
             sql.push_str(&format!(" AND i.source_id = ?{}", args.len()));
         }
+        if let Some(fts) = q.q.as_deref().and_then(fts_query) {
+            args.push(Box::new(fts));
+            sql.push_str(&format!(
+                " AND i.id IN (SELECT rowid FROM items_fts WHERE items_fts MATCH ?{})",
+                args.len()
+            ));
+        }
         let limit = if q.limit == 0 { 50 } else { q.limit };
         sql.push_str(&format!(
             " ORDER BY i.sort_date DESC, i.id DESC LIMIT {limit} OFFSET {}",
@@ -680,6 +713,19 @@ const ITEM_SELECT: &str = "SELECT i.id, i.source_id, i.guid, i.kind, i.title, i.
         i.image_url, i.image_checked
     FROM items i";
 
+/// Turns free text from a search box into an FTS5 query: each word becomes a quoted
+/// prefix term, so FTS5 operators are searched for as words and every word must match.
+/// Words without letters or digits would match nothing, so they're left out. `None` when
+/// no words are left.
+fn fts_query(text: &str) -> Option<String> {
+    let terms: Vec<String> = text
+        .split_whitespace()
+        .filter(|w| w.chars().any(char::is_alphanumeric))
+        .map(|w| format!("\"{}\"*", w.replace('"', "\"\"")))
+        .collect();
+    (!terms.is_empty()).then(|| terms.join(" "))
+}
+
 fn insert_source(
     conn: &Connection,
     id: &str,
@@ -841,6 +887,95 @@ mod tests {
             ..Default::default()
         };
         assert_eq!(store.query_items(&q).unwrap()[0].guid, "2");
+    }
+
+    fn search(store: &Store, q: &str) -> Vec<String> {
+        let q = ItemQuery {
+            q: Some(q.into()),
+            ..Default::default()
+        };
+        let mut guids: Vec<_> = store
+            .query_items(&q)
+            .unwrap()
+            .into_iter()
+            .map(|i| i.guid)
+            .collect();
+        guids.sort();
+        guids
+    }
+
+    #[test]
+    fn searches_titles_and_summaries() {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut a = new_item("a", "1", "");
+        a.title = "Godot 4.3 released with Jolt physics".into();
+        let mut b = new_item("a", "2", "");
+        b.title = "Weekly roundup".into();
+        b.summary = Some("New lighting in Unity 6; Godot gets a shader editor".into());
+        let mut c = new_item("a", "3", "");
+        c.title = "Stride community meeting".into();
+        store.insert_items(&[a, b, c]).unwrap();
+
+        assert_eq!(search(&store, "godot"), ["1", "2"]);
+        assert_eq!(search(&store, "Jolt"), ["1"]);
+        assert_eq!(search(&store, "shader"), ["2"]);
+        // Every word must match.
+        assert_eq!(search(&store, "godot physics"), ["1"]);
+        assert!(search(&store, "bevy").is_empty());
+    }
+
+    #[test]
+    fn search_takes_any_text_literally() {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut a = new_item("a", "1", "");
+        a.title = "Unity 6.1 \"Beta\" and C# NEAR the editor".into();
+        store.insert_items(&[a]).unwrap();
+
+        assert_eq!(search(&store, "uni"), ["1"], "words match as prefixes");
+        assert_eq!(search(&store, "\"beta"), ["1"]);
+        assert_eq!(search(&store, "NEAR("), ["1"]);
+        assert_eq!(search(&store, "c# OR"), Vec::<String>::new());
+        assert_eq!(search(&store, "6.1"), ["1"]);
+        // Words without letters or digits are ignored; blank text is no filter at all.
+        assert_eq!(search(&store, "editor - *"), ["1"]);
+        assert_eq!(search(&store, "*"), ["1"]);
+        assert_eq!(search(&store, "   "), ["1"]);
+    }
+
+    #[test]
+    fn upgrading_indexes_existing_items() {
+        // A database from before search, with an item in it.
+        assert!(MIGRATIONS[SEARCH_MIGRATION].contains("CREATE VIRTUAL TABLE items_fts"));
+        let conn = Connection::open_in_memory().unwrap();
+        let before_search = SEARCH_MIGRATION;
+        for sql in &MIGRATIONS[..before_search] {
+            conn.execute_batch(sql).unwrap();
+        }
+        conn.pragma_update(None, "user_version", before_search as i64)
+            .unwrap();
+        let mut store = Store { conn };
+        let mut a = new_item("a", "1", "");
+        a.title = "Bevy 0.15 released".into();
+        store.insert_items(&[a]).unwrap();
+
+        let store = Store::init(store.conn).unwrap();
+        assert_eq!(search(&store, "bevy"), ["1"]);
+    }
+
+    #[test]
+    fn purged_items_leave_the_search_index() {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut a = new_item("a", "1", "");
+        a.title = "Flax 1.9 released".into();
+        store.insert_items(&[a]).unwrap();
+        store.purge_sources(&["a".into()]).unwrap();
+        // The next item reuses the purged row id.
+        let mut b = new_item("b", "2", "");
+        b.title = "Stride 4.2 released".into();
+        store.insert_items(&[b]).unwrap();
+
+        assert!(search(&store, "flax").is_empty());
+        assert_eq!(search(&store, "released"), ["2"]);
     }
 
     #[test]
