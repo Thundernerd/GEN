@@ -302,6 +302,7 @@ mod tests {
         let cases: &[(&str, &[&str])] = &[
             ("Assassin's Creed Unity gets a Linux port", &[]),
             ("Assassin’s Creed Unity runs well on Proton", &[]),
+            ("Assassins Creed Unity is free this week", &[]),
             ("Unity of Command II DLC out now", &[]),
             ("Unity 6.3 LTS released", &["unity"]),
         ];
