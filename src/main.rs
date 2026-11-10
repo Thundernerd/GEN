@@ -56,6 +56,11 @@ enum Command {
     },
     /// Validate the config file and list the sources stored in the database.
     CheckConfig,
+    /// Add an engine or outlet from the built-in catalog, with its sources, to the database.
+    Add {
+        /// Catalog id of the engine or outlet, e.g. `bevy` or `gamefromscratch`.
+        id: String,
+    },
     /// Send a sample item to one notification channel, ignoring its rules.
     NotifyTest {
         /// Channel name, as shown on the Notifications page.
@@ -81,6 +86,7 @@ async fn main() -> anyhow::Result<()> {
 
     match cli.command.unwrap_or(Command::Serve) {
         Command::CheckConfig => check_config(&app),
+        Command::Add { id } => add(&app, &id),
         Command::Fetch { source } => fetch_once(&app, source.as_deref()).await,
         Command::Serve => serve(app).await,
         Command::NotifyTest { channel, sample } => notify_test(&app, &channel, &sample).await,
@@ -141,6 +147,51 @@ fn check_config(app: &AppConfig) -> anyhow::Result<()> {
         println!("\nwarning: {warning}");
     }
     Ok(())
+}
+
+fn add(app: &AppConfig, id: &str) -> anyhow::Result<()> {
+    let pipeline = build_pipeline(app)?;
+    let mut store = pipeline
+        .store
+        .lock()
+        .map_err(|_| anyhow::anyhow!("store mutex poisoned"))?;
+    let added = add_catalog_owner(&pipeline.registry, &mut store, id)?;
+    println!("added {id} with {} sources", added.len());
+    for source in &added {
+        // `fetch` skips these; they can be switched on from the Sources page.
+        let off = if source.enabled {
+            ""
+        } else {
+            "  (switched off)"
+        };
+        println!("  {}{off}", source.id);
+    }
+    Ok(())
+}
+
+/// Adds the catalog engine or outlet `id` with its catalog sources, as the Add button under
+/// Suggestions does. Returns the added sources, sorted by id.
+fn add_catalog_owner(
+    registry: &SourceRegistry,
+    store: &mut Store,
+    id: &str,
+) -> anyhow::Result<Vec<config::ResolvedSource>> {
+    let owner = catalog::owner(id)
+        .ok_or_else(|| anyhow::anyhow!("“{id}” is not a suggested engine or outlet."))?;
+    // `apply` refuses this too, but its "is already used" is worded for the web form.
+    if registry.current().has_owner(id) {
+        anyhow::bail!("“{id}” is already in the database.");
+    }
+    registry.apply(store, registry::SourceEdit::AddOwner(owner))?;
+    let mut added: Vec<_> = registry
+        .current()
+        .config
+        .all_sources()
+        .into_iter()
+        .filter(|s| s.owner.id() == id)
+        .collect();
+    added.sort_by(|a, b| a.id.cmp(&b.id));
+    Ok(added)
 }
 
 /// [`fetch::github::token_warning`] for the sources that are switched on.
@@ -355,4 +406,106 @@ fn build_pipeline(app: &AppConfig) -> anyhow::Result<Pipeline> {
         settings: Arc::new(pipeline::PollSettings::new(default_interval)),
         fetches: Arc::new(scheduler::FetchRequests::default()),
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn empty_registry() -> (SourceRegistry, Store) {
+        let store = Store::open_in_memory().unwrap();
+        (SourceRegistry::load(&store).unwrap(), store)
+    }
+
+    #[test]
+    fn adding_a_catalog_engine_stores_it_with_its_catalog_sources() {
+        let (registry, mut store) = empty_registry();
+
+        let added: Vec<_> = add_catalog_owner(&registry, &mut store, "bevy")
+            .unwrap()
+            .into_iter()
+            .map(|s| s.id)
+            .collect();
+
+        assert_eq!(
+            added,
+            [
+                "bevy:feed:https://bevy.org/atom.xml",
+                "bevy:github:bevyengine/bevy"
+            ]
+        );
+        // Stored, not just published: a fresh load from the same database sees it.
+        let reloaded = SourceRegistry::load(&store).unwrap().current();
+        assert!(reloaded.has_owner("bevy"));
+        let mut ids: Vec<_> = reloaded
+            .config
+            .all_sources()
+            .into_iter()
+            .filter(|s| s.owner.id() == "bevy")
+            .map(|s| s.id)
+            .collect();
+        ids.sort();
+        assert_eq!(ids, added);
+    }
+
+    #[test]
+    fn adding_an_unknown_id_fails_and_stores_nothing() {
+        let (registry, mut store) = empty_registry();
+
+        let err = add_catalog_owner(&registry, &mut store, "no-such-engine").unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "“no-such-engine” is not a suggested engine or outlet."
+        );
+        assert!(
+            !SourceRegistry::load(&store)
+                .unwrap()
+                .current()
+                .has_owner("no-such-engine")
+        );
+    }
+
+    #[test]
+    fn adding_an_owner_that_is_already_present_fails() {
+        let (registry, mut store) = empty_registry();
+        add_catalog_owner(&registry, &mut store, "gamefromscratch").unwrap();
+
+        let err = add_catalog_owner(&registry, &mut store, "gamefromscratch").unwrap_err();
+
+        assert_eq!(
+            err.to_string(),
+            "“gamefromscratch” is already in the database."
+        );
+    }
+
+    #[test]
+    fn an_added_engine_has_its_catalog_excludes_and_the_next_start_keeps_them() {
+        let (registry, mut store) = empty_registry();
+        let Some(registry::NewOwner::Engine(unity)) = catalog::owner("unity") else {
+            panic!("unity is a catalog engine");
+        };
+        let catalog_excludes = unity.exclude;
+        assert!(!catalog_excludes.is_empty(), "unity has catalog excludes");
+        add_catalog_owner(&registry, &mut store, "unity").unwrap();
+        let excludes = |reg: &SourceRegistry| {
+            reg.current()
+                .config
+                .engine("unity")
+                .unwrap()
+                .exclude
+                .clone()
+        };
+        assert_eq!(excludes(&registry), catalog_excludes);
+
+        // What the next start does: nothing is missing, so nothing changes.
+        let restarted = SourceRegistry::load(&store).unwrap();
+        catalog::merge_catalog_excludes(&restarted, &mut store);
+
+        assert_eq!(excludes(&restarted), catalog_excludes);
+        assert_eq!(
+            excludes(&SourceRegistry::load(&store).unwrap()),
+            catalog_excludes
+        );
+    }
 }
