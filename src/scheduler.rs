@@ -670,6 +670,19 @@ mod tests {
         }
     }
 
+    /// A notifier, and its pipeline, over `store` and the sources it holds. `bot` is the
+    /// Discord bot that posts to bot channels.
+    fn test_notifier(store: crate::store::Store, bot: Option<BotApi>) -> Notifier {
+        let registry = crate::registry::SourceRegistry::load(&store).unwrap();
+        let pipeline = test_pipeline(store, registry);
+        Notifier {
+            wake: pipeline.notify_wake.clone(),
+            pipeline,
+            bot,
+            app: Arc::new(AppConfig::default()),
+        }
+    }
+
     /// A local HTTP server, running until the test ends.
     struct TestServer {
         addr: std::net::SocketAddr,
@@ -932,7 +945,6 @@ mod tests {
         let addr = sink.addr;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
-        let registry = crate::registry::SourceRegistry::load(&store).unwrap();
         let channel = format!(
             r#"{{"name":"phone","kind":"ntfy","server":"http://{addr}","topic":"gen-test"}}"#
         );
@@ -954,13 +966,7 @@ mod tests {
                 image_url: None,
             }])
             .unwrap();
-        let pipeline = test_pipeline(store, registry);
-        let notifier = Notifier {
-            pipeline: pipeline.clone(),
-            bot: None,
-            app: Arc::new(AppConfig::default()),
-            wake: pipeline.notify_wake.clone(),
-        };
+        let notifier = test_notifier(store, None);
         notifier.run_once().await;
 
         let requests = sink.requests();
@@ -968,7 +974,7 @@ mod tests {
         let request = &requests[0];
         assert!(request.starts_with("POST /gen-test "), "{request}");
         assert!(request.contains("Godot 4.8"), "{request}");
-        let channels = notify::load_channels(&pipeline.store.lock().unwrap()).unwrap();
+        let channels = notify::load_channels(&notifier.pipeline.store.lock().unwrap()).unwrap();
         assert!(channels[0].last_ok.is_some() && channels[0].last_error.is_none());
     }
 
@@ -980,7 +986,6 @@ mod tests {
         let addr = sink.addr;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
-        let registry = crate::registry::SourceRegistry::load(&store).unwrap();
         let channel = format!(
             r#"{{"name":"phone","kind":"ntfy","server":"http://{addr}","topic":"gen-test",
                 "rules":{{"search":"godot shader"}}}}"#
@@ -1008,13 +1013,7 @@ mod tests {
                 item("d", "Unity shader graph", None),
             ])
             .unwrap();
-        let pipeline = test_pipeline(store, registry);
-        let notifier = Notifier {
-            pipeline: pipeline.clone(),
-            bot: None,
-            app: Arc::new(AppConfig::default()),
-            wake: pipeline.notify_wake.clone(),
-        };
+        let notifier = test_notifier(store, None);
         notifier.run_once().await;
 
         let requests = sink.requests();
@@ -1024,7 +1023,7 @@ mod tests {
             "{requests:?}"
         );
         assert!(requests[1].contains("Weekly roundup"), "{requests:?}");
-        let store = pipeline.store.lock().unwrap();
+        let store = notifier.pipeline.store.lock().unwrap();
         let since = chrono::Utc::now() - chrono::Duration::days(1);
         assert!(
             store
@@ -1044,7 +1043,6 @@ mod tests {
         let addr = sink.addr;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
-        let registry = crate::registry::SourceRegistry::load(&store).unwrap();
         let channel = r#"{"name":"discord-godot","kind":"discordbot","guild_id":1,"channel_id":42,
             "subscriptions":[{"engine":"godot","topic":"releases"},{"engine":"unity","topic":"releases"}]}"#;
         store.add_channel("discord-godot", channel).unwrap();
@@ -1070,16 +1068,11 @@ mod tests {
                 item("c", &["bevy"], Release, "Bevy release, not subscribed"),
             ])
             .unwrap();
-        let pipeline = test_pipeline(store, registry);
-        let notifier = Notifier {
-            pipeline: pipeline.clone(),
-            bot: Some(BotApi {
-                token: "t0ken".into(),
-                api_base: format!("http://{addr}"),
-            }),
-            app: Arc::new(AppConfig::default()),
-            wake: pipeline.notify_wake.clone(),
+        let bot = BotApi {
+            token: "t0ken".into(),
+            api_base: format!("http://{addr}"),
         };
+        let notifier = test_notifier(store, Some(bot));
         notifier.run_once().await;
         notifier.run_once().await;
 
@@ -1092,7 +1085,7 @@ mod tests {
                 .to_lowercase()
                 .contains("authorization: bot t0ken")
         );
-        let channels = notify::load_channels(&pipeline.store.lock().unwrap()).unwrap();
+        let channels = notify::load_channels(&notifier.pipeline.store.lock().unwrap()).unwrap();
         assert!(channels[0].last_ok.is_some() && channels[0].last_error.is_none());
     }
 
@@ -1111,7 +1104,6 @@ mod tests {
         let addr = server.addr;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
-        let registry = crate::registry::SourceRegistry::load(&store).unwrap();
         let channel = format!(
             r#"{{"name":"chat","kind":"discord","webhook_url":"http://{addr}/hook","style":"polished"}}"#
         );
@@ -1132,17 +1124,12 @@ mod tests {
                 image_url: None,
             }])
             .unwrap();
-        let pipeline = test_pipeline(store, registry);
-        let notifier = Notifier {
-            pipeline: pipeline.clone(),
-            bot: None,
-            app: Arc::new(AppConfig::default()),
-            wake: pipeline.notify_wake.clone(),
-        };
+        let notifier = test_notifier(store, None);
         notifier.run_once().await;
 
         let hero = format!("http://{addr}/hero.png");
-        let item = pipeline
+        let item = notifier
+            .pipeline
             .store
             .lock()
             .unwrap()
