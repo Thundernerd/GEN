@@ -390,7 +390,7 @@ Its subscriptions are changed in Discord. On the website you can add keywords, c
 | `/api/items` | JSON API for items. Takes `engine`, `kind`, `tier`, `csharp`, `q`, `page` and `limit`. |
 | `/health` | Liveness check that returns `ok`. |
 
-**Search:** `/`, `/feed.xml` and `/api/items` take `q=` to search item titles and summaries; the timeline has a search box for it. Every word must match, as a word or the start of one (`god` finds Godot), regardless of case and accents. Punctuation and words like `AND` or `NEAR` are matched as text, not operators. Search combines with the other filters, so `/feed.xml?engine=godot&q=shader` is a feed you can subscribe to.
+**Search:** `/`, `/feed.xml` and `/api/items` take `q=` to search item titles and summaries; the timeline has a search box for it. Every word must match, as a word or the start of one (`god` finds Godot), regardless of case and accents. Punctuation is ignored, and words like `AND` or `NEAR` are searched for as words, not used as operators. Search combines with the other filters, so `/feed.xml?engine=godot&q=shader` is a feed you can subscribe to.
 
 ## Managing sources from the web
 

@@ -16,6 +16,10 @@ use crate::model::{Item, ItemKind, NewItem, SourceState};
 /// Items with the same `story_key` within this window are treated as the same story.
 pub const DUPLICATE_WINDOW_DAYS: i64 = 7;
 
+/// Index in `MIGRATIONS` of the migration that adds full-text search.
+#[cfg(test)]
+const SEARCH_MIGRATION: usize = 7;
+
 const MIGRATIONS: &[&str] = &[
     r#"
 CREATE TABLE items (
@@ -710,11 +714,13 @@ const ITEM_SELECT: &str = "SELECT i.id, i.source_id, i.guid, i.kind, i.title, i.
     FROM items i";
 
 /// Turns free text from a search box into an FTS5 query: each word becomes a quoted
-/// prefix term, so FTS5 operators and punctuation are taken literally and every word must
-/// match. `None` when there are no words.
+/// prefix term, so FTS5 operators are searched for as words and every word must match.
+/// Words without letters or digits would match nothing, so they're left out. `None` when
+/// no words are left.
 fn fts_query(text: &str) -> Option<String> {
     let terms: Vec<String> = text
         .split_whitespace()
+        .filter(|w| w.chars().any(char::is_alphanumeric))
         .map(|w| format!("\"{}\"*", w.replace('"', "\"\"")))
         .collect();
     (!terms.is_empty()).then(|| terms.join(" "))
@@ -930,16 +936,18 @@ mod tests {
         assert_eq!(search(&store, "NEAR("), ["1"]);
         assert_eq!(search(&store, "c# OR"), Vec::<String>::new());
         assert_eq!(search(&store, "6.1"), ["1"]);
-        assert_eq!(search(&store, "*"), Vec::<String>::new());
-        // Blank text is no filter at all.
+        // Words without letters or digits are ignored; blank text is no filter at all.
+        assert_eq!(search(&store, "editor - *"), ["1"]);
+        assert_eq!(search(&store, "*"), ["1"]);
         assert_eq!(search(&store, "   "), ["1"]);
     }
 
     #[test]
     fn upgrading_indexes_existing_items() {
         // A database from before search, with an item in it.
+        assert!(MIGRATIONS[SEARCH_MIGRATION].contains("CREATE VIRTUAL TABLE items_fts"));
         let conn = Connection::open_in_memory().unwrap();
-        let before_search = MIGRATIONS.len() - 1;
+        let before_search = SEARCH_MIGRATION;
         for sql in &MIGRATIONS[..before_search] {
             conn.execute_batch(sql).unwrap();
         }
