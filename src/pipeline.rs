@@ -5,7 +5,7 @@ use std::sync::{Arc, Mutex};
 use tokio::sync::{Notify, watch};
 
 use crate::config::ResolvedSource;
-use crate::fetch::{self, FetchOutcome, Http};
+use crate::fetch::{self, FetchError, FetchOutcome, Http};
 use crate::model::{Item, NewItem};
 use crate::registry::SourceRegistry;
 use crate::scheduler::FetchRequests;
@@ -80,6 +80,9 @@ impl Pipeline {
 
         let outcome = match fetch::fetch_source(&self.http, source, &state).await {
             Ok(outcome) => outcome,
+            // Skipped while the host cools down from a rate limit: not this source's
+            // failure, so its stored record stays as it is.
+            Err(err @ FetchError::CoolingDown { .. }) => return Err(err.into()),
             Err(err) => {
                 let (id, msg) = (source.id.clone(), err.to_string());
                 self.with_store(move |s| s.record_fetch_error(&id, &msg))
