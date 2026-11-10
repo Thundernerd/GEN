@@ -251,16 +251,29 @@ All source kinds also accept these fields:
 
 - Tier 1 covers major or very active engines with C# support, plus Unreal (C# via plugins only): Unity, Unreal, Godot (.NET), Stride, Flax, S&Box, Prowl, OpenEngine, MonoGame, FNA, NeoAxis, Evergine, UNIGINE, Silk.NET and BRUTAL.
 - Tier 2 covers niche C# engines, frameworks and libraries, such as LODZERO, KNI, Murder, Raylib-cs, Foster, MonoGame.Extended, Myra, Arch and BEPUphysics.
-- Tier 3 covers notable engines without C# support, such as Bevy, Defold, O3DE and GameMaker. Tier-3 engines ship with `enabled = false`, so they are listed but not polled. Set `enabled = true` on any you want to follow.
+- Tier 3 covers notable engines without C# support, such as Bevy, Defold, O3DE and GameMaker.
 
-You can disable a whole engine or outlet, or a single source, with `enabled = false`. Run `gen check-config` after editing.
+The tier only groups engines; it doesn't decide whether they are polled. Apart from the seeded engines, every catalog engine of every tier, and every outlet, is offered as a suggestion on the Sources page, and its sources are polled once you add it. Catalog engines and outlets are always enabled (a test checks this). A single catalog source with `enabled = false` is added switched off; switch it on from the Sources page (see "Switching sources on and off").
 
-To add an engine or outlet:
+The `check-config` and `fetch` commands only see the sources stored in the database, so a new catalog entry is invisible to them until it has been added from the suggestions. To add an engine or outlet to the catalog and try it out:
 
-1. Add the `[[engine]]` or `[[outlet]]` block.
-2. Run `cargo run -- check-config`.
-3. Run `cargo run -- fetch --source <id>` to see what it produces.
-4. Restart the server.
+1. Add the `[[engine]]` or `[[outlet]]` block (or a `source` entry under an existing one) to `src/catalog.toml`.
+2. Run `cargo test catalog`, which checks that the catalog parses, is valid and has no YouTube, Reddit, forum or Hacker News sources.
+3. Try it on a scratch database, so your real one stays untouched. Write a scratch config, e.g. `scratch.toml`:
+
+   ```toml
+   [server]
+   bind = "127.0.0.1:8081"
+   base_url = "http://localhost:8081"
+   admin_token = "scratch"
+
+   [database]
+   path = "data/scratch.db"
+   ```
+
+   Run `cargo run -- --config scratch.toml serve`, open <http://localhost:8081/sources>, log in with the token, and click **Add** next to the new entry under **Suggestions**. GEN polls its sources straight away: the log shows `fetched source=<source id> new=<count>` for each, and an engine's page, `/engine/<id>`, lists its items.
+4. After that, `cargo run -- --config scratch.toml fetch --source <id>` polls them again and prints the items that are new since then (usually none, or `not modified`). To see the first fetch again after changing the entry, delete `data/scratch.db` and repeat step 3; a database keeps the copy of an entry it was given.
+5. Rebuild and restart the real server. The new entry shows under **Suggestions** on its Sources page.
 
 New sources fill the database silently on their first successful fetch.
 
