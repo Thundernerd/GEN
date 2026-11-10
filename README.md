@@ -174,7 +174,7 @@ concurrency = 8                    # max sources fetched at the same time
 
 Relative paths resolve against the working directory. A GitHub token is optional, but without one the GitHub API allows only 60 requests per hour.
 
-Without `retention_days`, the database keeps every item and grows without bound. With it, GEN deletes items dated more than that many days ago at startup and then once a day, together with their cross-source duplicates. It must be at least 7, the window in which the same story from different sources is merged. GEN remembers each deleted item's source and id, so a feed that still lists an old entry doesn't bring it back as new or notify it again. SQLite reuses the freed space, so the file stops growing; it doesn't shrink unless you run `sqlite3 gen.db VACUUM` while GEN is stopped.
+Without `retention_days`, the database keeps every item and grows without bound. With it, GEN deletes items that are dated, and were first fetched, more than that many days ago. It does so at startup and then once a day, and deletes their cross-source duplicates with them. It must be at least 7, the window in which the same story from different sources is merged. GEN remembers each deleted item's source and id, so a feed that still lists an old entry doesn't bring it back as new or notify it again. That record is two short strings per item, so the database still grows, but slowly. SQLite reuses the freed space; the file doesn't shrink unless you run `sqlite3 gen.db VACUUM` while GEN is stopped.
 
 ### Engines, outlets and the catalog
 

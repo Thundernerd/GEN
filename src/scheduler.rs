@@ -190,6 +190,10 @@ impl FetchRequests {
 /// stops them, and with the supervisor every polling task.
 pub fn spawn(pipeline: Pipeline, app: Arc<AppConfig>) -> JoinSet<()> {
     let wake = pipeline.notify_wake.clone();
+    let mut tasks = JoinSet::new();
+    if let Some(retention) = app.database.retention() {
+        tasks.spawn(prune(pipeline.clone(), retention));
+    }
     let poller = Poller {
         pipeline: pipeline.clone(),
         permits: Arc::new(Semaphore::new(app.polling.concurrency.max(1))),
@@ -201,17 +205,13 @@ pub fn spawn(pipeline: Pipeline, app: Arc<AppConfig>) -> JoinSet<()> {
         app,
         wake,
     };
-    let mut tasks = JoinSet::new();
-    if let Some(retention) = notifier.app.database.retention() {
-        tasks.spawn(prune(notifier.pipeline.clone(), retention));
-    }
     tasks.spawn(supervise(poller));
     tasks.spawn(async move { notifier.run().await });
     tasks
 }
 
 /// Deletes items older than `retention`, at startup and then once a day.
-async fn prune(pipeline: Pipeline, retention: chrono::Duration) {
+async fn prune(pipeline: Pipeline, retention: chrono::TimeDelta) {
     loop {
         let cutoff = chrono::Utc::now() - retention;
         match pipeline.with_store(move |s| s.prune_items(cutoff)).await {

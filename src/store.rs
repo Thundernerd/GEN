@@ -412,8 +412,8 @@ impl Store {
 
     // -- items --------------------------------------------------------------
 
-    /// Inserts items, skipping ones already stored (or pruned) for the same source. Returns the newly
-    /// stored items; ones whose story was already stored from another source within
+    /// Inserts items, skipping ones already stored (or pruned) for the same source. Returns
+    /// the newly stored items; ones whose story was already stored from another source within
     /// `DUPLICATE_WINDOW_DAYS` come back with `duplicate_of` set.
     pub fn insert_items(&mut self, items: &[NewItem]) -> anyhow::Result<Vec<Item>> {
         self.insert_items_at(items, Utc::now())
@@ -503,8 +503,9 @@ impl Store {
         Ok(inserted)
     }
 
-    /// Deletes items dated before `cutoff`, with their cross-source duplicates. Their source and guid are kept, so a feed
-    /// that still lists one doesn't store it again. Returns how many were deleted.
+    /// Deletes items dated before `cutoff`, with their cross-source duplicates. Their source
+    /// and guid are kept, so a feed that still lists one doesn't store it again. Returns how
+    /// many were deleted.
     pub fn prune_items(&mut self, cutoff: DateTime<Utc>) -> anyhow::Result<usize> {
         let tx = self.conn.transaction()?;
         // Duplicates go with their story, even when dated later than it.
@@ -737,7 +738,8 @@ fn insert_source(
 }
 
 /// Deletes a source's items (with their engine tags and sent notifications), the keys of
-/// its pruned items, its fetch state and override. Items of other sources that were duplicates of these become primaries.
+/// its pruned items, its fetch state and override. Items of other sources that were
+/// duplicates of these become primaries.
 fn purge_source_data(conn: &Connection, source_id: &str) -> rusqlite::Result<()> {
     conn.execute(
         "UPDATE items SET duplicate_of = NULL
