@@ -58,6 +58,7 @@
       {{ style_select(f, styles, true) }}
       <p class="form-hint">Change these in Discord with <code>/gen subscribe</code>, <code>/gen unsubscribe</code> and <code>/gen remove</code>.</p>
       <label><span>Keywords (optional, comma-separated: only items mentioning one)</span><input name="keywords" value="{{ f.keywords or "" }}"></label>
+      <label><span>Search (optional: every word must match, like the site's search box)</span><input type="search" name="search" value="{{ f.search or "" }}"></label>
     </fieldset>
     {%- else %}
     <p class="form-hint">Secrets can be written as <code>${VARIABLE}</code> to read them from GEN's environment instead of storing them.</p>
@@ -122,6 +123,7 @@
       </div>
       <label class="check"><input type="checkbox" name="include_untagged" value="1"{% if f.include_untagged %} checked{% endif %}> Also news-outlet items that mention no engine</label>
       <label><span>Keywords (optional, comma-separated: only items mentioning one)</span><input name="keywords" value="{{ f.keywords or "" }}"></label>
+      <label><span>Search (optional: every word must match, like the site's search box)</span><input type="search" name="search" value="{{ f.search or "" }}"></label>
     </fieldset>
     {%- endif %}
 

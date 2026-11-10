@@ -581,6 +581,10 @@ pub struct NotifyRules {
     /// Case-insensitive substrings; at least one must appear in title or summary.
     #[serde(default)]
     pub keywords: Vec<String>,
+    /// A search with the same meaning as the site's search box: every word must match
+    /// the start of a word in title or summary, ignoring case and accents.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub search: Option<String>,
     /// Also notify about items from general outlets that matched no engine.
     #[serde(default)]
     pub include_untagged: bool,

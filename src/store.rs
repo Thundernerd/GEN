@@ -4,7 +4,7 @@
 //! `Store` is synchronous; async code shares it as `Arc<Mutex<Store>>` and calls it from
 //! `tokio::task::spawn_blocking` (queries are small and fast).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
 use anyhow::Context;
@@ -608,6 +608,21 @@ impl Store {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
+    /// Which of the given item ids match a search, with the same meaning as the site's
+    /// search box (`ItemQuery::q`). A search without words matches every id.
+    pub fn matching_search(&self, ids: &[i64], text: &str) -> anyhow::Result<HashSet<i64>> {
+        let Some(fts) = fts_query(text) else {
+            return Ok(ids.iter().copied().collect());
+        };
+        let mut stmt = self.conn.prepare_cached(
+            "SELECT rowid FROM items_fts WHERE items_fts MATCH ?1
+             AND rowid IN (SELECT value FROM json_each(?2))",
+        )?;
+        let ids = serde_json::to_string(ids)?;
+        let rows = stmt.query_map(params![fts, ids], |r| r.get::<_, i64>(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
     /// For each given item id, the source ids of items marked as its duplicates.
     pub fn duplicate_sources(&self, ids: &[i64]) -> anyhow::Result<HashMap<i64, Vec<String>>> {
         let mut out: HashMap<i64, Vec<String>> = HashMap::new();
@@ -1014,6 +1029,44 @@ mod tests {
         // Every word must match.
         assert_eq!(search(&store, "godot physics"), ["1"]);
         assert!(search(&store, "bevy").is_empty());
+    }
+
+    /// Notification channels ask which of their pending items match a search; the answer
+    /// is the same as the site's search, limited to the given ids.
+    #[test]
+    fn tells_which_items_match_a_search() {
+        let mut store = Store::open_in_memory().unwrap();
+        let mut a = new_item("a", "1", "");
+        a.title = "Godot 4.3 released with Jolt physics".into();
+        let mut b = new_item("a", "2", "");
+        b.title = "Weekly roundup".into();
+        b.summary = Some("New lighting in Unity 6; Godot gets a shader editor".into());
+        let mut c = new_item("a", "3", "");
+        c.title = "Stride community meeting".into();
+        let mut d = new_item("a", "4", "");
+        d.title = "GODOT shaders, déjà vu".into();
+        let stored = store.insert_items(&[a, b, c, d]).unwrap();
+        let ids: Vec<i64> = stored.iter().map(|i| i.id).collect();
+        let matching = |ids: &[i64], q: &str| {
+            let mut found: Vec<i64> = store.matching_search(ids, q).unwrap().into_iter().collect();
+            found.sort();
+            found
+        };
+
+        assert_eq!(matching(&ids, "godot"), [ids[0], ids[1], ids[3]]);
+        assert_eq!(matching(&ids, "Jolt"), [ids[0]]);
+        assert_eq!(
+            matching(&ids, "godot shader"),
+            [ids[1], ids[3]],
+            "every word, as a prefix"
+        );
+        assert_eq!(matching(&ids, "deja"), [ids[3]], "accents are ignored");
+        assert!(matching(&ids, "bevy").is_empty());
+        // Only the given ids are answered for.
+        assert_eq!(matching(&ids[1..3], "godot"), [ids[1]]);
+        assert!(matching(&[], "godot").is_empty());
+        // A search without words is no filter.
+        assert_eq!(matching(&ids[..2], " * "), ids[..2]);
     }
 
     #[test]

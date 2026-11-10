@@ -804,7 +804,7 @@ async fn admin_manages_notification_channels() {
     assert!(body.contains("No channels yet"));
 
     let form = format!(
-        "name=chat&kind=discord&webhook_url={HOOK}&kinds=release&kinds=prerelease&engines=godot&enabled=1"
+        "name=chat&kind=discord&webhook_url={HOOK}&kinds=release&kinds=prerelease&engines=godot&search=godot+shader&enabled=1"
     );
     let (status, headers, _) =
         send(&st, post_form("/notifications/add", &form, Some(&cookie))).await;
@@ -814,10 +814,15 @@ async fn admin_manages_notification_channels() {
     assert!(chat.enabled);
     assert_eq!(chat.rules.engines, ["godot"]);
     assert_eq!(chat.rules.kinds, [ItemKind::Release, ItemKind::Prerelease]);
+    assert_eq!(chat.rules.search.as_deref(), Some("godot shader"));
 
     let (_, body) = get_as(&st, "/notifications", &cookie).await;
     assert!(body.contains("Discord webhook"));
-    assert!(body.contains("release, prerelease · Godot"));
+    assert!(body.contains("release, prerelease · Godot · search: godot shader"));
+    assert!(
+        body.contains(r#"name="search" value="godot shader""#),
+        "{body}"
+    );
     assert!(!body.contains("SUPERSECRET"), "secrets are never shown");
     assert!(body.contains("set · leave empty to keep"));
 
@@ -827,7 +832,7 @@ async fn admin_manages_notification_channels() {
         .map(|k| format!("&kinds={}", k.as_str()))
         .collect();
     let form = format!(
-        "original_name=chat&kind=discord&webhook_url=&keywords=4.8%2C+C%23&enabled=1{kinds}"
+        "original_name=chat&kind=discord&webhook_url=&keywords=4.8%2C+C%23&search=+unity++&enabled=1{kinds}"
     );
     let (status, _, _) = send(&st, post_form("/notifications/edit", &form, Some(&cookie))).await;
     assert_eq!(status, StatusCode::SEE_OTHER);
@@ -837,6 +842,13 @@ async fn admin_manages_notification_channels() {
     );
     assert!(chat.rules.kinds.is_empty() && chat.rules.engines.is_empty());
     assert_eq!(chat.rules.keywords, ["4.8", "C#"]);
+    assert_eq!(chat.rules.search.as_deref(), Some("unity"));
+
+    // An empty search is no search.
+    let form = format!("original_name=chat&kind=discord&webhook_url=&search=+&enabled=1{kinds}");
+    let (status, _, _) = send(&st, post_form("/notifications/edit", &form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(stored_channels(&st)[0].rules.search, None);
 
     let (status, _, _) = send(
         &st,
@@ -1204,13 +1216,16 @@ async fn shows_discord_bot_channels_and_keeps_their_subscriptions() {
     assert!(body.contains("client_id=42"));
     assert!(body.contains(r#"<input type="hidden" name="kind" value="discordbot">"#));
 
-    // Editing changes keywords and the switch; the subscriptions stay as they are.
-    let form = "original_name=discord-godot-news&kind=discordbot&keywords=4.8";
+    // Editing changes keywords, search and the switch; the subscriptions stay as they are.
+    let form = "original_name=discord-godot-news&kind=discordbot&keywords=4.8&search=shader";
     let (status, _, _) = send(&st, post_form("/notifications/edit", form, Some(&cookie))).await;
     assert_eq!(status, StatusCode::SEE_OTHER);
     let channel = &stored_channels(&st)[0];
     assert!(!channel.enabled);
     assert_eq!(channel.rules.keywords, ["4.8"]);
+    assert_eq!(channel.rules.search.as_deref(), Some("shader"));
+    let (_, body) = get_as(&st, "/notifications", &cookie).await;
+    assert!(body.contains("keywords: 4.8 · search: shader"), "{body}");
     assert!(
         matches!(&channel.target, ChannelTarget::DiscordBot { subscriptions, created_by_bot: true, .. } if subscriptions.len() == 2)
     );
