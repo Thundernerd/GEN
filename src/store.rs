@@ -985,17 +985,8 @@ mod tests {
 
     fn new_item(source: &str, guid: &str, story: &str) -> NewItem {
         NewItem {
-            source_id: source.into(),
-            guid: guid.into(),
-            engines: vec!["godot".into()],
-            kind: ItemKind::Release,
-            title: format!("Title {guid}"),
-            url: Some(format!("https://example.com/{guid}")),
-            summary: None,
-            published: Some(Utc::now()),
             story_key: story.into(),
-            notify: false,
-            image_url: None,
+            ..NewItem::test(source, guid)
         }
     }
 
@@ -1564,9 +1555,10 @@ mod tests {
     }
 
     fn aged(source: &str, guid: &str, story: &str, days: i64) -> NewItem {
-        let mut item = new_item(source, guid, story);
-        item.published = Some(Utc::now() - Duration::days(days));
-        item
+        NewItem {
+            published: Some(Utc::now() - Duration::days(days)),
+            ..new_item(source, guid, story)
+        }
     }
 
     #[test]
