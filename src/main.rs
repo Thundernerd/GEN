@@ -10,6 +10,8 @@ mod pipeline;
 mod registry;
 mod scheduler;
 mod store;
+#[cfg(test)]
+mod test_server;
 mod time_ago;
 mod toggles;
 mod web;

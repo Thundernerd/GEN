@@ -311,6 +311,7 @@ mod tests {
     use super::*;
     use crate::model::ItemKind;
     use crate::notify::tests::{item, sources};
+    use crate::test_server::{TestServer, respond, serve, unexpected};
 
     const BASE: &str = "https://gen.example.org/";
 
@@ -469,7 +470,8 @@ mod tests {
 
     #[tokio::test]
     async fn posts_as_the_bot() {
-        let (addr, requests) = sink(&["200 OK"]).await;
+        let server = sink(&["200 OK"]).await;
+        let addr = server.addr;
         let http = crate::fetch::Http::new("gen-test", None).unwrap();
         let bot = BotApi {
             token: "bot-token".into(),
@@ -484,7 +486,9 @@ mod tests {
         let i = item(&["godot"], ItemKind::Release, "Godot 4.8", None);
         send_bot(&ctx, 42, MessageStyle::Card, &[i]).await.unwrap();
 
-        let request = requests.await.unwrap().remove(0);
+        let requests = server.requests();
+        assert_eq!(requests.len(), 1, "{requests:#?}");
+        let request = &requests[0];
         assert!(
             request.starts_with("POST /api/v10/channels/42/messages "),
             "{request}"
@@ -501,7 +505,8 @@ mod tests {
 
     #[tokio::test]
     async fn webhooks_fall_back_when_components_are_refused() {
-        let (addr, requests) = sink(&["400 Bad Request", "204 No Content"]).await;
+        let server = sink(&["400 Bad Request", "204 No Content"]).await;
+        let addr = server.addr;
         let http = crate::fetch::Http::new("gen-test", None).unwrap();
         let ctx = NotifyContext {
             http: &http,
@@ -513,7 +518,8 @@ mod tests {
         let hook = format!("http://{addr}/api/webhooks/1/x");
         send(&ctx, &hook, MessageStyle::Card, &[i]).await.unwrap();
 
-        let requests = requests.await.unwrap();
+        let requests = server.requests();
+        assert_eq!(requests.len(), 2, "{requests:#?}");
         assert!(requests[0].starts_with("POST /api/webhooks/1/x?with_components=true "));
         assert!(requests[0].contains(r#""flags":32768"#));
         assert!(requests[1].starts_with("POST /api/webhooks/1/x "));
@@ -521,30 +527,15 @@ mod tests {
         assert!(!requests[1].contains(r#""components""#));
     }
 
-    /// An HTTP server answering one request per status, returning what it was sent.
-    async fn sink(
-        statuses: &[&'static str],
-    ) -> (std::net::SocketAddr, tokio::task::JoinHandle<Vec<String>>) {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
+    /// A server that answers its Nth request with the Nth of `statuses`, and any
+    /// request after those with a 500.
+    async fn sink(statuses: &[&'static str]) -> TestServer {
         let statuses = statuses.to_vec();
-        let task = tokio::spawn(async move {
-            let mut seen = Vec::new();
-            for status in statuses {
-                let (mut conn, _) = listener.accept().await.unwrap();
-                let mut buf = vec![0u8; 32 * 1024];
-                let n = conn.read(&mut buf).await.unwrap();
-                seen.push(String::from_utf8_lossy(&buf[..n]).into_owned());
-                let reply = format!(
-                    "HTTP/1.1 {status}\r\ncontent-length: 2\r\nconnection: close\r\n\r\n{{}}"
-                );
-                conn.write_all(reply.as_bytes()).await.unwrap();
-            }
-            seen
-        });
-        (addr, task)
+        serve(move |n, _| match statuses.get(n) {
+            Some(status) => respond(status, &[], "{}"),
+            None => unexpected(),
+        })
+        .await
     }
 
     #[tokio::test]
