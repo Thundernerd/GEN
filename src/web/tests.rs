@@ -743,7 +743,7 @@ async fn removed_engines_come_back_from_the_suggestions() {
     assert_eq!(status, StatusCode::SEE_OTHER);
     let snapshot = st.registry.current();
     let godot = snapshot.config.engine("godot").unwrap();
-    assert_eq!(godot.sources.len(), 2);
+    assert_eq!(godot.sources.len(), 3);
     assert!(godot.aliases.contains(&"gdscript".to_string()));
     let (status, _, _) = send(
         &st,

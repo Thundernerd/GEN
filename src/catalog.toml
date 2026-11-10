@@ -77,6 +77,11 @@ aliases = ["godot", "godot engine", "gdscript"]
   kind = "github"
   repo = "godotengine/godot"
   category = "release"
+  # Dev, beta and RC builds are only published here (the main repo has just -stable).
+  [[engine.source]]
+  kind = "github"
+  repo = "godotengine/godot-builds"
+  category = "release"
 
 # --- Stride -------------------------------------------------------------------
 # GitHub releases also include launcher/ and vsix/ releases; keep only releases/.
