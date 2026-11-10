@@ -918,6 +918,20 @@ aliases = ["excalibur.js", "excaliburjs"]
   repo = "excaliburjs/Excalibur"
   category = "release"
 
+# ebitengine.org has no RSS/Atom feed; its blog mostly announces the GitHub releases.
+[[engine]]
+id = "ebitengine"
+name = "Ebitengine"
+tier = 3
+csharp = "none (Go)"
+homepage = "https://ebitengine.org"
+icon = "https://avatars.githubusercontent.com/u/106237124?s=128&v=4"
+aliases = ["ebitengine", "ebiten"]
+  [[engine.source]]
+  kind = "github"
+  repo = "hajimehoshi/ebiten"
+  category = "release"
+
 # ===========================================================================
 # Outlets: general game-dev news. Items are tagged with engines via aliases.
 # ===========================================================================
