@@ -67,13 +67,16 @@ pub async fn fetch(
 /// A warning for when GitHub releases sources are polled without a token, or `None`.
 /// Without one, releases come from the public `releases.atom` feed, which has no
 /// prerelease flag (only the title can mark a prerelease) and is polled anonymously; a
-/// token changes nothing for tags and commits. `default_interval` applies to sources
+/// token changes nothing for tags and commits. `default_interval_minutes` applies to sources
 /// without their own interval.
 pub fn token_warning(
     sources: &[ResolvedSource],
-    default_interval: u64,
+    default_interval_minutes: u64,
     has_token: bool,
 ) -> Option<String> {
+    if has_token {
+        return None;
+    }
     let mut releases = 0;
     let mut per_hour = 0.0;
     for s in sources {
@@ -83,9 +86,12 @@ pub fn token_warning(
         if *mode == GithubMode::Releases {
             releases += 1;
         }
-        per_hour += 60.0 / s.interval_minutes.unwrap_or(default_interval).max(1) as f64;
+        per_hour += 60.0
+            / s.interval_minutes
+                .unwrap_or(default_interval_minutes)
+                .max(1) as f64;
     }
-    if has_token || releases == 0 {
+    if releases == 0 {
         return None;
     }
     Some(format!(
