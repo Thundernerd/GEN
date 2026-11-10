@@ -309,6 +309,7 @@ struct ListParams {
     kind: Option<String>,
     tier: Option<String>,
     csharp: Option<String>,
+    q: Option<String>,
     page: Option<String>,
     limit: Option<String>,
 }
@@ -330,6 +331,7 @@ impl ListParams {
                 non_empty(&self.csharp).as_deref(),
                 Some("1" | "on" | "true" | "yes")
             ),
+            q: non_empty(&self.q),
         }
     }
 
@@ -349,6 +351,7 @@ fn filter_pairs(f: &ItemFilter) -> Vec<(&'static str, Option<String>)> {
         ("kind", f.kind.map(|k| k.as_str().to_string())),
         ("tier", f.tier.map(|t| t.to_string())),
         ("csharp", f.csharp.then(|| "1".to_string())),
+        ("q", f.q.clone()),
     ]
 }
 
@@ -448,7 +451,18 @@ async fn index_page(
         })
         .collect();
     let csharp_link = link("csharp", (!filter.csharp).then(|| "1".to_string()));
-    let feed_pairs: Vec<_> = pairs[..2].to_vec();
+    // The search form resubmits the other filters as hidden fields.
+    let search_hidden: Vec<_> = pairs
+        .iter()
+        .filter(|(k, _)| *k != "q")
+        .filter_map(|(k, v)| v.as_ref().map(|v| json!({"name": k, "value": v})))
+        .collect();
+    // The feed takes the engine, kind and search filters.
+    let feed_pairs: Vec<_> = pairs
+        .iter()
+        .filter(|(k, _)| matches!(*k, "engine" | "kind" | "q"))
+        .cloned()
+        .collect();
     st.render(
         "index.html",
         json!({
@@ -459,13 +473,16 @@ async fn index_page(
             "kind_tabs": kind_tabs,
             "engine_links": engine_links,
             "csharp_link": csharp_link,
+            "search_hidden": search_hidden,
+            "clear_search_link": link("q", None),
             "filter": {
                 "engine": filter.engine,
                 "kind": filter.kind.map(ItemKind::as_str),
                 "tier": filter.tier,
                 "csharp": filter.csharp,
+                "q": filter.q,
                 "active": filter.engine.is_some() || filter.kind.is_some()
-                    || filter.tier.is_some() || filter.csharp,
+                    || filter.tier.is_some() || filter.csharp || filter.q.is_some(),
             },
             "pagination": pagination("/", &pairs, page, has_more),
             "feed_url": format!("/feed.xml{}", query_string(&feed_pairs)),
@@ -1092,6 +1109,7 @@ async fn feed_response(st: &AppState, params: ListParams) -> PageResult {
     let filter = ItemFilter {
         engine: full.engine,
         kind: full.kind,
+        q: full.q,
         ..Default::default()
     };
     let (items, _) = st.items_with_dups(filter.clone(), FEED_SIZE, 0).await?;
@@ -1102,6 +1120,9 @@ async fn feed_response(st: &AppState, params: ListParams) -> PageResult {
     }
     if let Some(k) = filter.kind {
         title.push_str(&format!(" ({})", k.as_str()));
+    }
+    if let Some(q) = &filter.q {
+        title.push_str(&format!(" — “{q}”"));
     }
     let query = query_string(&filter_pairs(&filter));
     let feed = feed::build(&items, lookup, st.base_url(), &query, &title);
