@@ -9,7 +9,7 @@ mod notifications;
 mod queries;
 #[cfg(test)]
 mod tests;
-pub(crate) mod view;
+mod view;
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -32,8 +32,8 @@ use crate::catalog;
 use crate::config::{AppConfig, Owner, SourceSpec};
 use crate::discord_bot::BotStatusHandle;
 use crate::fetch::Http;
-use crate::health;
-use crate::model::{Item, ItemKind, SourceState};
+use crate::health::{FetchHistory, SourceHistory};
+use crate::model::{Item, ItemKind};
 use crate::notify::discord::BotApi;
 use crate::pipeline::{Pipeline, PollSettings};
 use crate::registry::{NewOwner, Snapshot, SourceRegistry};
@@ -556,14 +556,14 @@ async fn engine_page(
     let has_more = items.len() > PAGE_SIZE as usize;
     items.truncate(PAGE_SIZE as usize);
 
-    let (states, latest) = st.with_store(source_health_data).await?;
+    let history = st.with_store(FetchHistory::load).await?;
     let now = Utc::now();
     let sources: Vec<_> = snapshot
         .config
         .manageable_sources()
         .into_iter()
         .filter(|s| s.owner == Owner::Engine(engine.id.clone()))
-        .map(|s| source_row(st, &s, states.get(&s.id), latest.get(&s.id).copied(), now))
+        .map(|s| source_row(st, &s, &history.source(&s.id), now))
         .collect();
 
     let base = format!("/engine/{}", engine.id);
@@ -639,14 +639,14 @@ async fn sources_page(
     feedback: Option<serde_json::Value>,
     notice: Option<serde_json::Value>,
 ) -> PageResult {
-    let (states, latest) = st.with_store(source_health_data).await?;
+    let history = st.with_store(FetchHistory::load).await?;
     let now = Utc::now();
     let snapshot = st.registry.current();
     let rows: Vec<_> = snapshot
         .config
         .manageable_sources()
         .iter()
-        .map(|s| source_row(st, s, states.get(&s.id), latest.get(&s.id).copied(), now))
+        .map(|s| source_row(st, s, &history.source(&s.id), now))
         .collect();
     let unhealthy_only = params.health.as_deref() == Some("unhealthy");
 
@@ -1046,27 +1046,16 @@ fn safe_next(next: Option<&str>) -> String {
     }
 }
 
-/// Every source's fetch state and newest item date, for `source_row`.
-type HealthData = (
-    HashMap<String, SourceState>,
-    HashMap<String, chrono::DateTime<Utc>>,
-);
-
-fn source_health_data(store: &Store) -> anyhow::Result<HealthData> {
-    Ok((store.source_states()?, store.latest_item_dates()?))
-}
-
 /// One source with its health, for the engine and sources pages.
 fn source_row(
     st: &AppState,
     s: &crate::config::ResolvedSource,
-    state: Option<&SourceState>,
-    latest_item: Option<chrono::DateTime<Utc>>,
+    history: &SourceHistory,
     now: chrono::DateTime<Utc>,
 ) -> serde_json::Value {
-    let state = state.cloned().unwrap_or_default();
     let enabled = st.toggles.is_enabled(s);
-    let health = health::classify(enabled, &state, latest_item, now);
+    let health = history.health(enabled, now);
+    let state = &history.state;
     let (kind, target, target_url) = describe(&s.spec);
     let (owner_kind, owner_id) = match &s.owner {
         Owner::Engine(id) => ("engine", id.clone()),
@@ -1088,9 +1077,9 @@ fn source_row(
         "in_catalog": catalog::has_source(&s.id),
         "status": health.as_str(),
         "unhealthy": health.is_unhealthy(),
-        "latest_item": latest_item.map(|d| DateView::new(d, now)),
+        "latest_item": history.latest_item.map(|d| DateView::new(d, now)),
         "last_ok": state.last_ok.map(|d| DateView::new(d, now)),
-        "last_error": state.last_error,
+        "last_error": state.last_error.clone(),
         "failures": state.consecutive_failures,
     })
 }

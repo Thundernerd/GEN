@@ -453,6 +453,7 @@ Layout of `src/`:
 | `fetch/` | HTTP client and one fetcher per source kind: `feed`, `github`, `unity`, `hn`, `html`. |
 | `classify.rs` | Item kind detection, engine tagging by alias and story keys for deduplication. |
 | `health.rs` | Source health (ok, retrying, failing, stale …) from fetch state and newest item. |
+| `time_ago.rs` | Relative times such as "3 hours ago", for the web UI and `check-config`. |
 | `store.rs` | SQLite storage: items, source state, engines/outlets/sources and queries for the web UI. |
 | `catalog.rs` | The built-in catalog (`catalog.toml`): seeding a new database and the suggestions. |
 | `registry.rs` | The live set of sources stored in the database, published to the web UI, pipeline and scheduler. |

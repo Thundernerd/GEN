@@ -10,6 +10,7 @@ mod pipeline;
 mod registry;
 mod scheduler;
 mod store;
+mod time_ago;
 mod toggles;
 mod web;
 
@@ -90,15 +91,14 @@ fn check_config(app: &AppConfig) -> anyhow::Result<()> {
     let pipeline = build_pipeline(app)?;
     let snapshot = pipeline.registry.current();
     let sources = &snapshot.config;
-    let (channels, states, latest) = {
+    let (channels, history) = {
         let store = pipeline
             .store
             .lock()
             .map_err(|_| anyhow::anyhow!("store mutex poisoned"))?;
         (
             notify::load_channels(&store)?,
-            store.source_states()?,
-            store.latest_item_dates()?,
+            health::FetchHistory::load(&store)?,
         )
     };
     let all = sources.all_sources();
@@ -121,12 +121,11 @@ fn check_config(app: &AppConfig) -> anyhow::Result<()> {
         .manageable_sources()
         .into_iter()
         .filter_map(|s| {
-            let state = states.get(&s.id).cloned().unwrap_or_default();
-            let latest = latest.get(&s.id).copied();
-            let health = health::classify(pipeline.toggles.is_enabled(&s), &state, latest, now);
+            let history = history.source(&s.id);
+            let health = history.health(pipeline.toggles.is_enabled(&s), now);
             health
                 .is_unhealthy()
-                .then(|| (s.id, health, health::reason(health, &state, latest, now)))
+                .then(|| (s.id, health, history.reason(health, now)))
         })
         .collect();
     if !unhealthy.is_empty() {

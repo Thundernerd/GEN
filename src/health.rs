@@ -2,8 +2,11 @@
 
 use chrono::{DateTime, Duration, Utc};
 
+use std::collections::HashMap;
+
 use crate::model::SourceState;
-use crate::web::view::relative_time;
+use crate::store::Store;
+use crate::time_ago::relative_time;
 
 /// A source's health, as shown on the Sources page and by `gen check-config`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -29,31 +32,83 @@ pub const FAILING_WITHOUT_OK_DAYS: i64 = 3;
 /// A working source without new items for this long (about six months) counts as stale.
 pub const STALE_AFTER_DAYS: i64 = 182;
 
-/// The health of a source from its fetch state and the date of its newest item.
-pub fn classify(
-    enabled: bool,
-    state: &SourceState,
-    latest_item: Option<DateTime<Utc>>,
-    now: DateTime<Utc>,
-) -> Health {
-    let older_than =
-        |dt: Option<DateTime<Utc>>, days: i64| dt.is_none_or(|dt| now - dt > Duration::days(days));
-    if !enabled {
-        Health::Disabled
-    } else if state.consecutive_failures > 0 {
-        if state.consecutive_failures >= FAILING_AFTER
-            || older_than(state.last_ok, FAILING_WITHOUT_OK_DAYS)
-        {
-            Health::Failing
-        } else {
-            Health::Retrying
+/// Every source's fetch state and the date of its newest item.
+pub struct FetchHistory {
+    states: HashMap<String, SourceState>,
+    latest_items: HashMap<String, DateTime<Utc>>,
+}
+
+impl FetchHistory {
+    pub fn load(store: &Store) -> anyhow::Result<Self> {
+        Ok(FetchHistory {
+            states: store.source_states()?,
+            latest_items: store.latest_item_dates()?,
+        })
+    }
+
+    /// One source's history; a source never fetched has an empty one.
+    pub fn source(&self, source_id: &str) -> SourceHistory {
+        SourceHistory {
+            state: self.states.get(source_id).cloned().unwrap_or_default(),
+            latest_item: self.latest_items.get(source_id).copied(),
         }
-    } else if state.last_ok.is_none() {
-        Health::Pending
-    } else if older_than(latest_item, STALE_AFTER_DAYS) {
-        Health::Stale
-    } else {
-        Health::Ok
+    }
+}
+
+/// A source's fetch state and the date of its newest item, duplicates included.
+#[derive(Debug, Clone, Default)]
+pub struct SourceHistory {
+    pub state: SourceState,
+    pub latest_item: Option<DateTime<Utc>>,
+}
+
+impl SourceHistory {
+    /// The source's health, given whether it is switched on.
+    pub fn health(&self, enabled: bool, now: DateTime<Utc>) -> Health {
+        let state = &self.state;
+        let older_than = |dt: Option<DateTime<Utc>>, days: i64| {
+            dt.is_none_or(|dt| now - dt > Duration::days(days))
+        };
+        if !enabled {
+            Health::Disabled
+        } else if state.consecutive_failures > 0 {
+            if state.consecutive_failures >= FAILING_AFTER
+                || older_than(state.last_ok, FAILING_WITHOUT_OK_DAYS)
+            {
+                Health::Failing
+            } else {
+                Health::Retrying
+            }
+        } else if state.last_ok.is_none() {
+            Health::Pending
+        } else if older_than(self.latest_item, STALE_AFTER_DAYS) {
+            Health::Stale
+        } else {
+            Health::Ok
+        }
+    }
+
+    /// Why the source has this health, in a few words, e.g. for `gen check-config`.
+    /// Empty for healthy sources.
+    pub fn reason(&self, health: Health, now: DateTime<Utc>) -> String {
+        let ago = |dt| relative_time(dt, now);
+        match health {
+            Health::Failing | Health::Retrying => {
+                let n = self.state.consecutive_failures;
+                let last_ok = self.state.last_ok.map_or_else(
+                    || "never OK".to_string(),
+                    |dt| format!("last OK {}", ago(dt)),
+                );
+                let error = self.state.last_error.as_deref().unwrap_or("unknown error");
+                let plural = if n == 1 { "" } else { "s" };
+                format!("{n} failure{plural} in a row, {last_ok}: {error}")
+            }
+            Health::Stale => self.latest_item.map_or_else(
+                || "no items yet".to_string(),
+                |dt| format!("newest item {}", ago(dt)),
+            ),
+            Health::Disabled | Health::Pending | Health::Ok => String::new(),
+        }
     }
 }
 
@@ -75,33 +130,6 @@ impl Health {
     }
 }
 
-/// Why an unhealthy source is unhealthy, in a few words, e.g. for `gen check-config`.
-pub fn reason(
-    health: Health,
-    state: &SourceState,
-    latest_item: Option<DateTime<Utc>>,
-    now: DateTime<Utc>,
-) -> String {
-    let ago = |dt| relative_time(dt, now);
-    match health {
-        Health::Failing | Health::Retrying => {
-            let n = state.consecutive_failures;
-            let last_ok = state.last_ok.map_or_else(
-                || "never OK".to_string(),
-                |dt| format!("last OK {}", ago(dt)),
-            );
-            let error = state.last_error.as_deref().unwrap_or("unknown error");
-            let plural = if n == 1 { "" } else { "s" };
-            format!("{n} failure{plural} in a row, {last_ok}: {error}")
-        }
-        Health::Stale => latest_item.map_or_else(
-            || "no items yet".to_string(),
-            |dt| format!("newest item {}", ago(dt)),
-        ),
-        Health::Disabled | Health::Pending | Health::Ok => String::new(),
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -119,6 +147,28 @@ mod tests {
             consecutive_failures: failures,
             ..Default::default()
         }
+    }
+
+    fn history(state: SourceState, latest_item: Option<DateTime<Utc>>) -> SourceHistory {
+        SourceHistory { state, latest_item }
+    }
+
+    fn classify(
+        enabled: bool,
+        state: &SourceState,
+        latest_item: Option<DateTime<Utc>>,
+        now: DateTime<Utc>,
+    ) -> Health {
+        history(state.clone(), latest_item).health(enabled, now)
+    }
+
+    fn reason(
+        health: Health,
+        state: &SourceState,
+        latest_item: Option<DateTime<Utc>>,
+        now: DateTime<Utc>,
+    ) -> String {
+        history(state.clone(), latest_item).reason(health, now)
     }
 
     fn days_ago(d: i64) -> Option<DateTime<Utc>> {
