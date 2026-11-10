@@ -844,11 +844,15 @@ async fn admin_manages_notification_channels() {
     assert_eq!(chat.rules.keywords, ["4.8", "C#"]);
     assert_eq!(chat.rules.search.as_deref(), Some("unity"));
 
-    // An empty search is no search.
-    let form = format!("original_name=chat&kind=discord&webhook_url=&search=+&enabled=1{kinds}");
-    let (status, _, _) = send(&st, post_form("/notifications/edit", &form, Some(&cookie))).await;
-    assert_eq!(status, StatusCode::SEE_OTHER);
-    assert_eq!(stored_channels(&st)[0].rules.search, None);
+    // A search without words (blank, or only symbols the site's search ignores) is no search.
+    for blank in ["+", "*+-"] {
+        let form =
+            format!("original_name=chat&kind=discord&webhook_url=&search={blank}&enabled=1{kinds}");
+        let (status, _, _) =
+            send(&st, post_form("/notifications/edit", &form, Some(&cookie))).await;
+        assert_eq!(status, StatusCode::SEE_OTHER);
+        assert_eq!(stored_channels(&st)[0].rules.search, None, "{blank}");
+    }
 
     let (status, _, _) = send(
         &st,

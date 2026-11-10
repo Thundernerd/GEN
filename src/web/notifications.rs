@@ -605,11 +605,12 @@ impl Posted {
         Ok(channel)
     }
 
-    /// The search rule, words separated by single spaces; `None` when blank.
+    /// The search rule, words separated by single spaces; `None` when it has no words the
+    /// site's search would look for, so a rule that filters nothing isn't shown.
     fn search(&self) -> Option<String> {
         let text = self.get("search")?;
-        let words: Vec<&str> = text.split_whitespace().collect();
-        (!words.is_empty()).then(|| words.join(" "))
+        crate::store::fts_query(&text)?;
+        Some(text.split_whitespace().collect::<Vec<_>>().join(" "))
     }
 
     /// The chosen message style; the default when the form has none.

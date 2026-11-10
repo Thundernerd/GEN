@@ -794,7 +794,7 @@ const ITEM_SELECT: &str = "SELECT i.id, i.source_id, i.guid, i.kind, i.title, i.
 /// prefix term, so FTS5 operators are searched for as words and every word must match.
 /// Words without letters or digits would match nothing, so they're left out. `None` when
 /// no words are left.
-fn fts_query(text: &str) -> Option<String> {
+pub(crate) fn fts_query(text: &str) -> Option<String> {
     let terms: Vec<String> = text
         .split_whitespace()
         .filter(|w| w.chars().any(char::is_alphanumeric))
