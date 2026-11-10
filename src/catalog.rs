@@ -272,6 +272,10 @@ mod tests {
         for (title, expected) in cases {
             assert_eq!(classifier.match_engines(title), *expected, "{title}");
         }
+    }
+
+    #[test]
+    fn unity_networking_libraries_are_tier_2_with_icons() {
         for id in ["mirror", "fishnet"] {
             let engine = CATALOG.engine(id).expect(id);
             assert_eq!(engine.tier, 2, "{id}");
