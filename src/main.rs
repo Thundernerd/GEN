@@ -158,20 +158,27 @@ fn add(app: &AppConfig, id: &str) -> anyhow::Result<()> {
     let added = add_catalog_owner(&pipeline.registry, &mut store, id)?;
     println!("added {id} with {} sources", added.len());
     for source in &added {
-        println!("  {source}");
+        // `fetch` skips these; they can be switched on from the Sources page.
+        let off = if source.enabled {
+            ""
+        } else {
+            "  (switched off)"
+        };
+        println!("  {}{off}", source.id);
     }
     Ok(())
 }
 
 /// Adds the catalog engine or outlet `id` with its catalog sources, as the Add button under
-/// Suggestions does. Returns the ids of the added sources, sorted.
+/// Suggestions does. Returns the added sources, sorted by id.
 fn add_catalog_owner(
     registry: &SourceRegistry,
     store: &mut Store,
     id: &str,
-) -> anyhow::Result<Vec<String>> {
+) -> anyhow::Result<Vec<config::ResolvedSource>> {
     let owner = catalog::owner(id)
         .ok_or_else(|| anyhow::anyhow!("“{id}” is not a suggested engine or outlet."))?;
+    // `apply` refuses this too, but its "is already used" is worded for the web form.
     if registry.current().has_owner(id) {
         anyhow::bail!("“{id}” is already in the database.");
     }
@@ -182,9 +189,8 @@ fn add_catalog_owner(
         .all_sources()
         .into_iter()
         .filter(|s| s.owner.id() == id)
-        .map(|s| s.id)
         .collect();
-    added.sort();
+    added.sort_by(|a, b| a.id.cmp(&b.id));
     Ok(added)
 }
 
@@ -414,7 +420,11 @@ mod tests {
     fn adding_a_catalog_engine_stores_it_with_its_catalog_sources() {
         let (registry, mut store) = empty_registry();
 
-        let added = add_catalog_owner(&registry, &mut store, "bevy").unwrap();
+        let added: Vec<_> = add_catalog_owner(&registry, &mut store, "bevy")
+            .unwrap()
+            .into_iter()
+            .map(|s| s.id)
+            .collect();
 
         assert_eq!(
             added,
