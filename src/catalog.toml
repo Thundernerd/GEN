@@ -741,6 +741,7 @@ aliases = ["gamemaker", "game maker studio"]
   kind = "feed"
   url = "https://store.steampowered.com/feeds/news/app/1670460/"
   category = "release"
+  interval_minutes = 180
 
 [[engine]]
 id = "cocos"
