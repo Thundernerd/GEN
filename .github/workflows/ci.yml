@@ -34,6 +34,9 @@ jobs:
         run: cargo test --locked
       - name: Validate the default config and the built-in catalog
         run: cargo run --locked --quiet -- check-config
+      - name: ShellCheck the Proxmox VE scripts
+        working-directory: deploy/proxmox
+        run: shellcheck gen.sh ct/gen.sh install/gen-install.sh
 
   docker:
     name: Docker build

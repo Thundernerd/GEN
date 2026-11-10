@@ -1,0 +1,3 @@
+# Same checks as the community-scripts repos, plus SC1090: the engine is sourced
+# from a computed path (local core checkout or raw URL) that ShellCheck cannot follow.
+disable=SC2034,SC1091,SC2155,SC2086,SC2317,SC2181,SC2164,SC1090
