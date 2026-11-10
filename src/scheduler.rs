@@ -947,6 +947,7 @@ mod tests {
                 title: "Godot 4.8".into(),
                 story_key: "godot 4 8".into(),
                 notify: true,
+                published: None,
                 ..crate::model::NewItem::test("godot:github:godotengine/godot", "4.8")
             }])
             .unwrap();
@@ -980,6 +981,7 @@ mod tests {
             kind: crate::model::ItemKind::News,
             title: title.into(),
             summary: summary.map(Into::into),
+            published: None,
             notify: true,
             ..crate::model::NewItem::test(&format!("x:feed:{guid}"), guid)
         };
@@ -1029,6 +1031,7 @@ mod tests {
             engines: engines.iter().map(|e| e.to_string()).collect(),
             kind,
             title: title.into(),
+            published: None,
             notify: true,
             ..crate::model::NewItem::test(&format!("x:feed:{guid}"), guid)
         };
@@ -1086,6 +1089,7 @@ mod tests {
                 kind: crate::model::ItemKind::News,
                 title: "Godot news".into(),
                 url: Some(format!("http://{addr}/post")),
+                published: None,
                 notify: true,
                 ..crate::model::NewItem::test("x:feed:https://example.org/feed", "a")
             }])
