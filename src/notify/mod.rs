@@ -123,6 +123,13 @@ fn matches(rules: &NotifyRules, item: &Item) -> bool {
         .any(|k| haystack.contains(&k.to_lowercase()))
 }
 
+/// The items a channel gets and the ones it skips, in their original order.
+#[derive(Debug)]
+pub struct ChannelItems {
+    pub gets: Vec<Item>,
+    pub skipped: Vec<Item>,
+}
+
 /// Splits `items` into those `channel` gets and the rest, by every rule, including the
 /// search (answered by the store's search index), and for a Discord bot channel its
 /// subscriptions. This is the only way to check a channel's rules.
@@ -130,7 +137,7 @@ pub fn partition(
     store: &Store,
     channel: &ChannelConfig,
     items: Vec<Item>,
-) -> anyhow::Result<(Vec<Item>, Vec<Item>)> {
+) -> anyhow::Result<ChannelItems> {
     let found = match &channel.rules.search {
         Some(search) => {
             let ids: Vec<i64> = items.iter().map(|i| i.id).collect();
@@ -138,9 +145,10 @@ pub fn partition(
         }
         None => None,
     };
-    Ok(items
+    let (gets, skipped) = items
         .into_iter()
-        .partition(|i| accepts(channel, i) && found.as_ref().is_none_or(|f| f.contains(&i.id))))
+        .partition(|i| accepts(channel, i) && found.as_ref().is_none_or(|f| f.contains(&i.id)));
+    Ok(ChannelItems { gets, skipped })
 }
 
 /// Whether `item` passes `channel`'s rules except `search` and, for a Discord bot channel,
@@ -671,7 +679,7 @@ pub(crate) mod tests {
         };
         let titles = |items: &[Item]| items.iter().map(|i| i.title.clone()).collect::<Vec<_>>();
 
-        let (gets, skipped) =
+        let ChannelItems { gets, skipped } =
             partition(&store, &channel(Some("godot shader")), items.clone()).unwrap();
         assert_eq!(titles(&gets), ["Godot shaders explained"]);
         assert_eq!(
@@ -680,7 +688,7 @@ pub(crate) mod tests {
             "the wrong kind, and not found by the search"
         );
 
-        let (gets, _) = partition(&store, &channel(None), items).unwrap();
+        let ChannelItems { gets, .. } = partition(&store, &channel(None), items).unwrap();
         assert_eq!(
             titles(&gets),
             ["Godot shaders explained", "Godot 4.8 released"],

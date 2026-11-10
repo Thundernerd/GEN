@@ -516,7 +516,10 @@ impl Notifier {
             return Ok(false);
         }
         let config = channel.clone();
-        let (mut matching, skipped) = self
+        let notify::ChannelItems {
+            gets: mut matching,
+            skipped,
+        } = self
             .pipeline
             .with_store(move |s| notify::partition(s, &config, pending))
             .await?;
