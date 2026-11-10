@@ -652,6 +652,49 @@ mod tests {
         }
     }
 
+    /// A local HTTP server, running until the test ends.
+    struct TestServer {
+        addr: std::net::SocketAddr,
+        requests: Arc<Mutex<Vec<String>>>,
+    }
+
+    impl TestServer {
+        /// Every request received so far, oldest first.
+        fn requests(&self) -> Vec<String> {
+            self.requests.lock().unwrap().clone()
+        }
+    }
+
+    /// Starts a local server that answers each request with the raw HTTP response
+    /// `reply` gives for it, and records the requests.
+    async fn serve(reply: impl Fn(&str) -> String + Send + 'static) -> TestServer {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let seen = requests.clone();
+        tokio::spawn(async move {
+            while let Ok((mut conn, _)) = listener.accept().await {
+                let mut buf = vec![0u8; 32 * 1024];
+                let n = conn.read(&mut buf).await.unwrap_or(0);
+                let request = String::from_utf8_lossy(&buf[..n]).into_owned();
+                let response = reply(&request);
+                seen.lock().unwrap().push(request);
+                let _ = conn.write_all(response.as_bytes()).await;
+            }
+        });
+        TestServer { addr, requests }
+    }
+
+    /// A `200 OK` response carrying `body`.
+    fn ok(body: &str) -> String {
+        format!(
+            "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    }
+
     fn source(id: &str, interval: Option<u64>) -> ResolvedSource {
         ResolvedSource {
             id: id.into(),
@@ -670,25 +713,15 @@ mod tests {
     /// what it found. A request for a switched-off source is answered without fetching.
     #[tokio::test]
     async fn fetches_on_request() {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
         let feed = include_str!("../tests/fixtures/feed/godot.xml");
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move {
-            loop {
-                let Ok((mut conn, _)) = listener.accept().await else {
-                    return;
-                };
-                let mut buf = vec![0u8; 8 * 1024];
-                let _ = conn.read(&mut buf).await;
-                let reply = format!(
-                    "HTTP/1.1 200 OK\r\ncontent-type: application/rss+xml\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{feed}",
-                    feed.len()
-                );
-                let _ = conn.write_all(reply.as_bytes()).await;
-            }
-        });
+        let addr = serve(move |_| {
+            format!(
+                "HTTP/1.1 200 OK\r\ncontent-type: application/rss+xml\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{feed}",
+                feed.len()
+            )
+        })
+        .await
+        .addr;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
         let config = format!(
@@ -752,21 +785,11 @@ mod tests {
     /// "Fetch now" on it still says why it didn't fetch.
     #[tokio::test]
     async fn a_cooldown_skip_is_not_a_failure() {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        tokio::spawn(async move {
-            while let Ok((mut conn, _)) = listener.accept().await {
-                let mut buf = vec![0u8; 8 * 1024];
-                let _ = conn.read(&mut buf).await;
-                let _ = conn
-                    .write_all(
-                        b"HTTP/1.1 429 Too Many Requests\r\nretry-after: 600\r\ncontent-length: 0\r\nconnection: close\r\n\r\n",
-                    )
-                    .await;
-            }
-        });
+        let addr = serve(|_| {
+            "HTTP/1.1 429 Too Many Requests\r\nretry-after: 600\r\ncontent-length: 0\r\nconnection: close\r\n\r\n".into()
+        })
+        .await
+        .addr;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
         let config = format!(
@@ -886,20 +909,9 @@ mod tests {
     /// notifier run, and the result is recorded on the channel.
     #[tokio::test]
     async fn delivers_to_channels_from_the_store() {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-        // A one-shot HTTP sink that records the request.
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let sink = tokio::spawn(async move {
-            let (mut conn, _) = listener.accept().await.unwrap();
-            let mut buf = vec![0u8; 16 * 1024];
-            let n = conn.read(&mut buf).await.unwrap();
-            conn.write_all(b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\nconnection: close\r\n\r\n")
-                .await
-                .unwrap();
-            String::from_utf8_lossy(&buf[..n]).into_owned()
-        });
+        // An HTTP sink that records the request.
+        let sink = serve(|_| ok("")).await;
+        let addr = sink.addr;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
         let registry = crate::registry::SourceRegistry::load(&store).unwrap();
@@ -933,7 +945,7 @@ mod tests {
         };
         notifier.run_once().await;
 
-        let request = sink.await.unwrap();
+        let request = sink.requests().remove(0);
         assert!(request.starts_with("POST /gen-test "), "{request}");
         assert!(request.contains("Godot 4.8"), "{request}");
         let channels = notify::load_channels(&pipeline.store.lock().unwrap()).unwrap();
@@ -944,27 +956,8 @@ mod tests {
     /// site's search would; the others are marked handled so they aren't looked at again.
     #[tokio::test]
     async fn delivers_only_items_matching_a_channel_search() {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let requests = Arc::new(Mutex::new(Vec::<String>::new()));
-        let seen = requests.clone();
-        tokio::spawn(async move {
-            loop {
-                let (mut conn, _) = listener.accept().await.unwrap();
-                let mut buf = vec![0u8; 16 * 1024];
-                let n = conn.read(&mut buf).await.unwrap();
-                seen.lock()
-                    .unwrap()
-                    .push(String::from_utf8_lossy(&buf[..n]).into_owned());
-                conn.write_all(
-                    b"HTTP/1.1 200 OK\r\ncontent-length: 0\r\nconnection: close\r\n\r\n",
-                )
-                .await
-                .unwrap();
-            }
-        });
+        let sink = serve(|_| ok("")).await;
+        let addr = sink.addr;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
         let registry = crate::registry::SourceRegistry::load(&store).unwrap();
@@ -1004,7 +997,7 @@ mod tests {
         };
         notifier.run_once().await;
 
-        let requests = requests.lock().unwrap().clone();
+        let requests = sink.requests();
         assert_eq!(requests.len(), 2, "{requests:?}");
         assert!(
             requests[0].contains("Godot shaders explained"),
@@ -1026,28 +1019,9 @@ mod tests {
     /// when several subscriptions match, with the bot's token.
     #[tokio::test]
     async fn delivers_subscribed_items_to_bot_channels() {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
         // An HTTP sink that records every request until the test ends.
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let requests = Arc::new(Mutex::new(Vec::<String>::new()));
-        let seen = requests.clone();
-        tokio::spawn(async move {
-            loop {
-                let (mut conn, _) = listener.accept().await.unwrap();
-                let mut buf = vec![0u8; 16 * 1024];
-                let n = conn.read(&mut buf).await.unwrap();
-                seen.lock()
-                    .unwrap()
-                    .push(String::from_utf8_lossy(&buf[..n]).into_owned());
-                conn.write_all(
-                    b"HTTP/1.1 200 OK\r\ncontent-length: 2\r\nconnection: close\r\n\r\n{}",
-                )
-                .await
-                .unwrap();
-            }
-        });
+        let sink = serve(|_| ok("{}")).await;
+        let addr = sink.addr;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
         let registry = crate::registry::SourceRegistry::load(&store).unwrap();
@@ -1089,7 +1063,7 @@ mod tests {
         notifier.run_once().await;
         notifier.run_once().await;
 
-        let requests = requests.lock().unwrap().clone();
+        let requests = sink.requests();
         assert_eq!(requests.len(), 1, "{requests:?}");
         assert!(requests[0].starts_with("POST /channels/42/messages "));
         assert!(requests[0].contains("Godot and Unity ship"));
@@ -1106,31 +1080,15 @@ mod tests {
     /// og:image once and stores it; the message carries it.
     #[tokio::test]
     async fn looks_up_preview_images_once() {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
-
-        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
-        let addr = listener.local_addr().unwrap();
-        let requests = Arc::new(Mutex::new(Vec::<String>::new()));
-        let seen = requests.clone();
-        tokio::spawn(async move {
-            loop {
-                let (mut conn, _) = listener.accept().await.unwrap();
-                let mut buf = vec![0u8; 32 * 1024];
-                let n = conn.read(&mut buf).await.unwrap();
-                let request = String::from_utf8_lossy(&buf[..n]).into_owned();
-                let body = if request.starts_with("GET /post") {
-                    r#"<head><meta property="og:image" content="/hero.png"></head>"#
-                } else {
-                    "{}"
-                };
-                seen.lock().unwrap().push(request);
-                let reply = format!(
-                    "HTTP/1.1 200 OK\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{body}",
-                    body.len()
-                );
-                conn.write_all(reply.as_bytes()).await.unwrap();
+        let sink = serve(|request| {
+            if request.starts_with("GET /post") {
+                ok(r#"<head><meta property="og:image" content="/hero.png"></head>"#)
+            } else {
+                ok("{}")
             }
-        });
+        })
+        .await;
+        let addr = sink.addr;
 
         let mut store = crate::store::Store::open_in_memory().unwrap();
         let registry = crate::registry::SourceRegistry::load(&store).unwrap();
@@ -1174,7 +1132,7 @@ mod tests {
         assert_eq!(item.image_url.as_deref(), Some(hero.as_str()));
         assert!(item.image_checked);
         {
-            let requests = requests.lock().unwrap();
+            let requests = sink.requests();
             assert_eq!(requests.len(), 2, "{requests:?}");
             assert!(requests[0].starts_with("GET /post "));
             assert!(requests[1].starts_with("POST /hook?with_components=true "));
@@ -1185,7 +1143,7 @@ mod tests {
         let mut again = vec![item];
         again[0].image_url = None;
         notifier.find_images(&mut again).await;
-        assert_eq!(requests.lock().unwrap().len(), 2);
+        assert_eq!(sink.requests().len(), 2);
     }
 
     #[test]
