@@ -281,6 +281,13 @@ mod tests {
     }
 
     #[test]
+    fn unreal_tracks_unrealsharp_commits_disabled_by_default() {
+        let s = source("unreal:github-commits:UnrealSharp/UnrealSharp").expect("in catalog");
+        assert_eq!(s.owner, Owner::Engine("unreal".into()));
+        assert!(!s.enabled, "commits are noisy and Unreal is seeded");
+    }
+
+    #[test]
     fn catalog_icons_are_web_images() {
         for e in &CATALOG.engines {
             if let Some(icon) = &e.icon {
