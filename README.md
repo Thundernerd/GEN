@@ -157,6 +157,7 @@ static_dir = "static"              # default
 
 [database]
 path = "data/gen.db"               # SQLite file; parent dir must be writable
+# retention_days = 365             # delete older items once a day; unset (default) keeps everything
 
 [polling]
 default_interval_minutes = 60      # until changed on the Sources page; per source: interval_minutes
@@ -172,6 +173,8 @@ concurrency = 8                    # max sources fetched at the same time
 ```
 
 Relative paths resolve against the working directory. A GitHub token is optional, but without one the GitHub API allows only 60 requests per hour.
+
+Without `retention_days`, the database keeps every item and grows without bound. With it, GEN deletes items dated more than that many days ago at startup and then once a day, together with their cross-source duplicates. It must be at least 7, the window in which the same story from different sources is merged. GEN remembers each deleted item's source and id, so a feed that still lists an old entry doesn't bring it back as new or notify it again. SQLite reuses the freed space, so the file stops growing; it doesn't shrink unless you run `sqlite3 gen.db VACUUM` while GEN is stopped.
 
 ### Engines, outlets and the catalog
 
