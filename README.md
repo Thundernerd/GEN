@@ -413,7 +413,7 @@ Each source on `/sources` and on the engine pages has a status:
 | `pending` | Not fetched yet. |
 | `retrying` | The last one or two fetches failed, but it fetched fine recently (see `failing`). It's tried again on its next poll. |
 | `failing` | 3 or more fetches in a row failed, or it hasn't fetched fine for over 3 days (or ever), e.g. a feed URL that now returns 404, or polling stopped. For sources polled less often than every 36 hours, the limit is two polling intervals instead of 3 days. |
-| `stale` | Fetches fine, but its newest item is over six months old, or it has no items at all, e.g. an abandoned blog or a scraper whose selector no longer matches. |
+| `stale` | Fetches fine, but its newest item is over six months old, or it has no items at all, e.g. an abandoned blog or a scraper whose selector no longer matches. Items deleted by `retention_days` still count for their source's newest item. |
 | `disabled` | Switched off. |
 
 Failing and stale sources count as unhealthy. The summary above the table counts each status, and **Show only unhealthy** lists just those sources. Admins also see how many sources need attention next to the page title. `gen check-config` lists the unhealthy sources with the reason, e.g. `failing  unity:feed:…  (3 failures in a row, never OK: HTTP 404)`.
