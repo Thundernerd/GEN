@@ -1002,6 +1002,19 @@ require_engine_match = true  # drop the general .NET / ReSharper posts
   url = "https://blog.jetbrains.com/dotnet/feed/"
   category = "news"
 
+# --- GamingOnLinux ---------------------------------------------------------------
+# Verified 2026-11-10. Mostly game news; keep only engine-related posts. Expect some
+# noise on the `Unity` alias (game titles, "made with Unity" game coverage).
+[[outlet]]
+id = "gamingonlinux"
+name = "GamingOnLinux"
+homepage = "https://www.gamingonlinux.com"
+require_engine_match = true
+  [[outlet.source]]
+  kind = "feed"
+  url = "https://www.gamingonlinux.com/article_rss.php"
+  category = "news"
+
 # ===========================================================================
 # Skipped on purpose
 # ===========================================================================
