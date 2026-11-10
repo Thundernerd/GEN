@@ -73,7 +73,7 @@ jobs:
           cp "target/$TARGET/release/gen" "dist/$name/"
           cp -R templates static "dist/$name/"
           cp config/gen.toml "dist/$name/config/gen.toml"
-          cp deploy/gen.service README.md "dist/$name/"
+          cp deploy/gen.service README.md LICENSE "dist/$name/"
           tar -C dist -czf "dist/$name.tar.gz" "$name"
       - uses: actions/upload-artifact@v4
         with:
