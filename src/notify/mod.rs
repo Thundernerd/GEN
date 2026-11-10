@@ -92,10 +92,9 @@ pub struct NotifyContext<'a> {
     pub discord_bot: Option<&'a discord::BotApi>,
 }
 
-/// Whether `item` should be sent to a channel with these rules. The `search` rule isn't
-/// checked here: it needs the search index, so the notifier asks the store
-/// (`Store::matching_search`).
-pub fn matches(rules: &NotifyRules, item: &Item) -> bool {
+/// Whether `item` passes these rules, except the `search` rule, which needs the search
+/// index; [`partition`] checks that one.
+fn matches(rules: &NotifyRules, item: &Item) -> bool {
     if item.duplicate_of.is_some() || rules.exclude_kinds.contains(&item.kind) {
         return false;
     }
@@ -125,9 +124,37 @@ pub fn matches(rules: &NotifyRules, item: &Item) -> bool {
         .any(|k| haystack.contains(&k.to_lowercase()))
 }
 
-/// Whether `item` should be sent to `channel`: its rules match and, for a Discord bot
-/// channel, one of its subscriptions does.
-pub fn accepts(channel: &ChannelConfig, item: &Item) -> bool {
+/// The items a channel gets and the ones it skips, in their original order.
+#[derive(Debug)]
+pub struct ChannelItems {
+    pub gets: Vec<Item>,
+    pub skipped: Vec<Item>,
+}
+
+/// Splits `items` into those `channel` gets and the rest, by every rule, including the
+/// search (answered by the store's search index), and for a Discord bot channel its
+/// subscriptions. This is the only way to check a channel's rules.
+pub fn partition(
+    store: &Store,
+    channel: &ChannelConfig,
+    items: Vec<Item>,
+) -> anyhow::Result<ChannelItems> {
+    let found = match &channel.rules.search {
+        Some(search) => {
+            let ids: Vec<i64> = items.iter().map(|i| i.id).collect();
+            Some(store.matching_search(&ids, search)?)
+        }
+        None => None,
+    };
+    let (gets, skipped) = items
+        .into_iter()
+        .partition(|i| accepts(channel, i) && found.as_ref().is_none_or(|f| f.contains(&i.id)));
+    Ok(ChannelItems { gets, skipped })
+}
+
+/// Whether `item` passes `channel`'s rules except `search` and, for a Discord bot channel,
+/// one of its subscriptions matches.
+fn accepts(channel: &ChannelConfig, item: &Item) -> bool {
     if !matches(&channel.rules, item) {
         return false;
     }
@@ -139,7 +166,7 @@ pub fn accepts(channel: &ChannelConfig, item: &Item) -> bool {
     }
 }
 
-/// Sends `items` (already filtered by `accepts`) to one channel.
+/// Sends `items` (already filtered by [`partition`]) to one channel.
 pub async fn send(
     ctx: &NotifyContext<'_>,
     channel: &ChannelConfig,
@@ -653,6 +680,66 @@ pub(crate) mod tests {
             ..unity_releases_godot_news.clone()
         };
         assert!(accepts(&webhook, &cases[2].0));
+    }
+
+    /// A channel's search is checked together with its other rules: it gets only the
+    /// items that pass both.
+    #[test]
+    fn channels_get_items_that_pass_their_search_and_other_rules() {
+        use crate::model::NewItem;
+        use ItemKind::*;
+        let new = |guid: &str, kind, title: &str| NewItem {
+            source_id: "godot-blog".into(),
+            guid: guid.into(),
+            engines: vec!["godot".into()],
+            kind,
+            title: title.into(),
+            url: None,
+            summary: None,
+            published: Some(Utc::now()),
+            image_url: None,
+            story_key: guid.into(),
+            notify: true,
+        };
+        let mut store = Store::open_in_memory().unwrap();
+        let items = store
+            .insert_items(&[
+                new("1", Release, "Godot shaders explained"),
+                new("2", News, "Godot shaders explained, part 2"),
+                new("3", Release, "Godot 4.8 released"),
+            ])
+            .unwrap();
+        let channel = |search: Option<&str>| ChannelConfig {
+            name: "phone".into(),
+            enabled: true,
+            health_alerts: false,
+            rules: NotifyRules {
+                search: search.map(str::to_string),
+                ..rules(&[], &[Release], &[], &[], false)
+            },
+            target: ChannelTarget::Ntfy {
+                server: "https://ntfy.sh".into(),
+                topic: "t".into(),
+                token: None,
+            },
+        };
+        let titles = |items: &[Item]| items.iter().map(|i| i.title.clone()).collect::<Vec<_>>();
+
+        let ChannelItems { gets, skipped } =
+            partition(&store, &channel(Some("godot shader")), items.clone()).unwrap();
+        assert_eq!(titles(&gets), ["Godot shaders explained"]);
+        assert_eq!(
+            titles(&skipped),
+            ["Godot shaders explained, part 2", "Godot 4.8 released"],
+            "the wrong kind, and not found by the search"
+        );
+
+        let ChannelItems { gets, .. } = partition(&store, &channel(None), items).unwrap();
+        assert_eq!(
+            titles(&gets),
+            ["Godot shaders explained", "Godot 4.8 released"],
+            "without a search, the other rules decide"
+        );
     }
 
     #[tokio::test]
