@@ -26,7 +26,7 @@ GEN is a single Rust binary. It contains a web server and a background poller, a
 
 ## Download a release
 
-Each [release](https://github.com/Thundernerd/GEN/releases) has prebuilt archives for Linux (x86_64 and arm64, glibc 2.35 or newer, so Debian 12 and Ubuntu 22.04 work) and macOS (Apple silicon), with a `SHA256SUMS` file. An archive contains the `gen` binary, the `templates/` and `static/` folders it serves, a default `config/gen.toml` and the systemd unit. Run it from the extracted folder:
+Each [release](https://github.com/Thundernerd/GEN/releases) has prebuilt archives for Linux (x86_64 and arm64, glibc 2.35 or newer, so Debian 12 and Ubuntu 22.04 work) and macOS (Apple silicon), with a `SHA256SUMS` file. An archive contains the `gen` binary, the `templates/` and `static/` folders it serves, a default `config/gen.toml`, the systemd unit and the licence. Run it from the extracted folder:
 
 ```sh
 tar -xzf gen-<version>-x86_64-unknown-linux-gnu.tar.gz
@@ -531,3 +531,7 @@ git tag -a v0.2.0 -m "GEN 0.2.0" && git push origin v0.2.0
 ```
 
 `.github/workflows/release.yml` checks that the tag matches `Cargo.toml`, runs CI, builds the archives, publishes the Docker image to `ghcr.io/thundernerd/gen` (tags `0.2.0`, `0.2`, `latest`, and the major version from 1.0 on) and creates the GitHub release with generated notes. A tag with a suffix, such as `v0.2.0-rc.1`, becomes a prerelease and doesn't move `latest`.
+
+## License
+
+GEN is released under the [MIT License](LICENSE).
