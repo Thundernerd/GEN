@@ -62,8 +62,8 @@ pub async fn fetch_source(
         SourceSpec::Github {
             repo,
             mode,
-            tag_prefix,
-        } => github::fetch(http, repo, *mode, tag_prefix.as_deref(), state).await,
+            tag_prefixes,
+        } => github::fetch(http, repo, *mode, tag_prefixes, state).await,
         SourceSpec::Unity { limit } => unity::fetch(http, *limit, state).await,
         SourceSpec::Hn { query } => hn::fetch(http, query, state).await,
         SourceSpec::Html {

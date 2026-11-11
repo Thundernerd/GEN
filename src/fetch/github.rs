@@ -2,9 +2,10 @@
 //!
 //! Releases use the REST API when a token is configured (it carries the prerelease flag
 //! and hides drafts), otherwise the public `releases.atom` feed. Tags and commits always
-//! use the Atom feeds. A releases source with a `tag_prefix` asks the API for a wider page,
-//! since monorepos publish many packages at once. Conditional requests (ETag / 304) go
-//! through `Http::get_conditional`; GitHub does not count 304s against the API rate limit.
+//! use the Atom feeds. A releases source with a `tag_prefix` (one prefix or several) asks
+//! the API for a wider page, since monorepos publish many packages at once. Conditional
+//! requests (ETag / 304) go through `Http::get_conditional`; GitHub does not count 304s
+//! against the API rate limit.
 //!
 //! Titles that are just a version (e.g. Godot's `4.7.2-stable`, S&Box's `26.10.13`) are
 //! prefixed with the repository name so they make sense out of context
@@ -16,7 +17,7 @@ use reqwest::header::{self, HeaderMap, HeaderValue};
 use serde::Deserialize;
 
 use super::{Conditional, FetchError, FetchOutcome, Http, feed, text_to_lines, truncate};
-use crate::config::{GithubMode, ResolvedSource, SourceSpec};
+use crate::config::{GithubMode, ResolvedSource, SourceSpec, TagPrefixes};
 use crate::model::{RawItem, SourceState};
 
 /// Max chars kept from a release body.
@@ -33,12 +34,12 @@ pub async fn fetch(
     http: &Http,
     repo: &str,
     mode: GithubMode,
-    tag_prefix: Option<&str>,
+    tag_prefixes: &TagPrefixes,
     state: &SourceState,
 ) -> Result<FetchOutcome, FetchError> {
     let (url, headers) = match (mode, http.github_token.as_deref()) {
         (GithubMode::Releases, Some(token)) => {
-            (releases_api_url(repo, tag_prefix), api_headers(token)?)
+            (releases_api_url(repo, tag_prefixes), api_headers(token)?)
         }
         (GithubMode::Releases, None) => (
             format!("https://github.com/{repo}/releases.atom"),
@@ -58,9 +59,9 @@ pub async fn fetch(
         Conditional::Body(resp) => resp,
     };
     let items = match (mode, http.github_token.is_some()) {
-        (GithubMode::Releases, true) => parse_releases_json(&resp.body, repo, tag_prefix)?,
+        (GithubMode::Releases, true) => parse_releases_json(&resp.body, repo, tag_prefixes)?,
         (GithubMode::Releases | GithubMode::Tags, _) => {
-            parse_tag_atom(&resp.body, repo, mode, tag_prefix)?
+            parse_tag_atom(&resp.body, repo, mode, tag_prefixes)?
         }
         (GithubMode::Commits, _) => parse_commits_atom(&resp.body)?,
     };
@@ -151,13 +152,13 @@ struct ApiRelease {
 fn parse_releases_json(
     body: &[u8],
     repo: &str,
-    tag_prefix: Option<&str>,
+    tag_prefixes: &TagPrefixes,
 ) -> Result<Vec<RawItem>, FetchError> {
     let releases: Vec<ApiRelease> =
         serde_json::from_slice(body).map_err(|e| FetchError::Parse(e.to_string()))?;
     Ok(releases
         .into_iter()
-        .filter(|r| !r.draft && has_prefix(&r.tag_name, tag_prefix))
+        .filter(|r| !r.draft && tag_prefixes.matches(&r.tag_name))
         .map(|r| {
             let name = r.name.as_deref().map(str::trim).unwrap_or_default();
             let name = if name.is_empty() { &r.tag_name } else { name };
@@ -182,13 +183,13 @@ fn parse_tag_atom(
     body: &[u8],
     repo: &str,
     mode: GithubMode,
-    tag_prefix: Option<&str>,
+    tag_prefixes: &TagPrefixes,
 ) -> Result<Vec<RawItem>, FetchError> {
     Ok(feed::parse(body)?
         .into_iter()
         .filter_map(|mut item| {
             let tag = item.url.as_deref().and_then(tag_from_url)?;
-            if !has_prefix(&tag, tag_prefix) {
+            if !tag_prefixes.matches(&tag) {
                 return None;
             }
             let name = if mode == GithubMode::Tags || item.title.is_empty() {
@@ -231,17 +232,13 @@ fn tag_from_url(url: &str) -> Option<String> {
 /// that publishes many packages at once (Flame releases about 30 per batch), so the window
 /// is widened to 100, GitHub's maximum page, to keep the matching release in it: still one
 /// request per poll.
-fn releases_api_url(repo: &str, tag_prefix: Option<&str>) -> String {
-    let per_page = if tag_prefix.is_some() {
+fn releases_api_url(repo: &str, tag_prefixes: &TagPrefixes) -> String {
+    let per_page = if !tag_prefixes.is_empty() {
         RELEASES_PER_PAGE_PREFIXED
     } else {
         RELEASES_PER_PAGE
     };
     format!("https://api.github.com/repos/{repo}/releases?per_page={per_page}")
-}
-
-fn has_prefix(tag: &str, prefix: Option<&str>) -> bool {
-    prefix.is_none_or(|p| tag.starts_with(p))
 }
 
 /// Prefixes bare version names (`4.7.2-stable`, `v1.2`) with the repository name, without a
@@ -281,7 +278,7 @@ mod tests {
             spec: SourceSpec::Github {
                 repo: repo.into(),
                 mode,
-                tag_prefix: None,
+                tag_prefixes: TagPrefixes::default(),
             },
         }
     }
@@ -291,11 +288,11 @@ mod tests {
     #[test]
     fn releases_api_url_widens_the_window_for_a_tag_prefix() {
         assert_eq!(
-            releases_api_url("flame-engine/flame", Some("v")),
+            releases_api_url("flame-engine/flame", &TagPrefixes::new(["v"])),
             "https://api.github.com/repos/flame-engine/flame/releases?per_page=100"
         );
         assert_eq!(
-            releases_api_url("godotengine/godot", None),
+            releases_api_url("godotengine/godot", &TagPrefixes::default()),
             "https://api.github.com/repos/godotengine/godot/releases?per_page=30"
         );
     }
@@ -375,13 +372,19 @@ mod tests {
     #[test]
     fn stride_releases_atom_with_prefix() {
         let body = fixture!("stride_releases.atom");
-        let all = parse_tag_atom(body, "stride3d/stride", GithubMode::Releases, None).unwrap();
+        let all = parse_tag_atom(
+            body,
+            "stride3d/stride",
+            GithubMode::Releases,
+            &TagPrefixes::default(),
+        )
+        .unwrap();
         assert_eq!(all.len(), 10);
         let items = parse_tag_atom(
             body,
             "stride3d/stride",
             GithubMode::Releases,
-            Some("releases/"),
+            &TagPrefixes::new(["releases/"]),
         )
         .unwrap();
         let guids: Vec<_> = items.iter().map(|i| i.guid.as_str()).collect();
@@ -394,8 +397,12 @@ mod tests {
 
     #[test]
     fn godot_releases_json() {
-        let items = parse_releases_json(fixture!("godot_releases.json"), "godotengine/godot", None)
-            .unwrap();
+        let items = parse_releases_json(
+            fixture!("godot_releases.json"),
+            "godotengine/godot",
+            &TagPrefixes::default(),
+        )
+        .unwrap();
         assert_eq!(items.len(), 5);
         let first = &items[0];
         assert_eq!(first.guid, "3.6.3-stable");
@@ -425,7 +432,8 @@ mod tests {
             {"tag_name": "launcher/1.0", "name": "Launcher 1.0", "html_url": "https://h/l",
              "body": "", "draft": false, "prerelease": false, "published_at": null}
         ]"#;
-        let items = parse_releases_json(body, "godotengine/godot", None).unwrap();
+        let items =
+            parse_releases_json(body, "godotengine/godot", &TagPrefixes::default()).unwrap();
         assert_eq!(items.len(), 2);
         assert_eq!(items[0].guid, "4.8-beta1");
         assert_eq!(items[0].title, "godot 4.8-beta1");
@@ -433,9 +441,34 @@ mod tests {
         assert_eq!(items[0].summary.as_deref(), Some("Beta\n• fixes"));
         assert_eq!(items[1].summary, None);
 
-        let filtered = parse_releases_json(body, "o/r", Some("launcher/")).unwrap();
+        let filtered = parse_releases_json(body, "o/r", &TagPrefixes::new(["launcher/"])).unwrap();
         assert_eq!(filtered.len(), 1);
         assert_eq!(filtered[0].guid, "launcher/1.0");
+    }
+
+    /// Flame's monorepo tags the engine `v1.x` and `flame-v2.x` beside its other packages
+    /// (`flame_3d-v...`, `flame_svg-v...`); both engine prefixes keep exactly the engine.
+    #[test]
+    fn flame_releases_json_with_several_prefixes() {
+        let prefixes = TagPrefixes::new(["v", "flame-v"]);
+        let items = parse_releases_json(
+            fixture!("flame_releases.json"),
+            "flame-engine/flame",
+            &prefixes,
+        )
+        .unwrap();
+        let guids: Vec<_> = items.iter().map(|i| i.guid.as_str()).collect();
+        assert_eq!(
+            guids,
+            [
+                "flame-v2.0.0-dev.1",
+                "flame-v2.0.0-dev.0",
+                "v1.38.2",
+                "v1.38.1"
+            ]
+        );
+        assert_eq!(items[0].title, "flame v2.0.0-dev.1");
+        assert_eq!(items[0].prerelease, Some(true));
     }
 
     #[test]
@@ -444,7 +477,7 @@ mod tests {
             fixture!("sbox_tags.atom"),
             "Facepunch/sbox-public",
             GithubMode::Tags,
-            None,
+            &TagPrefixes::default(),
         )
         .unwrap();
         assert!(!items.is_empty());
