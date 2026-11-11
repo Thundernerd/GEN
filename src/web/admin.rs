@@ -247,8 +247,9 @@ impl AddOwnerForm {
                 id,
                 name,
                 tier: non_empty(&self.tier)
-                    .and_then(|t| t.parse().ok())
-                    .ok_or("Choose a tier.")?,
+                    .and_then(|t| t.parse::<u8>().ok())
+                    .ok_or("Choose a tier.")?
+                    .try_into()?,
                 languages: split_list(self.languages.as_deref()),
                 language_note: non_empty(&self.language_note),
                 homepage,

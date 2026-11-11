@@ -26,7 +26,8 @@ const SCAN_BATCH: u32 = 500;
 pub struct ItemFilter {
     pub engine: Option<String>,
     pub kind: Option<ItemKind>,
-    /// Only items tagged with an engine of this tier.
+    /// Only items tagged with an engine of this tier, by number. A number that is no tier
+    /// matches nothing.
     pub tier: Option<u8>,
     /// Only items tagged with an engine programmed in this language (any case). For C#,
     /// also outlet items mentioning C# or .NET.
@@ -52,7 +53,7 @@ impl ItemFilter {
 
     /// The part of the filter the store can't express.
     fn matches(&self, item: &Item, sources: &SourcesConfig, lookup: &Lookup) -> bool {
-        let tier_of = |id: &String| sources.engine(id).map(|e| e.tier);
+        let tier_of = |id: &String| sources.engine(id).map(|e| u8::from(e.tier));
         if let Some(tier) = self.tier
             && !item.engines.iter().any(|e| tier_of(e) == Some(tier))
         {
