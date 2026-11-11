@@ -17,7 +17,7 @@ use super::{
 use crate::catalog;
 use crate::config::{
     EngineConfig, GithubMode, MAX_INTERVAL_MINUTES, OutletConfig, ResolvedSource, SourceConfig,
-    SourceSpec,
+    SourceSpec, TagPrefixes,
 };
 use crate::model::ItemKind;
 use crate::pipeline::DEFAULT_INTERVAL_KEY;
@@ -98,7 +98,12 @@ impl AddSourceForm {
                     Some("commits") => GithubMode::Commits,
                     Some(other) => return Err(format!("Unknown GitHub mode “{other}”.")),
                 },
-                tag_prefix: split_list(self.tag_prefix.as_deref()),
+                tag_prefixes: TagPrefixes::new(
+                    self.tag_prefix
+                        .as_deref()
+                        .unwrap_or_default()
+                        .split([',', '\n']),
+                ),
             },
             Some("html") => SourceSpec::Html {
                 url: required(&self.html_url, "the page URL")?,

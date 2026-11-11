@@ -202,10 +202,8 @@ pub enum SourceSpec {
         #[serde(default)]
         mode: GithubMode,
         /// Only keep tags starting with one of these prefixes (e.g. Stride's `releases/`).
-        /// Written as one string or a list; empty entries are dropped, and no prefixes
-        /// keep every tag.
-        #[serde(default, with = "tag_prefixes")]
-        tag_prefix: Vec<String>,
+        #[serde(default, rename = "tag_prefix")]
+        tag_prefixes: TagPrefixes,
     },
     /// Unity editor releases JSON API.
     Unity {
@@ -226,33 +224,85 @@ pub enum SourceSpec {
     },
 }
 
-/// `tag_prefix` as one string or a list. It is written back as before it took a list:
-/// `null` for none and a plain string for one, so stored sources keep their JSON.
-mod tag_prefixes {
-    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+/// The tag prefixes a GitHub source keeps: a tag matches when it starts with any of them,
+/// and no prefixes keep every tag. Written as one string or a list; entries are trimmed and
+/// empty ones dropped. Written back as before it took a list (`null` for none, a plain
+/// string for one), so stored sources keep their JSON.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TagPrefixes(Vec<String>);
 
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum OneOrMany {
-        One(String),
-        Many(Vec<String>),
+impl TagPrefixes {
+    pub fn new<S: AsRef<str>>(prefixes: impl IntoIterator<Item = S>) -> Self {
+        Self(
+            prefixes
+                .into_iter()
+                .map(|p| p.as_ref().trim().to_string())
+                .filter(|p| !p.is_empty())
+                .collect(),
+        )
     }
 
-    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
-        let prefixes = match Option::<OneOrMany>::deserialize(d)? {
-            None => Vec::new(),
-            Some(OneOrMany::One(p)) => vec![p],
-            Some(OneOrMany::Many(ps)) => ps,
-        };
-        Ok(prefixes.into_iter().filter(|p| !p.is_empty()).collect())
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
     }
 
-    pub fn serialize<S: Serializer>(prefixes: &[String], s: S) -> Result<S::Ok, S::Error> {
-        match prefixes {
+    /// Whether `tag` starts with one of the prefixes; no prefixes match every tag.
+    pub fn matches(&self, tag: &str) -> bool {
+        self.0.is_empty() || self.0.iter().any(|p| tag.starts_with(p.as_str()))
+    }
+}
+
+impl Serialize for TagPrefixes {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        match self.0.as_slice() {
             [] => s.serialize_none(),
             [one] => one.serialize(s),
             many => many.serialize(s),
         }
+    }
+}
+
+impl<'de> Deserialize<'de> for TagPrefixes {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        struct Visitor;
+        impl<'de> serde::de::Visitor<'de> for Visitor {
+            type Value = TagPrefixes;
+
+            fn expecting(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+                f.write_str("a tag prefix or a list of tag prefixes")
+            }
+
+            fn visit_unit<E>(self) -> Result<TagPrefixes, E> {
+                Ok(TagPrefixes::default())
+            }
+
+            fn visit_none<E>(self) -> Result<TagPrefixes, E> {
+                Ok(TagPrefixes::default())
+            }
+
+            fn visit_some<D: serde::Deserializer<'de>>(
+                self,
+                d: D,
+            ) -> Result<TagPrefixes, D::Error> {
+                TagPrefixes::deserialize(d)
+            }
+
+            fn visit_str<E>(self, prefix: &str) -> Result<TagPrefixes, E> {
+                Ok(TagPrefixes::new([prefix]))
+            }
+
+            fn visit_seq<A: serde::de::SeqAccess<'de>>(
+                self,
+                mut seq: A,
+            ) -> Result<TagPrefixes, A::Error> {
+                let mut prefixes = Vec::new();
+                while let Some(prefix) = seq.next_element::<String>()? {
+                    prefixes.push(prefix);
+                }
+                Ok(TagPrefixes::new(prefixes))
+            }
+        }
+        d.deserialize_any(Visitor)
     }
 }
 
@@ -1155,29 +1205,49 @@ mod tests {
         assert!(sources[2].require_engine_match);
     }
 
+    fn github_spec(tag_prefix: &str) -> SourceSpec {
+        toml::from_str(&format!(
+            "kind = \"github\"\nrepo = \"flame-engine/flame\"\n{tag_prefix}"
+        ))
+        .unwrap()
+    }
+
+    fn tag_prefixes(spec: &SourceSpec) -> TagPrefixes {
+        match spec {
+            SourceSpec::Github { tag_prefixes, .. } => tag_prefixes.clone(),
+            other => panic!("not github: {other:?}"),
+        }
+    }
+
     /// `tag_prefix` takes one prefix or several (a monorepo whose engine changed its tag
-    /// scheme); empty entries are dropped, and the prefix never changes the source id.
+    /// scheme); entries are trimmed and empty ones dropped.
     #[test]
     fn tag_prefix_takes_one_prefix_or_several() {
-        let spec = |prefix: &str| -> SourceSpec {
-            toml::from_str(&format!(
-                "kind = \"github\"\nrepo = \"flame-engine/flame\"\n{prefix}"
-            ))
-            .unwrap()
-        };
-        let prefixes = |spec: &SourceSpec| match spec {
-            SourceSpec::Github { tag_prefix, .. } => tag_prefix.clone(),
-            other => panic!("not github: {other:?}"),
-        };
-        let none = spec("");
-        let one = spec(r#"tag_prefix = "v""#);
-        let several = spec(r#"tag_prefix = ["v", "", "flame-v"]"#);
-        assert_eq!(prefixes(&none), Vec::<String>::new());
-        assert_eq!(prefixes(&one), vec!["v"]);
-        assert_eq!(prefixes(&several), vec!["v", "flame-v"]);
-        assert_eq!(prefixes(&spec(r#"tag_prefix = """#)), Vec::<String>::new());
-        for s in [&none, &one, &several] {
-            assert_eq!(source_id("flame", s), "flame:github:flame-engine/flame");
+        let prefixes = |line: &str| tag_prefixes(&github_spec(line));
+        assert_eq!(prefixes(""), TagPrefixes::default());
+        assert_eq!(prefixes(r#"tag_prefix = """#), TagPrefixes::default());
+        assert_eq!(prefixes(r#"tag_prefix = "v""#), TagPrefixes::new(["v"]));
+        assert_eq!(
+            prefixes(r#"tag_prefix = ["v", "", " flame-v "]"#),
+            TagPrefixes::new(["v", "flame-v"])
+        );
+        let err = toml::from_str::<SourceSpec>("kind = \"github\"\nrepo = \"a/b\"\ntag_prefix = 1")
+            .unwrap_err();
+        assert!(err.to_string().contains("a tag prefix or a list"), "{err}");
+    }
+
+    /// The source id leaves `tag_prefix` out, so adding a prefix keeps a source's items.
+    #[test]
+    fn tag_prefix_leaves_the_source_id_alone() {
+        for line in [
+            "",
+            r#"tag_prefix = "v""#,
+            r#"tag_prefix = ["v", "flame-v"]"#,
+        ] {
+            assert_eq!(
+                source_id("flame", &github_spec(line)),
+                "flame:github:flame-engine/flame"
+            );
         }
     }
 
@@ -1251,7 +1321,7 @@ mod tests {
         let github = |repo: &str| SourceSpec::Github {
             repo: repo.into(),
             mode: GithubMode::Releases,
-            tag_prefix: Vec::new(),
+            tag_prefixes: TagPrefixes::default(),
         };
         assert!(github("godotengine/godot").check().is_ok());
         assert!(
