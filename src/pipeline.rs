@@ -299,4 +299,25 @@ mod tests {
         pipeline.poll(&source).await.unwrap();
         assert_eq!(notified(&pipeline).await, ["Godot news new"]);
     }
+
+    /// A source whose items were all deleted by retention still knows its newest one, so a
+    /// wider window doesn't notify its older entries.
+    #[tokio::test]
+    async fn pruned_items_still_count_as_the_newest() {
+        let first = rss(&[("day10", "Sat, 10 Oct 2026 12:00:00 GMT")]);
+        let second = rss(&[
+            ("day11", "Sun, 11 Oct 2026 12:00:00 GMT"),
+            ("day3", "Sat, 03 Oct 2026 12:00:00 GMT"),
+        ]);
+        let (pipeline, source) = feed_source(first, second).await;
+
+        pipeline.poll(&source).await.unwrap();
+        let pruned = pipeline
+            .with_store(|s| s.prune_items(Utc::now() + chrono::TimeDelta::days(1)))
+            .await
+            .unwrap();
+        assert_eq!(pruned, 1);
+        pipeline.poll(&source).await.unwrap();
+        assert_eq!(notified(&pipeline).await, ["Godot news day11"]);
+    }
 }

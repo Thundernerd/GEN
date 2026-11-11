@@ -299,11 +299,18 @@ impl Store {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
-    /// The newest `published` date among the source's stored items, if any has one. A date
-    /// in the future (a feed typo) counts as the time the item was first fetched.
+    /// The newest `published` date among the source's items, if any has one. A date in the
+    /// future (a feed typo) counts as the time the item was first fetched. Items deleted by
+    /// retention count too, by their sort date (which doesn't record whether they were dated),
+    /// so a quiet source keeps its newest date. Unlike `latest_item_dates`, an undated item
+    /// still stored doesn't count, as its date is only when it was fetched.
     pub fn newest_published(&self, source_id: &str) -> anyhow::Result<Option<DateTime<Utc>>> {
         Ok(self.conn.query_row(
-            "SELECT MAX(sort_date) FROM items WHERE source_id = ?1 AND published IS NOT NULL",
+            "SELECT MAX(sort_date) FROM (
+                 SELECT sort_date FROM items WHERE source_id = ?1 AND published IS NOT NULL
+                 UNION ALL
+                 SELECT sort_date FROM pruned_items WHERE source_id = ?1
+             )",
             [source_id],
             |r| r.get(0),
         )?)
