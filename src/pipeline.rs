@@ -75,6 +75,22 @@ pub struct PollResult {
     pub not_modified: bool,
 }
 
+#[cfg(test)]
+impl Pipeline {
+    /// A test pipeline over `store` and `registry`, with every other part fresh and default.
+    pub(crate) fn test(store: Store, registry: SourceRegistry) -> Self {
+        Pipeline {
+            http: Http::new("gen-test", None).unwrap(),
+            store: Arc::new(Mutex::new(store)),
+            registry: Arc::new(registry),
+            toggles: Arc::new(SourceToggles::default()),
+            notify_wake: Arc::new(Notify::new()),
+            settings: Arc::new(PollSettings::new(60)),
+            fetches: Arc::new(FetchRequests::default()),
+        }
+    }
+}
+
 impl Pipeline {
     pub async fn poll(&self, source: &ResolvedSource) -> anyhow::Result<PollResult> {
         let (state, newest_published) = self
@@ -225,16 +241,7 @@ mod tests {
         );
         let registry = SourceRegistry::with_owners(&mut store, &config);
         let source = registry.current().config.all_sources().remove(0);
-        let pipeline = Pipeline {
-            http: Http::new("gen-test", None).unwrap(),
-            store: Arc::new(Mutex::new(store)),
-            registry: Arc::new(registry),
-            toggles: Arc::new(SourceToggles::default()),
-            notify_wake: Arc::new(Notify::new()),
-            settings: Arc::new(PollSettings::new(60)),
-            fetches: Arc::new(FetchRequests::default()),
-        };
-        (pipeline, source)
+        (Pipeline::test(store, registry), source)
     }
 
     /// The titles of the stored items that will be sent to notification channels.
