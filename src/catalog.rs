@@ -529,10 +529,27 @@ mod tests {
     }
 
     #[test]
-    fn unity_networking_libraries_are_tier_2_with_icons() {
+    fn tiers_measure_prominence_and_kind_not_language() {
+        let tier = |id: &str| CATALOG.engine(id).expect(id).tier;
+        // 1 = major engines, of any language.
+        for id in ["unity", "unreal", "godot", "bevy", "defold", "gamemaker"] {
+            assert_eq!(tier(id), 1, "{id}");
+        }
+        // 2 = smaller engines, C# or not.
+        for id in ["prowl", "lodzero", "fyrox", "cryengine"] {
+            assert_eq!(tier(id), 2, "{id}");
+        }
+        // 3 = frameworks and libraries, C# or not.
+        for id in ["monogame", "silknet", "arch", "bepu", "raylib", "phaser"] {
+            assert_eq!(tier(id), 3, "{id}");
+        }
+    }
+
+    #[test]
+    fn unity_networking_libraries_are_tier_3_with_icons() {
         for id in ["mirror", "fishnet"] {
             let engine = CATALOG.engine(id).expect(id);
-            assert_eq!(engine.tier, 2, "{id}");
+            assert_eq!(engine.tier, 3, "{id}");
             assert!(engine.icon.is_some(), "{id}");
         }
     }
