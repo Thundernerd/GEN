@@ -201,8 +201,11 @@ pub enum SourceSpec {
         repo: String,
         #[serde(default)]
         mode: GithubMode,
-        /// Only keep tags starting with this prefix (e.g. Stride's `releases/`).
-        tag_prefix: Option<String>,
+        /// Only keep tags starting with one of these prefixes (e.g. Stride's `releases/`).
+        /// Written as one string or a list; empty entries are dropped, and no prefixes
+        /// keep every tag.
+        #[serde(default, with = "tag_prefixes")]
+        tag_prefix: Vec<String>,
     },
     /// Unity editor releases JSON API.
     Unity {
@@ -221,6 +224,36 @@ pub enum SourceSpec {
         link: String,
         date: Option<String>,
     },
+}
+
+/// `tag_prefix` as one string or a list. It is written back as before it took a list:
+/// `null` for none and a plain string for one, so stored sources keep their JSON.
+mod tag_prefixes {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum OneOrMany {
+        One(String),
+        Many(Vec<String>),
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Vec<String>, D::Error> {
+        let prefixes = match Option::<OneOrMany>::deserialize(d)? {
+            None => Vec::new(),
+            Some(OneOrMany::One(p)) => vec![p],
+            Some(OneOrMany::Many(ps)) => ps,
+        };
+        Ok(prefixes.into_iter().filter(|p| !p.is_empty()).collect())
+    }
+
+    pub fn serialize<S: Serializer>(prefixes: &[String], s: S) -> Result<S::Ok, S::Error> {
+        match prefixes {
+            [] => s.serialize_none(),
+            [one] => one.serialize(s),
+            many => many.serialize(s),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default, Deserialize, Serialize, PartialEq, Eq)]
@@ -1122,6 +1155,48 @@ mod tests {
         assert!(sources[2].require_engine_match);
     }
 
+    /// `tag_prefix` takes one prefix or several (a monorepo whose engine changed its tag
+    /// scheme); empty entries are dropped, and the prefix never changes the source id.
+    #[test]
+    fn tag_prefix_takes_one_prefix_or_several() {
+        let spec = |prefix: &str| -> SourceSpec {
+            toml::from_str(&format!(
+                "kind = \"github\"\nrepo = \"flame-engine/flame\"\n{prefix}"
+            ))
+            .unwrap()
+        };
+        let prefixes = |spec: &SourceSpec| match spec {
+            SourceSpec::Github { tag_prefix, .. } => tag_prefix.clone(),
+            other => panic!("not github: {other:?}"),
+        };
+        let none = spec("");
+        let one = spec(r#"tag_prefix = "v""#);
+        let several = spec(r#"tag_prefix = ["v", "", "flame-v"]"#);
+        assert_eq!(prefixes(&none), Vec::<String>::new());
+        assert_eq!(prefixes(&one), vec!["v"]);
+        assert_eq!(prefixes(&several), vec!["v", "flame-v"]);
+        assert_eq!(prefixes(&spec(r#"tag_prefix = """#)), Vec::<String>::new());
+        for s in [&none, &one, &several] {
+            assert_eq!(source_id("flame", s), "flame:github:flame-engine/flame");
+        }
+    }
+
+    /// Sources stored before `tag_prefix` took a list still load, and a single prefix is
+    /// stored as before.
+    #[test]
+    fn stored_tag_prefixes_keep_their_json_form() {
+        let one = r#"{"kind":"github","repo":"a/b","mode":"releases","tag_prefix":"v"}"#;
+        let none = r#"{"kind":"github","repo":"a/b","mode":"releases","tag_prefix":null}"#;
+        for json in [one, none] {
+            let spec: SourceSpec = serde_json::from_str(json).unwrap();
+            assert_eq!(serde_json::to_string(&spec).unwrap(), json);
+        }
+        let several =
+            r#"{"kind":"github","repo":"a/b","mode":"releases","tag_prefix":["v","flame-v"]}"#;
+        let spec: SourceSpec = serde_json::from_str(several).unwrap();
+        assert_eq!(serde_json::to_string(&spec).unwrap(), several);
+    }
+
     #[test]
     fn source_configs_round_trip_through_json() {
         let cfg: SourcesConfig = toml::from_str(
@@ -1176,7 +1251,7 @@ mod tests {
         let github = |repo: &str| SourceSpec::Github {
             repo: repo.into(),
             mode: GithubMode::Releases,
-            tag_prefix: None,
+            tag_prefix: Vec::new(),
         };
         assert!(github("godotengine/godot").check().is_ok());
         assert!(

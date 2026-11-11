@@ -98,7 +98,7 @@ impl AddSourceForm {
                     Some("commits") => GithubMode::Commits,
                     Some(other) => return Err(format!("Unknown GitHub mode “{other}”.")),
                 },
-                tag_prefix: non_empty(&self.tag_prefix),
+                tag_prefix: split_list(self.tag_prefix.as_deref()),
             },
             Some("html") => SourceSpec::Html {
                 url: required(&self.html_url, "the page URL")?,

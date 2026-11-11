@@ -711,7 +711,7 @@ mod tests {
             spec: SourceSpec::Github {
                 repo: "godotengine/godot".into(),
                 mode: GithubMode::Releases,
-                tag_prefix: None,
+                tag_prefix: Vec::new(),
             },
             ..hn("")
         };
