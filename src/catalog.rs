@@ -51,6 +51,14 @@ pub fn has_source(id: &str) -> bool {
     source(id).is_some()
 }
 
+/// The languages of the catalog engines, each spelled the catalog's one way.
+pub fn languages() -> impl Iterator<Item = &'static str> {
+    CATALOG
+        .engines
+        .iter()
+        .flat_map(|e| e.languages.iter().map(String::as_str))
+}
+
 /// What the catalog has that the current sources don't.
 pub struct Suggestions {
     /// Engines, then outlets, in catalog order (tier 1 → 3 for engines).

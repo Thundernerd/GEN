@@ -625,7 +625,7 @@ async fn admin_adds_an_engine_and_its_first_source() {
     let st = state();
     let cookie = login(&st).await;
     let form = "owner_kind=engine&id=stride&name=Stride&homepage=https%3A%2F%2Fstride3d.net\
-                &tier=1&languages=C%23%2C+F%23&language_note=engine+written+in+C%23\
+                &tier=1&languages=c%23%2C+F%23&language_note=engine+written+in+C%23\
                 &aliases=stride%2C+Stride3D";
     let (status, headers, _) = send(&st, post_form("/owners/add", form, Some(&cookie))).await;
     assert_eq!(status, StatusCode::SEE_OTHER);
@@ -641,6 +641,7 @@ async fn admin_adds_an_engine_and_its_first_source() {
         .cloned()
         .unwrap();
     assert_eq!(engine.aliases, ["stride", "Stride3D"]);
+    // "c#" takes the catalog's spelling.
     assert_eq!(engine.languages, ["C#", "F#"]);
     assert_eq!(
         engine.language_note.as_deref(),
