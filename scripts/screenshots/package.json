@@ -1,0 +1,12 @@
+{
+  "name": "gen-screenshots",
+  "private": true,
+  "description": "Retakes the README screenshots in docs/screenshots/",
+  "type": "module",
+  "scripts": {
+    "screenshots": "node screenshots.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.64.1"
+  }
+}
