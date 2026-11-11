@@ -299,10 +299,11 @@ impl Store {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
-    /// The newest `published` date among the source's stored items, if any has one.
+    /// The newest `published` date among the source's stored items, if any has one. A date
+    /// in the future (a feed typo) counts as the time the item was first fetched.
     pub fn newest_published(&self, source_id: &str) -> anyhow::Result<Option<DateTime<Utc>>> {
         Ok(self.conn.query_row(
-            "SELECT MAX(published) FROM items WHERE source_id = ?1",
+            "SELECT MAX(sort_date) FROM items WHERE source_id = ?1 AND published IS NOT NULL",
             [source_id],
             |r| r.get(0),
         )?)

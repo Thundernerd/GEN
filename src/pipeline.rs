@@ -200,33 +200,11 @@ mod tests {
         )
     }
 
-    /// The titles of the stored items that will be sent to notification channels.
-    async fn notified(pipeline: &Pipeline) -> Vec<String> {
-        let mut titles: Vec<String> = pipeline
-            .with_store(|s| s.pending_notifications("test", chrono::DateTime::UNIX_EPOCH, 100))
-            .await
-            .unwrap()
-            .into_iter()
-            .map(|i| i.title)
-            .collect();
-        titles.sort();
-        titles
-    }
-
-    /// Once a source has items, an entry dated well before its newest one (here because
-    /// the source's window grew) is stored but not notified. A newer entry still is, and so
-    /// is one listed a little out of order.
-    #[tokio::test]
-    async fn older_entries_coming_into_view_are_stored_but_not_notified() {
-        let first = rss(&[("day10", "Sat, 10 Oct 2026 12:00:00 GMT")]);
-        let second = rss(&[
-            ("day11", "Sun, 11 Oct 2026 12:00:00 GMT"),
-            ("day10", "Sat, 10 Oct 2026 12:00:00 GMT"),
-            ("day9", "Fri, 09 Oct 2026 12:00:00 GMT"),
-            ("day3", "Sat, 03 Oct 2026 12:00:00 GMT"),
-        ]);
+    /// A pipeline over a fresh store with one Godot feed source, which answers its first
+    /// fetch with `first` and every later fetch with `later`.
+    async fn feed_source(first: String, later: String) -> (Pipeline, ResolvedSource) {
         let addr = serve(move |index, _| {
-            let body = if index == 0 { &first } else { &second };
+            let body = if index == 0 { &first } else { &later };
             respond("200 OK", &[("content-type", "application/rss+xml")], body)
         })
         .await
@@ -256,6 +234,35 @@ mod tests {
             settings: Arc::new(PollSettings::new(60)),
             fetches: Arc::new(FetchRequests::default()),
         };
+        (pipeline, source)
+    }
+
+    /// The titles of the stored items that will be sent to notification channels.
+    async fn notified(pipeline: &Pipeline) -> Vec<String> {
+        let mut titles: Vec<String> = pipeline
+            .with_store(|s| s.pending_notifications("test", chrono::DateTime::UNIX_EPOCH, 100))
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|i| i.title)
+            .collect();
+        titles.sort();
+        titles
+    }
+
+    /// Once a source has items, an entry dated well before its newest one (here because
+    /// the source's window grew) is stored but not notified. A newer entry still is, and so
+    /// is one listed a little out of order.
+    #[tokio::test]
+    async fn older_entries_coming_into_view_are_stored_but_not_notified() {
+        let first = rss(&[("day10", "Sat, 10 Oct 2026 12:00:00 GMT")]);
+        let second = rss(&[
+            ("day11", "Sun, 11 Oct 2026 12:00:00 GMT"),
+            ("day10", "Sat, 10 Oct 2026 12:00:00 GMT"),
+            ("day9", "Fri, 09 Oct 2026 12:00:00 GMT"),
+            ("day3", "Sat, 03 Oct 2026 12:00:00 GMT"),
+        ]);
+        let (pipeline, source) = feed_source(first, second).await;
 
         let seeded = pipeline.poll(&source).await.unwrap();
         assert_eq!(seeded.new_items.len(), 1);
@@ -275,5 +282,21 @@ mod tests {
             notified(&pipeline).await,
             ["Godot news day11", "Godot news day9"]
         );
+    }
+
+    /// An entry dated in the future (a feed typo) doesn't hold back the source's later
+    /// entries: a source's newest item counts as no newer than when it was fetched.
+    #[tokio::test]
+    async fn a_future_dated_entry_does_not_silence_new_ones() {
+        let first = rss(&[
+            ("typo", "Fri, 10 Oct 2036 12:00:00 GMT"),
+            ("old", "Sat, 10 Oct 2026 12:00:00 GMT"),
+        ]);
+        let second = rss(&[("new", &Utc::now().to_rfc2822())]);
+        let (pipeline, source) = feed_source(first, second).await;
+
+        pipeline.poll(&source).await.unwrap();
+        pipeline.poll(&source).await.unwrap();
+        assert_eq!(notified(&pipeline).await, ["Godot news new"]);
     }
 }
