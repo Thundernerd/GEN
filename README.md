@@ -10,6 +10,11 @@ GEN tracks new releases and news for game engines and collects them on one page,
 
 GEN is a single Rust binary. It contains a web server and a background poller, and stores its data in SQLite.
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/timeline-dark.png">
+  <img alt="The GEN timeline: the latest releases and news from Unity, Unreal Engine, Godot, Bevy, Defold and GameFromScratch, grouped by day, with filters by kind, engine and language" src="docs/screenshots/timeline-light.png">
+</picture>
+
 ## Features
 
 - Polls RSS/Atom/JSON feeds, GitHub releases/tags/commits, the Unity release API, Hacker News searches and scraped HTML pages.
@@ -301,6 +306,11 @@ New sources fill the database silently on their first successful fetch.
 
 ## Notifications
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/notifications-dark.png">
+  <img alt="The Notifications page with a Discord, an ntfy and an email digest channel, each with its rules, its last delivery and Send test, Edit, Disable and Remove buttons" src="docs/screenshots/notifications-light.png">
+</picture>
+
 Channels are managed on the **Notifications** page (`/notifications`), which shows in the header once you're logged in as admin (see "Admin login"). Each channel sends to Discord (a webhook), ntfy (phone push), email, or an [Apprise API](https://github.com/caronc/apprise-api) server, and has rules for what it gets:
 
 - **Kinds:** the item kinds to send. All checked means everything, including kinds added later.
@@ -424,6 +434,11 @@ Its subscriptions are changed in Discord. On the website you can add keywords an
 
 ## Web routes
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/engine-dark.png">
+  <img alt="The Godot engine page: tier, languages, homepage and feed, its sources, and its releases and news grouped by day" src="docs/screenshots/engine-light.png">
+</picture>
+
 | Route | Description |
 |---|---|
 | `/` | Latest items from all enabled sources, grouped by day. Filter by kind, engine and language (`lang=Rust` keeps items about engines programmed in Rust; `lang=C#` also keeps news-outlet articles that mention C# or .NET). **Compact** shows one line per item (descriptions on hover); **Expanded** shows every description. The choice is remembered in a cookie and applies to engine pages too. |
@@ -442,6 +457,11 @@ Its subscriptions are changed in Discord. On the website you can add keywords an
 ## Managing sources from the web
 
 With `admin_token` set under `[server]`, the Sources page shows a **Manage sources** link. Log in with the token to manage sources without restarting. All changes are stored in the database and take effect right away. The buttons and forms update the page in place (via `static/inline-forms.js`); without JavaScript they work as ordinary form posts.
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/sources-dark.png">
+  <img alt="The Sources page logged in as admin: the health summary, the default interval, buttons to add sources, engines and outlets, the suggestions, and each source with its status and Fetch now, Disable and Remove buttons" src="docs/screenshots/sources-light.png">
+</picture>
 
 ### Source health
 
@@ -491,6 +511,8 @@ cargo test
 cargo clippy --all-targets
 cargo fmt
 ```
+
+To retake the README screenshots in `docs/screenshots/` after a change to the web UI, run `npm ci`, `npx playwright install chromium` and then `npm run screenshots` in `scripts/screenshots/` (see its [README](scripts/screenshots/README.md)). It needs Node.js 18 or newer; it builds GEN, serves it on a throwaway database with live items, and captures each view in light and dark mode.
 
 Layout of `src/`:
 
