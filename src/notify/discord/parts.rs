@@ -248,7 +248,7 @@ mod tests {
             id = "godot"
             name = "Godot"
             tier = 1
-            csharp = "first-class"
+            languages = ["GDScript", "C#", "C++"]
             icon = "https://godotengine.org/assets/favicon.png"
               [[engine.source]]
               kind = "github"
@@ -260,7 +260,7 @@ mod tests {
             id = "unity"
             name = "Unity"
             tier = 1
-            csharp = "native"
+            languages = ["C#"]
               [[engine.source]]
               kind = "unity"
             [[outlet]]

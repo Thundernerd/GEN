@@ -6,7 +6,7 @@
   <h1 class="page-title">{{ engine.name }}</h1>
   <dl class="facts">
     <dt>Tier</dt><dd>{{ engine.tier }}{% if engine.tier_label %} · {{ engine.tier_label }}{% endif %}</dd>
-    <dt>C# support</dt><dd>{{ engine.csharp }}</dd>
+    <dt>Languages</dt><dd>{{ engine.languages }}{% if engine.language_note %} <span class="language-note">{% if engine.languages %}({{ engine.language_note }}){% else %}{{ engine.language_note }}{% endif %}</span>{% endif %}</dd>
     {%- if engine.homepage %}
     <dt>Homepage</dt><dd><a href="{{ engine.homepage }}" rel="noopener">{{ engine.homepage }}</a></dd>
     {%- endif %}

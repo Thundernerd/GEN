@@ -202,7 +202,7 @@ Without `retention_days`, the database keeps every item and grows without bound.
 
 Engines, outlets and their sources live in the database and are managed on the Sources page (see "Managing sources from the web"). The first start on a database adds the engines in `catalog::SEEDED` (Unity, Unreal Engine and Godot) with their sources, once. On a database from before sources moved into it, that first start also deletes the items and fetch state of sources that are no longer configured.
 
-Everything else in the built-in catalog, `src/catalog.toml`, is offered as a suggestion on the Sources page. It includes the other C# engines and frameworks (tiers 1 and 2), notable engines without C# (tier 3) and general news outlets. It has no YouTube, forum, Reddit or Hacker News sources. To change the catalog, edit `src/catalog.toml` and rebuild; existing databases keep what they have, except that on every start each stored engine gets the catalog `exclude` phrases it lacks (phrases are only added, never removed, and engines that aren't in the catalog are left alone).
+Everything else in the built-in catalog, `src/catalog.toml`, is offered as a suggestion on the Sources page. It includes the other C# engines and frameworks (tiers 1 and 2), notable engines without C# (tier 3) and general news outlets. It has no YouTube, forum, Reddit or Hacker News sources. To change the catalog, edit `src/catalog.toml` and rebuild; existing databases keep what they have, except that on every start each stored engine gets the catalog `exclude` phrases it lacks (phrases are only added, never removed, and engines that aren't in the catalog are left alone). Engines stored before engines had `languages` keep loading: on the first start after the upgrade, catalog engines get their catalog languages and note, and other engines show their old C# text as the language note.
 
 There are two kinds of owners, and each has one or more `source` entries:
 
@@ -214,7 +214,8 @@ There are two kinds of owners, and each has one or more `source` entries:
 id = "stride"                    # unique; used in URLs and notify rules
 name = "Stride"
 tier = 1                         # 1 = major C#, 2 = niche C#, 3 = notable without C#
-csharp = "native"                # free text, shown in the UI
+languages = ["C#"]               # what you write games in, primary first; at least one
+language_note = "engine written in C#"  # optional nuance, shown after the languages
 homepage = "https://www.stride3d.net"
 icon = "https://www.stride3d.net/favicon.png"  # optional PNG/JPEG/WebP logo for Discord messages
 enabled = true                   # default true
@@ -424,7 +425,7 @@ Its subscriptions are changed in Discord. On the website you can add keywords an
 | Route | Description |
 |---|---|
 | `/` | Latest items from all enabled sources, grouped by day. **Compact** shows one line per item (descriptions on hover); **Expanded** shows every description. The choice is remembered in a cookie and applies to engine pages too. |
-| `/engines` | Engine list with tier, C# support and recent activity. |
+| `/engines` | Engine list with tier, languages and recent activity. |
 | `/engine/{id}` | Items for one engine. |
 | `/sources` | Every source with its health, last fetch time and errors; `?health=unhealthy` lists only failing and stale sources. Admins can switch sources on and off, add sources, engines and outlets (by hand or from the suggestions) and remove them here. |
 | `/notifications` | Admin only: notification channels, their rules and last deliveries. |
@@ -474,7 +475,7 @@ Each source (on `/sources` and on every engine page) gets an **Enable** / **Disa
 - **Add a source** (a button at the top of `/sources` that opens a dialog, or the **Add source** link next to an engine or outlet, which preselects it) takes the same settings as a `[[engine.source]]` entry: a feed, GitHub repository or scraped HTML page, plus an optional category, interval and keywords. Input is checked first (URLs, `owner/repo`, CSS selectors), and a source that already exists is refused. A new source is polled straight away; its first fetch is stored without sending notifications.
 - **Remove** (next to Enable / Disable) asks for confirmation, then stops polling the source and **deletes its stored items**, fetch state and on/off override. Items elsewhere that were duplicates of its items are shown in their place.
 - **Suggestions** lists what the catalog has that you don't: engines grouped by tier, news outlets, and catalog sources missing from engines and outlets you have. **Add** adds an engine or outlet with all its catalog sources, or a single source. Something you removed shows up here again if it's in the catalog; adding it back fetches its items again.
-- **Add an engine** and **Add a news outlet** (also dialogs) take an id (a lowercase slug, used in `/engine/{id}`), name and homepage. An engine also takes the tier, C# support, aliases and exclude phrases, written as in the catalog (see "Engines, outlets and the catalog"); an outlet can be limited to items that mention a known engine. Either is added without sources and you're taken straight to adding its first one. New aliases tag items from the next fetch on.
+- **Add an engine** and **Add a news outlet** (also dialogs) take an id (a lowercase slug, used in `/engine/{id}`), name and homepage. An engine also takes the tier, its languages (comma-separated, primary first; at least one) and an optional language note, aliases and exclude phrases, written as in the catalog (see "Engines, outlets and the catalog"); an outlet can be limited to items that mention a known engine. Either is added without sources and you're taken straight to adding its first one. New aliases tag items from the next fetch on.
 - **Remove engine / Remove outlet** (in its group header) removes it with all its sources and their items; an engine's tags on other sources' items are removed too.
 
 ### Admin login

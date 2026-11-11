@@ -230,7 +230,8 @@ pub(super) struct AddOwnerForm {
     homepage: Option<String>,
     icon: Option<String>,
     tier: Option<String>,
-    csharp: Option<String>,
+    languages: Option<String>,
+    language_note: Option<String>,
     aliases: Option<String>,
     exclude: Option<String>,
     require_engine_match: Option<String>,
@@ -248,7 +249,8 @@ impl AddOwnerForm {
                 tier: non_empty(&self.tier)
                     .and_then(|t| t.parse().ok())
                     .ok_or("Choose a tier.")?,
-                csharp: non_empty(&self.csharp).unwrap_or_else(|| "none".into()),
+                languages: split_list(self.languages.as_deref()),
+                language_note: non_empty(&self.language_note),
                 homepage,
                 icon: non_empty(&self.icon),
                 enabled: true,

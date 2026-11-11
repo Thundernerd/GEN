@@ -144,7 +144,7 @@ mod tests {
             id = "godot"
             name = "Godot"
             tier = 1
-            csharp = "first-class"
+            languages = ["GDScript", "C#", "C++"]
               [[engine.source]]
               kind = "feed"
               url = "https://godotengine.org/rss.xml"
@@ -206,7 +206,7 @@ mod tests {
             id = "godot"
             name = "Godot"
             tier = 1
-            csharp = "first-class"
+            languages = ["GDScript", "C#", "C++"]
               [[engine.source]]
               kind = "feed"
               url = "http://{feed}/rss.xml"
