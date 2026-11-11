@@ -440,6 +440,15 @@ impl Store {
         Ok(())
     }
 
+    /// Removes source `id` and its fetch state, but keeps its items.
+    pub fn retire_source(&mut self, id: &str) -> anyhow::Result<()> {
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM sources WHERE id = ?1", [id])?;
+        purge_fetch_state(&tx, id)?;
+        tx.commit()?;
+        Ok(())
+    }
+
     /// Removes an engine or outlet together with `source_ids` (its current sources) and
     /// their data. An engine's tags on other sources' items are removed too.
     pub fn remove_owner(
@@ -954,6 +963,12 @@ fn purge_source_data(conn: &Connection, source_id: &str) -> rusqlite::Result<()>
         [source_id],
     )?;
     conn.execute("DELETE FROM items WHERE source_id = ?1", [source_id])?;
+    purge_fetch_state(conn, source_id)
+}
+
+/// Deletes what GEN keeps about polling `source_id`: its state, its on/off override and
+/// its record of pruned entries.
+fn purge_fetch_state(conn: &Connection, source_id: &str) -> rusqlite::Result<()> {
     conn.execute("DELETE FROM pruned_items WHERE source_id = ?1", [source_id])?;
     conn.execute("DELETE FROM source_state WHERE source_id = ?1", [source_id])?;
     conn.execute(

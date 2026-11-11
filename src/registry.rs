@@ -10,8 +10,8 @@ use tokio::sync::watch;
 use crate::catalog;
 use crate::classify::Classifier;
 use crate::config::{
-    EngineConfig, OutletConfig, Owner, SourceConfig, SourcesConfig, check_url, source_id,
-    valid_owner_id,
+    EngineConfig, OutletConfig, Owner, SourceConfig, SourceSpec, SourcesConfig, check_url,
+    source_id, valid_owner_id,
 };
 use crate::model::Item;
 use crate::store::Store;
@@ -228,6 +228,15 @@ pub enum SourceEdit {
         config: SourceConfig,
     },
     RemoveSource(String),
+    /// Stops polling a source and forgets its fetch state, but keeps its items. For
+    /// migrations that replace a catalog source with another.
+    RetireSource(String),
+    /// Replaces a source's spec, keeping its id, interval and enabled state. The new spec
+    /// must give the same id.
+    ReplaceSourceSpec {
+        source_id: String,
+        spec: SourceSpec,
+    },
     /// Sets how often a source is polled; `None` uses the default interval.
     SetInterval {
         source_id: String,
@@ -324,6 +333,37 @@ impl SourceRegistry {
                 self.commit(stored, || store.remove_source(&id))?;
                 tracing::info!(source = %id, "source removed");
                 Ok(vec![id])
+            }
+            SourceEdit::RetireSource(id) => {
+                if !current.config.all_sources().iter().any(|s| s.id == id) {
+                    return Err(EditError::Invalid(format!("There is no source “{id}”.")));
+                }
+                stored.sources.retain(|s| s.id != id);
+                self.commit(stored, || store.retire_source(&id))?;
+                tracing::info!(source = %id, "source retired, its items kept");
+                Ok(vec![id])
+            }
+            SourceEdit::ReplaceSourceSpec { source_id, spec } => {
+                let Some(stored_source) = stored.sources.iter_mut().find(|s| s.id == source_id)
+                else {
+                    return Err(EditError::Invalid(format!(
+                        "There is no source “{source_id}”."
+                    )));
+                };
+                if crate::config::source_id(&stored_source.owner_id, &spec) != source_id {
+                    return Err(EditError::Invalid(format!(
+                        "The new spec would change the id of “{source_id}”."
+                    )));
+                }
+                stored_source.config.spec = spec;
+                stored_source.config.check().map_err(EditError::Invalid)?;
+                let json =
+                    serde_json::to_string(&stored_source.config).map_err(anyhow::Error::from)?;
+                self.commit(stored, || {
+                    store.update_source(&source_id, &json).map(|_| ())
+                })?;
+                tracing::info!(source = %source_id, "source spec replaced");
+                Ok(Vec::new())
             }
             SourceEdit::SetInterval { source_id, minutes } => {
                 let Some(stored_source) = stored.sources.iter_mut().find(|s| s.id == source_id)
