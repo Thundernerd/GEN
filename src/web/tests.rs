@@ -1,7 +1,5 @@
 //! Handler tests against an in-memory store.
 
-use std::sync::{Arc, Mutex};
-
 use axum::body::Body;
 use axum::http::{Request, StatusCode, header};
 use chrono::{Duration, Utc};
@@ -10,12 +8,10 @@ use tower::ServiceExt;
 
 use super::{AppState, router};
 use crate::config::AppConfig;
-use crate::fetch::Http;
 use crate::model::{ItemKind, NewItem};
 use crate::pipeline::Pipeline;
 use crate::registry::SourceRegistry;
 use crate::store::Store;
-use crate::toggles::SourceToggles;
 
 const SOURCES: &str = r#"
 [[engine]]
@@ -110,16 +106,8 @@ fn state() -> AppState {
     config.server.static_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/static").into();
     config.server.base_url = "https://gen.example.org/".into();
     config.server.admin_token = Some(ADMIN_TOKEN.into());
-    let registry = Arc::new(SourceRegistry::with_owners(&mut store, SOURCES));
-    let pipeline = Pipeline {
-        http: Http::new("gen-test", None).unwrap(),
-        store: Arc::new(Mutex::new(store)),
-        registry,
-        toggles: Arc::new(SourceToggles::default()),
-        notify_wake: Arc::new(tokio::sync::Notify::new()),
-        settings: Arc::new(crate::pipeline::PollSettings::new(60)),
-        fetches: Arc::new(crate::scheduler::FetchRequests::default()),
-    };
+    let registry = SourceRegistry::with_owners(&mut store, SOURCES);
+    let pipeline = Pipeline::test(store, registry);
     AppState::new(&pipeline, config).unwrap()
 }
 

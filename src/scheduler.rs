@@ -646,27 +646,11 @@ mod tests {
     use crate::config::{Owner, SourceSpec};
     use crate::test_server::{ok, respond, serve};
 
-    /// A pipeline over `store` and `registry`, with every other part fresh and default.
-    fn test_pipeline(
-        store: crate::store::Store,
-        registry: crate::registry::SourceRegistry,
-    ) -> Pipeline {
-        Pipeline {
-            http: crate::fetch::Http::new("gen-test", None).unwrap(),
-            store: Arc::new(Mutex::new(store)),
-            registry: Arc::new(registry),
-            toggles: Arc::new(crate::toggles::SourceToggles::default()),
-            notify_wake: Arc::new(Notify::new()),
-            settings: Arc::new(crate::pipeline::PollSettings::new(60)),
-            fetches: Arc::new(FetchRequests::default()),
-        }
-    }
-
     /// A notifier, and its pipeline, over `store` and the sources it holds. `bot` is the
     /// Discord bot that posts to bot channels.
     fn test_notifier(store: crate::store::Store, bot: Option<BotApi>) -> Notifier {
         let registry = crate::registry::SourceRegistry::load(&store).unwrap();
-        let pipeline = test_pipeline(store, registry);
+        let pipeline = Pipeline::test(store, registry);
         Notifier {
             wake: pipeline.notify_wake.clone(),
             pipeline,
@@ -715,7 +699,7 @@ mod tests {
         );
         let registry = crate::registry::SourceRegistry::with_owners(&mut store, &config);
         let source = registry.current().config.all_sources().remove(0);
-        let pipeline = test_pipeline(store, registry);
+        let pipeline = Pipeline::test(store, registry);
         let poller = Poller {
             pipeline: pipeline.clone(),
             permits: Arc::new(Semaphore::new(1)),
@@ -786,7 +770,7 @@ mod tests {
         let registry = crate::registry::SourceRegistry::with_owners(&mut store, &config);
         let sources = registry.current().config.all_sources();
         assert_eq!(sources.len(), 2);
-        let pipeline = test_pipeline(store, registry);
+        let pipeline = Pipeline::test(store, registry);
         let mut tasks = Vec::new();
         for source in &sources {
             let poller = Poller {
@@ -1126,7 +1110,7 @@ mod tests {
         store
             .insert_items_at(&[item("recent", 10)], ago(10))
             .unwrap();
-        let pipeline = test_pipeline(store, registry);
+        let pipeline = Pipeline::test(store, registry);
         let mut app = AppConfig::default();
         app.database.retention_days = Some(365);
         let _tasks = spawn(pipeline.clone(), Arc::new(app));

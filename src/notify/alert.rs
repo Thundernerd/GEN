@@ -112,14 +112,10 @@ pub fn describe(source: &ResolvedSource) -> String {
 
 #[cfg(test)]
 mod tests {
-    use std::sync::{Arc, Mutex};
-
-    use tokio::sync::Notify;
-
     use super::*;
     use crate::config::{ChannelConfig, ChannelTarget};
     use crate::notify::{NotifyContext, load_channels};
-    use crate::pipeline::{Pipeline, PollSettings};
+    use crate::pipeline::Pipeline;
     use crate::store::Store;
     use crate::test_server::{ok, respond, serve};
 
@@ -230,15 +226,7 @@ mod tests {
             let json = serde_json::to_string(&channel).unwrap();
             assert!(store.add_channel(name, &json).unwrap());
         }
-        let pipeline = Pipeline {
-            http: crate::fetch::Http::new("gen-test", None).unwrap(),
-            store: Arc::new(Mutex::new(store)),
-            registry: Arc::new(registry),
-            toggles: Arc::new(crate::toggles::SourceToggles::default()),
-            notify_wake: Arc::new(Notify::new()),
-            settings: Arc::new(PollSettings::new(60)),
-            fetches: Arc::new(crate::scheduler::FetchRequests::default()),
-        };
+        let pipeline = Pipeline::test(store, registry);
         let snapshot = pipeline.registry.current();
         let ctx = NotifyContext {
             http: &pipeline.http,
