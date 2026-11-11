@@ -32,7 +32,7 @@ homepage = "https://godotengine.org"
 [[engine]]
 id = "bevy"
 name = "Bevy"
-tier = 3
+tier = 2
 languages = ["Rust"]
   [[engine.source]]
   kind = "feed"
@@ -356,9 +356,13 @@ async fn timeline_filters() {
     assert!(body.contains("New C# engine appears"));
     assert!(!body.contains("Bevy 0.17 is out"));
 
-    let (_, _, body) = get("/?tier=3").await;
+    let (_, _, body) = get("/?tier=2").await;
     assert!(!body.contains("Godot 4.8 released"));
     assert!(body.contains("Bevy 0.17 is out"));
+
+    let (_, _, body) = get("/?tier=1").await;
+    assert!(body.contains("Godot 4.8 released"));
+    assert!(!body.contains("Bevy 0.17 is out"));
 }
 
 #[tokio::test]
@@ -401,6 +405,14 @@ fn language_picker(body: &str) -> Vec<String> {
         .collect()
 }
 
+/// The tier headings of the Engines page, without their news links.
+fn tier_headings(body: &str) -> Vec<&str> {
+    body.split(r#"<h2 class="tier-title">"#)
+        .skip(1)
+        .map(|h| h[..h.find(" <a ").expect("tier heading has a news link")].trim())
+        .collect()
+}
+
 #[tokio::test]
 async fn language_picker_merges_spellings_and_puts_common_languages_first() {
     let st = state();
@@ -438,7 +450,16 @@ async fn engine_pages() {
 async fn engines_and_sources_pages() {
     let (status, _, body) = get("/engines").await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body.contains("Major C# engines"));
+    // Tiers are headed by prominence and kind, not by language.
+    assert!(body.contains("Major engines"));
+    assert!(body.contains("Smaller engines"));
+    assert!(
+        !body.contains("Frameworks and libraries"),
+        "tier 3 is empty here"
+    );
+    for heading in tier_headings(&body) {
+        assert!(!heading.contains("C#"), "{heading}");
+    }
     assert!(body.contains("Bevy"));
     // Each language links to the timeline filtered on it.
     assert!(body.contains(r#"<dt>Languages</dt><dd><a href="&#x2f;?lang=Rust">Rust</a>"#));

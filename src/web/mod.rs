@@ -61,9 +61,9 @@ const ADMIN_COOKIE: &str = "gen_admin";
 const ADMIN_COOKIE_MAX_AGE: u32 = 30 * 24 * 60 * 60;
 
 const TIER_LABELS: [(u8, &str); 3] = [
-    (1, "Major C# engines"),
-    (2, "Niche C# engines"),
-    (3, "Other notable engines"),
+    (1, "Major engines"),
+    (2, "Smaller engines"),
+    (3, "Frameworks and libraries"),
 ];
 
 #[derive(Clone)]

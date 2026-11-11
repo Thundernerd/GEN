@@ -187,7 +187,8 @@ name = "GameFromScratch"
   url = "https://gamefromscratch.com/feed/"
   category = "news"
 "#;
-    // Tiers are the opposite of the catalog's, so a filter by tier would fail these tests.
+    // Godot (C#) is tier 3 and Bevy (Rust) tier 1 here, so a filter by tier instead of
+    // language would fail these tests.
     const GODOT_SRC: &str = "godot:github:godotengine/godot";
     const BEVY_SRC: &str = "bevy:feed:https://bevyengine.org/news/rss.xml";
     const GFS_SRC: &str = "gfs:feed:https://gamefromscratch.com/feed/";

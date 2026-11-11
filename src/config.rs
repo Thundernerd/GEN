@@ -26,7 +26,7 @@ pub struct SourcesConfig {
 pub struct EngineConfig {
     pub id: EngineId,
     pub name: String,
-    /// 1 = major C#, 2 = niche C#, 3 = notable without C#.
+    /// 1 = major engines, 2 = smaller engines, 3 = frameworks and libraries; any language.
     pub tier: u8,
     /// The languages games are written in with this engine, primary first, e.g.
     /// `["GDScript", "C#", "C++"]`. Empty only for engines stored before this field existed
