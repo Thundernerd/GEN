@@ -123,7 +123,8 @@ pub struct NewItem {
     pub image_url: Option<String>,
     /// Normalized key used for cross-source dedup (see `classify::story_key`).
     pub story_key: String,
-    /// Whether this item should be notified (false for a source's first, backfill fetch).
+    /// Whether this item should be notified (false for a source's first, backfill fetch,
+    /// and for an entry dated well before the newest item its source already has).
     pub notify: bool,
 }
 

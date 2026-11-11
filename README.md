@@ -18,7 +18,7 @@ GEN is a single Rust binary. It contains a web server and a background poller, a
 - Provides a web UI by engine and by source, a combined Atom feed and a JSON API, with full-text search over item titles and summaries.
 - Sends notifications to Discord, ntfy, email and Apprise API (which reaches Telegram, Slack, Matrix, Pushover and many more), with per-channel filter rules. Email can be sent as a digest.
 - Runs an optional Discord bot. Server admins subscribe channels to engine topics with `/gen` slash commands, and `/gen setup` creates the channels, e.g. a Unity category with `#unity-releases` and `#unity-news`.
-- Uses conditional requests (ETag / Last-Modified) and per-source intervals. The first fetch of a new source fills the database without notifying, so adding a source never floods your channels.
+- Uses conditional requests (ETag / Last-Modified) and per-source intervals. The first fetch of a new source fills the database without notifying, so adding a source never floods your channels. Later fetches don't notify entries dated more than 2 days before the newest item the source already has, e.g. older entries that come into view when you raise a `limit` or change a `tag_prefix`; they are still stored and shown.
 
 ### How it works
 

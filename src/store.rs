@@ -299,6 +299,15 @@ impl Store {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
+    /// The newest `published` date among the source's stored items, if any has one.
+    pub fn newest_published(&self, source_id: &str) -> anyhow::Result<Option<DateTime<Utc>>> {
+        Ok(self.conn.query_row(
+            "SELECT MAX(published) FROM items WHERE source_id = ?1",
+            [source_id],
+            |r| r.get(0),
+        )?)
+    }
+
     /// Records a successful fetch. Validators are only replaced when the response sent new ones.
     pub fn record_fetch_ok(
         &self,

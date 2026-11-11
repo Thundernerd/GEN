@@ -17,6 +17,11 @@ use crate::toggles::SourceToggles;
 /// Upper bound on entries taken from a single fetch.
 const MAX_ITEMS_PER_FETCH: usize = 200;
 
+/// How far before a source's newest stored item a new entry may be dated and still be
+/// notified, for feeds that list entries a little out of order. Older entries (e.g. ones
+/// that came into view because the source's window grew) are stored but not notified.
+const NOTIFY_GRACE: chrono::TimeDelta = chrono::TimeDelta::days(2);
+
 #[derive(Clone)]
 pub struct Pipeline {
     pub http: Http,
@@ -72,13 +77,14 @@ pub struct PollResult {
 
 impl Pipeline {
     pub async fn poll(&self, source: &ResolvedSource) -> anyhow::Result<PollResult> {
-        let state = self
+        let (state, newest_published) = self
             .with_store({
                 let id = source.id.clone();
-                move |s| s.source_state(&id)
+                move |s| Ok((s.source_state(&id)?, s.newest_published(&id)?))
             })
             .await?;
         let was_seeded = state.is_seeded();
+        let notify_cutoff = newest_published.map(|newest| newest - NOTIFY_GRACE);
 
         let outcome = match fetch::fetch_source(&self.http, source, &state).await {
             Ok(outcome) => outcome,
@@ -129,7 +135,11 @@ impl Pipeline {
                     .into_iter()
                     .filter_map(|raw| snapshot.classifier.classify(source, raw))
                     .map(|item| NewItem {
-                        notify: was_seeded,
+                        notify: was_seeded
+                            && !matches!(
+                                (item.published, notify_cutoff),
+                                (Some(published), Some(cutoff)) if published < cutoff
+                            ),
                         ..item
                     })
                     .collect();
@@ -164,5 +174,106 @@ impl Pipeline {
             f(&mut guard)
         })
         .await?
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_server::{respond, serve};
+
+    /// An RSS feed with one entry per `(guid, pubDate)`.
+    fn rss(entries: &[(&str, &str)]) -> String {
+        let items: String = entries
+            .iter()
+            .map(|(guid, date)| {
+                format!(
+                    "<item><title>Godot news {guid}</title><guid>{guid}</guid>\
+                     <link>https://godotengine.org/{guid}</link><pubDate>{date}</pubDate></item>"
+                )
+            })
+            .collect();
+        format!(
+            "<?xml version=\"1.0\"?><rss version=\"2.0\"><channel><title>Godot</title>\
+             <link>https://godotengine.org</link><description>news</description>{items}\
+             </channel></rss>"
+        )
+    }
+
+    /// The titles of the stored items that will be sent to notification channels.
+    async fn notified(pipeline: &Pipeline) -> Vec<String> {
+        let mut titles: Vec<String> = pipeline
+            .with_store(|s| s.pending_notifications("test", chrono::DateTime::UNIX_EPOCH, 100))
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|i| i.title)
+            .collect();
+        titles.sort();
+        titles
+    }
+
+    /// Once a source has items, an entry dated well before its newest one (here because
+    /// the source's window grew) is stored but not notified. A newer entry still is, and so
+    /// is one listed a little out of order.
+    #[tokio::test]
+    async fn older_entries_coming_into_view_are_stored_but_not_notified() {
+        let first = rss(&[("day10", "Sat, 10 Oct 2026 12:00:00 GMT")]);
+        let second = rss(&[
+            ("day11", "Sun, 11 Oct 2026 12:00:00 GMT"),
+            ("day10", "Sat, 10 Oct 2026 12:00:00 GMT"),
+            ("day9", "Fri, 09 Oct 2026 12:00:00 GMT"),
+            ("day3", "Sat, 03 Oct 2026 12:00:00 GMT"),
+        ]);
+        let addr = serve(move |index, _| {
+            let body = if index == 0 { &first } else { &second };
+            respond("200 OK", &[("content-type", "application/rss+xml")], body)
+        })
+        .await
+        .addr;
+        let mut store = Store::open_in_memory().unwrap();
+        let config = format!(
+            r#"
+            [[engine]]
+            id = "godot"
+            name = "Godot"
+            tier = 1
+            languages = ["GDScript", "C#", "C++"]
+              [[engine.source]]
+              kind = "feed"
+              url = "http://{addr}/rss.xml"
+              category = "news"
+            "#
+        );
+        let registry = SourceRegistry::with_owners(&mut store, &config);
+        let source = registry.current().config.all_sources().remove(0);
+        let pipeline = Pipeline {
+            http: Http::new("gen-test", None).unwrap(),
+            store: Arc::new(Mutex::new(store)),
+            registry: Arc::new(registry),
+            toggles: Arc::new(SourceToggles::default()),
+            notify_wake: Arc::new(Notify::new()),
+            settings: Arc::new(PollSettings::new(60)),
+            fetches: Arc::new(FetchRequests::default()),
+        };
+
+        let seeded = pipeline.poll(&source).await.unwrap();
+        assert_eq!(seeded.new_items.len(), 1);
+        assert!(
+            notified(&pipeline).await.is_empty(),
+            "the backfill isn't notified"
+        );
+
+        let widened = pipeline.poll(&source).await.unwrap();
+        let mut stored: Vec<_> = widened.new_items.into_iter().map(|i| i.title).collect();
+        stored.sort();
+        assert_eq!(
+            stored,
+            ["Godot news day11", "Godot news day3", "Godot news day9"]
+        );
+        assert_eq!(
+            notified(&pipeline).await,
+            ["Godot news day11", "Godot news day9"]
+        );
     }
 }
