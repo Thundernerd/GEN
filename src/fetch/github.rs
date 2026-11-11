@@ -30,10 +30,9 @@ pub async fn fetch(
     state: &SourceState,
 ) -> Result<FetchOutcome, FetchError> {
     let (url, headers) = match (mode, http.github_token.as_deref()) {
-        (GithubMode::Releases, Some(token)) => (
-            format!("https://api.github.com/repos/{repo}/releases?per_page=30"),
-            api_headers(token)?,
-        ),
+        (GithubMode::Releases, Some(token)) => {
+            (releases_api_url(repo, tag_prefix), api_headers(token)?)
+        }
         (GithubMode::Releases, None) => (
             format!("https://github.com/{repo}/releases.atom"),
             HeaderMap::new(),
@@ -221,6 +220,15 @@ fn tag_from_url(url: &str) -> Option<String> {
     (!tag.is_empty()).then_some(tag)
 }
 
+/// The REST URL for a repository's newest releases. A `tag_prefix` usually means a monorepo
+/// that publishes many packages at once (Flame releases about 30 per batch), so the window
+/// is widened to 100, GitHub's maximum page, to keep the matching release in it: still one
+/// request per poll.
+fn releases_api_url(repo: &str, tag_prefix: Option<&str>) -> String {
+    let per_page = if tag_prefix.is_some() { 100 } else { 30 };
+    format!("https://api.github.com/repos/{repo}/releases?per_page={per_page}")
+}
+
 fn has_prefix(tag: &str, prefix: Option<&str>) -> bool {
     prefix.is_none_or(|p| tag.starts_with(p))
 }
@@ -265,6 +273,20 @@ mod tests {
                 tag_prefix: None,
             },
         }
+    }
+
+    /// A monorepo publishes many packages at once, so a `tag_prefix` source asks for a wider
+    /// window; plain repositories keep the default 30.
+    #[test]
+    fn releases_api_url_widens_the_window_for_a_tag_prefix() {
+        assert_eq!(
+            releases_api_url("flame-engine/flame", Some("flame-v")),
+            "https://api.github.com/repos/flame-engine/flame/releases?per_page=100"
+        );
+        assert_eq!(
+            releases_api_url("godotengine/godot", None),
+            "https://api.github.com/repos/godotengine/godot/releases?per_page=30"
+        );
     }
 
     /// Without a token, releases come from the Atom feed (no prerelease flag), so
