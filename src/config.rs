@@ -26,8 +26,7 @@ pub struct SourcesConfig {
 pub struct EngineConfig {
     pub id: EngineId,
     pub name: String,
-    /// 1 = major engines, 2 = smaller engines, 3 = frameworks and libraries; any language.
-    pub tier: u8,
+    pub tier: Tier,
     /// The languages games are written in with this engine, primary first, e.g.
     /// `["GDScript", "C#", "C++"]`. Empty only for engines stored before this field existed
     /// that aren't in the catalog.
@@ -50,6 +49,72 @@ pub struct EngineConfig {
     pub sources: Vec<SourceConfig>,
 }
 
+/// How prominent and active an engine is and whether it's a full engine, not which language
+/// it uses. Stored and written in `catalog.toml` as its number, 1, 2 or 3.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize, Serialize)]
+#[serde(try_from = "u8", into = "u8")]
+pub enum Tier {
+    /// Widely used or very active full engines.
+    Major = 1,
+    /// Niche, young or less active full engines.
+    Smaller = 2,
+    /// Frameworks, bindings and libraries for physics, ECS, networking, UI and more.
+    Frameworks = 3,
+}
+
+const TIER_OUT_OF_RANGE: &str = "The tier must be 1, 2 or 3.";
+
+impl Tier {
+    /// Every tier, in order.
+    pub const ALL: [Tier; 3] = [Tier::Major, Tier::Smaller, Tier::Frameworks];
+
+    /// The tier's heading, e.g. on the Engines page.
+    pub fn label(self) -> &'static str {
+        match self {
+            Tier::Major => "Major engines",
+            Tier::Smaller => "Smaller engines",
+            Tier::Frameworks => "Frameworks and libraries",
+        }
+    }
+}
+
+/// Reads the number, as in `?tier=2` or a form field.
+impl std::str::FromStr for Tier {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        s.parse::<u8>()
+            .map_err(|_| TIER_OUT_OF_RANGE.to_string())?
+            .try_into()
+    }
+}
+
+/// Writes the number.
+impl std::fmt::Display for Tier {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", u8::from(*self))
+    }
+}
+
+impl From<Tier> for u8 {
+    fn from(tier: Tier) -> u8 {
+        tier as u8
+    }
+}
+
+impl TryFrom<u8> for Tier {
+    type Error = String;
+
+    fn try_from(n: u8) -> Result<Self, Self::Error> {
+        match n {
+            1 => Ok(Tier::Major),
+            2 => Ok(Tier::Smaller),
+            3 => Ok(Tier::Frameworks),
+            _ => Err(TIER_OUT_OF_RANGE.into()),
+        }
+    }
+}
+
 /// How [`EngineConfig`] is read: also accepts engines stored before `languages` existed,
 /// whose free-text `csharp` field becomes the `language_note`.
 #[derive(Deserialize)]
@@ -57,7 +122,7 @@ pub struct EngineConfig {
 struct StoredEngineConfig {
     id: EngineId,
     name: String,
-    tier: u8,
+    tier: Tier,
     #[serde(default)]
     languages: Vec<String>,
     #[serde(default)]
@@ -979,6 +1044,29 @@ fn default_smtp_port() -> u16 {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_tier_round_trips_through_json_as_a_number() {
+        for (json, tier) in [
+            ("1", Tier::Major),
+            ("2", Tier::Smaller),
+            ("3", Tier::Frameworks),
+        ] {
+            assert_eq!(serde_json::from_str::<Tier>(json).unwrap(), tier);
+            assert_eq!(serde_json::to_string(&tier).unwrap(), json);
+        }
+    }
+
+    #[test]
+    fn a_tier_outside_1_to_3_is_rejected() {
+        for json in ["0", "4"] {
+            let err = serde_json::from_str::<Tier>(json).unwrap_err();
+            assert!(
+                err.to_string().contains("The tier must be 1, 2 or 3."),
+                "{json}: {err}"
+            );
+        }
+    }
 
     #[test]
     fn reads_an_engine_stored_with_the_old_csharp_field() {

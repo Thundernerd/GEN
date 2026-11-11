@@ -175,13 +175,10 @@ impl NewOwner {
         if let Some(url) = homepage {
             check_url(url)?;
         }
-        if let NewOwner::Engine(e) = self {
-            if !(1..=3).contains(&e.tier) {
-                return Err("The tier must be 1, 2 or 3.".into());
-            }
-            if let Some(icon) = &e.icon {
-                check_url(icon)?;
-            }
+        if let NewOwner::Engine(e) = self
+            && let Some(icon) = &e.icon
+        {
+            check_url(icon)?;
         }
         Ok(())
     }
@@ -571,7 +568,7 @@ fn spell_languages<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{GithubMode, SourceSpec};
+    use crate::config::{GithubMode, SourceSpec, Tier};
 
     const FIXTURE: &str = r#"
         [[engine]]
@@ -729,7 +726,7 @@ mod tests {
         NewOwner::Engine(EngineConfig {
             id: id.into(),
             name: "Stride".into(),
-            tier: 1,
+            tier: Tier::Major,
             languages: vec!["C#".into()],
             language_note: None,
             homepage: None,
@@ -794,11 +791,6 @@ mod tests {
         assert!(invalid(&reg, &mut store, engine("Bad Id")).contains("can't be used"));
         assert!(invalid(&reg, &mut store, engine("a:b")).contains("can't be used"));
         assert!(invalid(&reg, &mut store, engine("gfs")).contains("already used"));
-        let NewOwner::Engine(mut tier7) = engine("x") else {
-            unreachable!()
-        };
-        tier7.tier = 7;
-        assert!(invalid(&reg, &mut store, NewOwner::Engine(tier7)).contains("tier"));
         let NewOwner::Engine(mut no_languages) = engine("x") else {
             unreachable!()
         };

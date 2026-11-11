@@ -4,7 +4,7 @@ use std::collections::HashMap;
 
 use chrono::{DateTime, Utc};
 
-use crate::config::SourcesConfig;
+use crate::config::{SourcesConfig, Tier};
 use crate::model::{Item, ItemKind};
 use crate::store::{ItemQuery, Store};
 
@@ -27,7 +27,7 @@ pub struct ItemFilter {
     pub engine: Option<String>,
     pub kind: Option<ItemKind>,
     /// Only items tagged with an engine of this tier.
-    pub tier: Option<u8>,
+    pub tier: Option<Tier>,
     /// Only items tagged with an engine programmed in this language (any case). For C#,
     /// also outlet items mentioning C# or .NET.
     pub lang: Option<String>,

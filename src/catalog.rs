@@ -229,7 +229,7 @@ pub fn merge_catalog_excludes(registry: &SourceRegistry, store: &mut Store) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::SourceSpec;
+    use crate::config::{SourceSpec, Tier};
     use std::collections::HashMap;
 
     #[test]
@@ -541,15 +541,15 @@ mod tests {
             "gamemaker",
             "babylonjs",
         ] {
-            assert_eq!(tier(id), 1, "{id}");
+            assert_eq!(tier(id), Tier::Major, "{id}");
         }
         // 2 = smaller engines, C# or not.
         for id in ["prowl", "lodzero", "evergine", "cryengine"] {
-            assert_eq!(tier(id), 2, "{id}");
+            assert_eq!(tier(id), Tier::Smaller, "{id}");
         }
         // 3 = frameworks and libraries, C# or not.
         for id in ["monogame", "silknet", "arch", "bepu", "raylib", "phaser"] {
-            assert_eq!(tier(id), 3, "{id}");
+            assert_eq!(tier(id), Tier::Frameworks, "{id}");
         }
     }
 
@@ -557,7 +557,7 @@ mod tests {
     fn unity_networking_libraries_are_tier_3_with_icons() {
         for id in ["mirror", "fishnet"] {
             let engine = CATALOG.engine(id).expect(id);
-            assert_eq!(engine.tier, 3, "{id}");
+            assert_eq!(engine.tier, Tier::Frameworks, "{id}");
             assert!(engine.icon.is_some(), "{id}");
         }
     }

@@ -29,7 +29,7 @@ use tower_http::compression::CompressionLayer;
 use tower_http::services::ServeDir;
 
 use crate::catalog;
-use crate::config::{AppConfig, EngineConfig, Owner, SourceSpec};
+use crate::config::{AppConfig, EngineConfig, Owner, SourceSpec, Tier};
 use crate::discord_bot::BotStatusHandle;
 use crate::fetch::Http;
 use crate::health::{FetchHistory, SourceHistory};
@@ -59,12 +59,6 @@ const VIEW_COOKIE_MAX_AGE: u32 = 365 * 24 * 60 * 60;
 /// Cookie holding a hash of the admin token once logged in.
 const ADMIN_COOKIE: &str = "gen_admin";
 const ADMIN_COOKIE_MAX_AGE: u32 = 30 * 24 * 60 * 60;
-
-const TIER_LABELS: [(u8, &str); 3] = [
-    (1, "Major engines"),
-    (2, "Smaller engines"),
-    (3, "Frameworks and libraries"),
-];
 
 #[derive(Clone)]
 pub struct AppState {
@@ -557,9 +551,9 @@ async fn engines_page(st: &AppState, admin: bool) -> PageResult {
     let stats = st.with_store(queries::engine_stats).await?;
     let now = Utc::now();
     let snapshot = st.registry.current();
-    let tiers: Vec<_> = TIER_LABELS
-        .iter()
-        .map(|&(tier, label)| {
+    let tiers: Vec<_> = Tier::ALL
+        .into_iter()
+        .map(|tier| {
             let engines: Vec<_> = snapshot
                 .config
                 .enabled_engines()
@@ -583,7 +577,7 @@ async fn engines_page(st: &AppState, admin: bool) -> PageResult {
                     })
                 })
                 .collect();
-            json!({"tier": tier, "label": label, "engines": engines})
+            json!({"tier": tier, "label": tier.label(), "engines": engines})
         })
         .collect();
     st.render(
@@ -672,7 +666,7 @@ async fn engine_page(
                 "id": engine.id,
                 "name": engine.name,
                 "tier": engine.tier,
-                "tier_label": TIER_LABELS.iter().find(|t| t.0 == engine.tier).map(|t| t.1),
+                "tier_label": engine.tier.label(),
                 "languages": engine.languages,
                 "language_note": engine.language_note,
                 "homepage": engine.homepage,
@@ -790,9 +784,9 @@ async fn sources_page(
             .collect()
     };
     let suggestions = suggestions_view(&snapshot);
-    let tiers: Vec<_> = TIER_LABELS
-        .iter()
-        .map(|(tier, label)| json!({"tier": tier, "label": label}))
+    let tiers: Vec<_> = Tier::ALL
+        .into_iter()
+        .map(|tier| json!({"tier": tier, "label": tier.label()}))
         .collect();
     let count = |status: &str| rows.iter().filter(|r| r["status"] == status).count();
     let summary = json!({
@@ -840,9 +834,9 @@ async fn sources_page(
 fn suggestions_view(snapshot: &Snapshot) -> serde_json::Value {
     let suggestions = catalog::suggestions(snapshot);
     let owner_view = |name: &str, id: &str, detail: String, sources: usize| json!({"id": id, "name": name, "detail": detail, "sources": sources});
-    let mut groups: Vec<_> = TIER_LABELS
-        .iter()
-        .map(|&(tier, label)| {
+    let mut groups: Vec<_> = Tier::ALL
+        .into_iter()
+        .map(|tier| {
             let owners: Vec<_> = suggestions
                 .owners
                 .iter()
@@ -856,7 +850,7 @@ fn suggestions_view(snapshot: &Snapshot) -> serde_json::Value {
                     _ => None,
                 })
                 .collect();
-            json!({"label": label, "owners": owners})
+            json!({"label": tier.label(), "owners": owners})
         })
         .collect();
     let outlets: Vec<_> = suggestions
