@@ -529,6 +529,63 @@ mod tests {
     }
 
     #[test]
+    fn love_is_tagged_by_its_name_not_by_the_word_love() {
+        let classifier = crate::classify::Classifier::new(&CATALOG);
+        let cases: &[(&str, &[&str])] = &[
+            ("I love this game", &[]),
+            ("I LOVE 2D platformers", &[]),
+            ("LÖVE 12.0 released", &["love"]),
+            ("Making a roguelike in Love2D", &["love"]),
+        ];
+        for (title, expected) in cases {
+            assert_eq!(classifier.match_engines(title), *expected, "{title}");
+        }
+    }
+
+    #[test]
+    fn heaps_is_tagged_by_its_name_not_by_the_word_heaps() {
+        let classifier = crate::classify::Classifier::new(&CATALOG);
+        let cases: &[(&str, &[&str])] = &[
+            ("Heaps of new games on Steam this week", &[]),
+            ("Binary heaps for A* pathfinding", &[]),
+            ("Heaps.io 2.1 released", &["heaps"]),
+            ("Shiro Games' Heaps engine goes open", &["heaps"]),
+        ];
+        for (title, expected) in cases {
+            assert_eq!(classifier.match_engines(title), *expected, "{title}");
+        }
+    }
+
+    #[test]
+    fn flame_is_tagged_by_its_name_not_by_the_word_flame() {
+        let classifier = crate::classify::Classifier::new(&CATALOG);
+        let cases: &[(&str, &[&str])] = &[
+            ("Fire and flame effects with particles", &[]),
+            ("Flame Keeper is out on Steam", &[]),
+            ("Flame engine 1.38 adds a new camera", &["flame"]),
+            ("Building a Flutter Flame game", &["flame"]),
+        ];
+        for (title, expected) in cases {
+            assert_eq!(classifier.match_engines(title), *expected, "{title}");
+        }
+    }
+
+    #[test]
+    fn sdl_is_tagged_by_its_name_only() {
+        let classifier = crate::classify::Classifier::new(&CATALOG);
+        let cases: &[(&str, &[&str])] = &[
+            ("SDLC best practices for game studios", &[]),
+            ("Using the sdl tool in Windows SDK", &[]),
+            ("SDL 3.4.20 released", &["sdl"]),
+            ("Porting a game from SDL2 to SDL3", &["sdl"]),
+            ("Simple DirectMedia Layer gets a GPU API", &["sdl"]),
+        ];
+        for (title, expected) in cases {
+            assert_eq!(classifier.match_engines(title), *expected, "{title}");
+        }
+    }
+
+    #[test]
     fn tiers_measure_prominence_and_kind_not_language() {
         let tier = |id: &str| CATALOG.engine(id).expect(id).tier;
         // 1 = major engines, of any language.
