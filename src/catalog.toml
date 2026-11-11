@@ -17,11 +17,12 @@
 # spelled one way across the catalog (C#, C++, F#, GDScript, Lua, ...); `language_note`
 # adds nuance the list can't carry, e.g. "C# via the UnrealSharp plugin".
 # Sources with `enabled = false` are added switched off.
-# Aliases are matched case-insensitively as whole words against outlet articles.
+# Aliases are matched as whole words against outlet articles: case-insensitively when
+# all lowercase, case-sensitively when they contain an uppercase letter ("SDL").
 # `icon` is a PNG/JPEG/WebP logo for Discord messages: the engine's own icon, or its
 # GitHub organization's avatar (never a person's).
 #
-# All URLs below were verified with curl / the GitHub API on 2026-10-22.
+# All URLs below were verified with curl / the GitHub API on 2026-11-11.
 #
 # Redot Engine is intentionally excluded everywhere (user request).
 
@@ -609,6 +610,61 @@ aliases = ["armory3d", "armory engine"]
   repo = "armory3d/armory"
   category = "release"
 
+# --- Ren'Py -------------------------------------------------------------------------
+# Tier 2: widely used, but for one genre (visual novels).
+[[engine]]
+id = "renpy"
+name = "Ren'Py"
+tier = 2
+languages = ["Python"]
+language_note = "Ren'Py script, a Python-based language"
+homepage = "https://www.renpy.org"
+icon = "https://avatars.githubusercontent.com/u/1900740?s=128&v=4"
+aliases = ["ren'py"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://www.renpy.org/feed/"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "renpy/renpy"
+  category = "release"
+
+# --- Panda3D ------------------------------------------------------------------------
+[[engine]]
+id = "panda3d"
+name = "Panda3D"
+tier = 2
+languages = ["Python", "C++"]
+homepage = "https://www.panda3d.org"
+icon = "https://www.panda3d.org/wp-content/uploads/2018/12/panda3d_icon-1.png"
+aliases = ["panda3d"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://www.panda3d.org/feed/"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "panda3d/panda3d"
+  category = "release"
+
+# --- jMonkeyEngine ------------------------------------------------------------------
+# jmonkeyengine.org has no feed apart from its forum.
+[[engine]]
+id = "jmonkeyengine"
+name = "jMonkeyEngine"
+tier = 2
+languages = ["Java"]
+homepage = "https://jmonkeyengine.org"
+icon = "https://avatars.githubusercontent.com/u/1562906?s=128&v=4"
+aliases = ["jmonkeyengine", "jmonkey", "jme3"]
+  [[engine.source]]
+  kind = "github"
+  repo = "jMonkeyEngine/jmonkeyengine"
+  category = "release"
+
 # ===========================================================================
 # Tier 3: frameworks and libraries
 # Frameworks, bindings and libraries (physics, ECS, networking, UI, ...).
@@ -1075,6 +1131,189 @@ aliases = ["ebitengine", "ebiten"]
   repo = "hajimehoshi/ebiten"
   category = "release"
 
+# --- LÖVE ---------------------------------------------------------------------------
+# love2d.org has no news feed; its releases.xml repeats the GitHub releases.
+# "love" is an ordinary word, so only the umlauted name and "love2d" are aliases.
+[[engine]]
+id = "love"
+name = "LÖVE"
+tier = 3
+languages = ["Lua"]
+homepage = "https://love2d.org"
+icon = "https://love2d.org/apple-touch-icon.png"
+aliases = ["löve", "löve2d", "love2d"]
+  [[engine.source]]
+  kind = "github"
+  repo = "love2d/love"
+  category = "release"
+
+# --- Heaps --------------------------------------------------------------------------
+# heaps.io has no feed. "heaps" is an ordinary word, so only multi-word aliases.
+[[engine]]
+id = "heaps"
+name = "Heaps"
+tier = 3
+languages = ["Haxe"]
+homepage = "https://heaps.io"
+icon = "https://avatars.githubusercontent.com/u/25413467?s=128&v=4"
+aliases = ["heaps.io", "heaps engine", "heaps framework", "heapsio"]
+  [[engine.source]]
+  kind = "github"
+  repo = "HeapsIO/heaps"
+  category = "release"
+
+# --- Flame --------------------------------------------------------------------------
+# flame-engine/flame is a monorepo that releases about 30 packages at a time; the
+# engine's own tags are `v1.x` up to 1.38 and `flame-v...` before and after (2.0
+# previews). The tags source keeps `flame-v` tags and the releases source `v` tags (1.x
+# maintenance releases). A batch can push the engine's tag out of the window GitHub
+# returns, so some engine releases may be missed. The site has no feed. "flame" is an ordinary word, so only multi-word aliases.
+[[engine]]
+id = "flame"
+name = "Flame"
+tier = 3
+languages = ["Dart"]
+homepage = "https://flame-engine.org"
+icon = "https://avatars.githubusercontent.com/u/47222401?s=128&v=4"
+aliases = ["flame engine", "flame-engine", "flutter flame", "flame game engine"]
+  [[engine.source]]
+  kind = "github"
+  repo = "flame-engine/flame"
+  tag_prefix = "v"
+  category = "release"
+  [[engine.source]]
+  kind = "github"
+  repo = "flame-engine/flame"
+  mode = "tags"
+  tag_prefix = "flame-v"
+  category = "release"
+
+# --- SDL ----------------------------------------------------------------------------
+# libsdl.org has no feed. "SDL" is matched case-sensitively, so "sdl" in other text isn't.
+[[engine]]
+id = "sdl"
+name = "SDL"
+tier = 3
+languages = ["C"]
+homepage = "https://www.libsdl.org"
+icon = "https://avatars.githubusercontent.com/u/77683370?s=128&v=4"
+aliases = ["SDL", "SDL2", "SDL3", "libsdl", "simple directmedia layer"]
+  [[engine.source]]
+  kind = "github"
+  repo = "libsdl-org/SDL"
+  category = "release"
+
+# --- three.js -----------------------------------------------------------------------
+# threejs.org has no feed and no PNG icon; the repo's owner avatar is a person's.
+[[engine]]
+id = "threejs"
+name = "three.js"
+tier = 3
+languages = ["JavaScript"]
+homepage = "https://threejs.org"
+aliases = ["three.js", "threejs"]
+  [[engine.source]]
+  kind = "github"
+  repo = "mrdoob/three.js"
+  category = "release"
+
+# --- HaxeFlixel ---------------------------------------------------------------------
+# flixel publishes tags, not GitHub releases.
+[[engine]]
+id = "haxeflixel"
+name = "HaxeFlixel"
+tier = 3
+languages = ["Haxe"]
+homepage = "https://haxeflixel.com"
+icon = "https://avatars.githubusercontent.com/u/4309553?s=128&v=4"
+aliases = ["haxeflixel", "flixel"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://haxeflixel.com/feed.xml"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "HaxeFlixel/flixel"
+  mode = "tags"
+  category = "release"
+
+# --- OpenFL -------------------------------------------------------------------------
+# The openfl.org blog feed's last post is from 2018, so only GitHub releases.
+[[engine]]
+id = "openfl"
+name = "OpenFL"
+tier = 3
+languages = ["Haxe"]
+homepage = "https://www.openfl.org"
+icon = "https://avatars.githubusercontent.com/u/4061208?s=128&v=4"
+aliases = ["openfl"]
+  [[engine.source]]
+  kind = "github"
+  repo = "openfl/openfl"
+  category = "release"
+
+# --- Pygame -------------------------------------------------------------------------
+# pygame.org returned 502 on 2026-11-11 and has no usable feed. Both the original
+# pygame and pygame-ce, its active community edition fork, are tracked.
+[[engine]]
+id = "pygame"
+name = "Pygame"
+tier = 3
+languages = ["Python"]
+homepage = "https://www.pygame.org"
+icon = "https://avatars.githubusercontent.com/u/20628127?s=128&v=4"
+aliases = ["pygame", "pygame-ce"]
+  [[engine.source]]
+  kind = "github"
+  repo = "pygame/pygame"
+  category = "release"
+  [[engine.source]]
+  kind = "github"
+  repo = "pygame-community/pygame-ce"
+  category = "release"
+
+# --- Macroquad ----------------------------------------------------------------------
+# macroquad publishes tags, not GitHub releases. Its owner's avatar is a person's, so
+# the icon is the site's favicon.
+[[engine]]
+id = "macroquad"
+name = "Macroquad"
+tier = 3
+languages = ["Rust"]
+homepage = "https://macroquad.rs"
+icon = "https://macroquad.rs/favicon-32x32.png"
+aliases = ["macroquad"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://macroquad.rs/atom.xml"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "not-fl3/macroquad"
+  mode = "tags"
+  category = "release"
+
+# --- KAPLAY -------------------------------------------------------------------------
+[[engine]]
+id = "kaplay"
+name = "KAPLAY"
+tier = 3
+languages = ["JavaScript", "TypeScript"]
+homepage = "https://kaplayjs.com"
+icon = "https://avatars.githubusercontent.com/u/91400947?s=128&v=4"
+aliases = ["kaplay", "kaplayjs", "kaplay.js"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://kaplayjs.com/blog/rss.xml"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "kaplayjs/kaplay"
+  category = "release"
+
 # ===========================================================================
 # Outlets: general game-dev news. Items are tagged with engines via aliases.
 # ===========================================================================
@@ -1174,3 +1413,6 @@ require_engine_match = true
 # - Veldrid: effectively unmaintained.
 # - Game Dev Digest: newsletter paused since 2026-05.
 # - Redot Engine: excluded at the user's request.
+# - Construct: no GitHub repo, and construct.net answers 403 to GEN's user agent
+#   (checked 2026-11-11).
+# - PICO-8: no GitHub repo; updates are announced only on the lexaloffle.com forum.

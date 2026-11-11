@@ -497,35 +497,76 @@ mod tests {
         assert!(!tags.contains(&"unity".into()), "{tags:?}");
     }
 
-    #[test]
-    fn unity_networking_libraries_are_tagged_without_a_bare_mirror_alias() {
+    /// Asserts which catalog engines each outlet title is tagged with.
+    fn assert_tags(cases: &[(&str, &[&str])]) {
         let classifier = crate::classify::Classifier::new(&CATALOG);
-        let cases: &[(&str, &[&str])] = &[
-            ("Mirror Networking v96.11 released", &["mirror"]),
-            ("FishNet 4.7.4 is out", &["fishnet"]),
-            ("Fish-Networking adds client prediction", &["fishnet"]),
-            ("Fish Networking 4.7 released", &["fishnet"]),
-            ("Mirror reflections for water", &[]),
-            ("Real-time mirror shaders", &[]),
-        ];
         for (title, expected) in cases {
             assert_eq!(classifier.match_engines(title), *expected, "{title}");
         }
     }
 
     #[test]
+    fn unity_networking_libraries_are_tagged_without_a_bare_mirror_alias() {
+        assert_tags(&[
+            ("Mirror Networking v96.11 released", &["mirror"]),
+            ("FishNet 4.7.4 is out", &["fishnet"]),
+            ("Fish-Networking adds client prediction", &["fishnet"]),
+            ("Fish Networking 4.7 released", &["fishnet"]),
+            ("Mirror reflections for water", &[]),
+            ("Real-time mirror shaders", &[]),
+        ]);
+    }
+
+    #[test]
     fn game_titles_containing_unity_do_not_tag_unity() {
-        let classifier = crate::classify::Classifier::new(&CATALOG);
-        let cases: &[(&str, &[&str])] = &[
+        assert_tags(&[
             ("Assassin's Creed Unity gets a Linux port", &[]),
             ("Assassin’s Creed Unity runs well on Proton", &[]),
             ("Assassins Creed Unity is free this week", &[]),
             ("Unity of Command II DLC out now", &[]),
             ("Unity 6.3 LTS released", &["unity"]),
-        ];
-        for (title, expected) in cases {
-            assert_eq!(classifier.match_engines(title), *expected, "{title}");
-        }
+        ]);
+    }
+
+    #[test]
+    fn love_is_tagged_by_its_name_not_by_the_word_love() {
+        assert_tags(&[
+            ("I love this game", &[]),
+            ("I LOVE 2D platformers", &[]),
+            ("LÖVE 12.0 released", &["love"]),
+            ("Making a roguelike in Love2D", &["love"]),
+        ]);
+    }
+
+    #[test]
+    fn heaps_is_tagged_by_its_name_not_by_the_word_heaps() {
+        assert_tags(&[
+            ("Heaps of new games on Steam this week", &[]),
+            ("Binary heaps for A* pathfinding", &[]),
+            ("Heaps.io 2.1 released", &["heaps"]),
+            ("Shiro Games' Heaps engine goes open", &["heaps"]),
+        ]);
+    }
+
+    #[test]
+    fn flame_is_tagged_by_its_name_not_by_the_word_flame() {
+        assert_tags(&[
+            ("Fire and flame effects with particles", &[]),
+            ("Flame Keeper is out on Steam", &[]),
+            ("Flame engine 1.38 adds a new camera", &["flame"]),
+            ("Building a Flutter Flame game", &["flame"]),
+        ]);
+    }
+
+    #[test]
+    fn sdl_is_tagged_by_its_name_only() {
+        assert_tags(&[
+            ("SDLC best practices for game studios", &[]),
+            ("Using the sdl tool in Windows SDK", &[]),
+            ("SDL 3.4.20 released", &["sdl"]),
+            ("Porting a game from SDL2 to SDL3", &["sdl"]),
+            ("Simple DirectMedia Layer gets a GPU API", &["sdl"]),
+        ]);
     }
 
     #[test]
