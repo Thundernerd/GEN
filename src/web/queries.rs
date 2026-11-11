@@ -157,7 +157,7 @@ mod tests {
 [[engine]]
 id = "godot"
 name = "Godot"
-tier = 1
+tier = 3
 languages = ["GDScript", "C#", "C++"]
   [[engine.source]]
   kind = "github"
@@ -167,7 +167,7 @@ languages = ["GDScript", "C#", "C++"]
 [[engine]]
 id = "bevy"
 name = "Bevy"
-tier = 3
+tier = 1
 languages = ["Rust"]
   [[engine.source]]
   kind = "feed"
@@ -182,6 +182,7 @@ name = "GameFromScratch"
   url = "https://gamefromscratch.com/feed/"
   category = "news"
 "#;
+    // Tiers are the opposite of the catalog's, so a filter by tier would fail these tests.
     const GODOT_SRC: &str = "godot:github:godotengine/godot";
     const BEVY_SRC: &str = "bevy:feed:https://bevyengine.org/news/rss.xml";
     const GFS_SRC: &str = "gfs:feed:https://gamefromscratch.com/feed/";
