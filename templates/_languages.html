@@ -1,7 +1,7 @@
 {#- An engine's languages, with its language note after them in muted text. An engine
-    stored before engines had languages may have only the note. With `link`, each
-    language links to the timeline filtered on it. -#}
-{%- macro languages(engine, link=false) -%}
-{%- for l in engine.languages %}{% if not loop.first %}, {% endif %}{% if link %}<a href="/?lang={{ l | urlencode }}">{{ l }}</a>{% else %}{{ l }}{% endif %}{% endfor %}
+    stored before engines had languages may have only the note. When the engine has
+    `language_urls` (one per language), each language links to its URL. -#}
+{%- macro languages(engine) -%}
+{%- for l in engine.languages %}{% if not loop.first %}, {% endif %}{% if engine.language_urls %}<a href="{{ engine.language_urls[loop.index0] }}">{{ l }}</a>{% else %}{{ l }}{% endif %}{% endfor %}
 {%- if engine.language_note %}{% if engine.languages %} {% endif %}<span class="language-note">{% if engine.languages %}({{ engine.language_note }}){% else %}{{ engine.language_note }}{% endif %}</span>{% endif %}
 {%- endmacro %}

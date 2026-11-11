@@ -12,7 +12,7 @@
     <li class="engine-card">
       <h3><a href="/engine/{{ e.id }}">{{ e.name }}</a></h3>
       <dl>
-        <dt>Languages</dt><dd>{{ languages(e, link=true) }}</dd>
+        <dt>Languages</dt><dd>{{ languages(e) }}</dd>
         <dt>Items</dt><dd>{{ e.items }}</dd>
         <dt>Latest</dt><dd>{% if e.latest %}<time datetime="{{ e.latest.iso }}" title="{{ e.latest.abs }}">{{ e.latest.rel }}</time>{% else %}—{% endif %}</dd>
       </dl>

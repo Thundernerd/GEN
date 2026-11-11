@@ -441,9 +441,9 @@ async fn engines_and_sources_pages() {
     assert!(body.contains("Major C# engines"));
     assert!(body.contains("Bevy"));
     // Each language links to the timeline filtered on it.
-    assert!(body.contains(r#"<dt>Languages</dt><dd><a href="/?lang=Rust">Rust</a>"#));
+    assert!(body.contains(r#"<dt>Languages</dt><dd><a href="&#x2f;?lang=Rust">Rust</a>"#));
     assert!(body.contains(
-        r#"<dt>Languages</dt><dd><a href="/?lang=GDScript">GDScript</a>, <a href="/?lang=C%23">C#</a>, <a href="/?lang=C%2B%2B">C++</a>"#
+        r#"<dt>Languages</dt><dd><a href="&#x2f;?lang=GDScript">GDScript</a>, <a href="&#x2f;?lang=C%23">C#</a>, <a href="&#x2f;?lang=C%2B%2B">C++</a>"#
     ));
     assert!(!body.contains("<dt>C#</dt>"));
 

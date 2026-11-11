@@ -573,6 +573,9 @@ async fn engines_page(st: &AppState, admin: bool) -> PageResult {
                         "id": e.id,
                         "name": e.name,
                         "languages": e.languages,
+                        "language_urls": e.languages.iter().map(|l| {
+                            format!("/{}", query_string(&[("lang", Some(l.clone()))]))
+                        }).collect::<Vec<_>>(),
                         "language_note": e.language_note,
                         "homepage": e.homepage,
                         "items": s.items,
