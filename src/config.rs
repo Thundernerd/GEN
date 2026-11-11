@@ -78,24 +78,6 @@ impl Tier {
     }
 }
 
-/// Reads the number, as in `?tier=2` or a form field.
-impl std::str::FromStr for Tier {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        s.parse::<u8>()
-            .map_err(|_| TIER_OUT_OF_RANGE.to_string())?
-            .try_into()
-    }
-}
-
-/// Writes the number.
-impl std::fmt::Display for Tier {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", u8::from(*self))
-    }
-}
-
 impl From<Tier> for u8 {
     fn from(tier: Tier) -> u8 {
         tier as u8
@@ -106,12 +88,10 @@ impl TryFrom<u8> for Tier {
     type Error = String;
 
     fn try_from(n: u8) -> Result<Self, Self::Error> {
-        match n {
-            1 => Ok(Tier::Major),
-            2 => Ok(Tier::Smaller),
-            3 => Ok(Tier::Frameworks),
-            _ => Err(TIER_OUT_OF_RANGE.into()),
-        }
+        Tier::ALL
+            .into_iter()
+            .find(|&t| u8::from(t) == n)
+            .ok_or_else(|| TIER_OUT_OF_RANGE.into())
     }
 }
 

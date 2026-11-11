@@ -363,6 +363,12 @@ async fn timeline_filters() {
     let (_, _, body) = get("/?tier=1").await;
     assert!(body.contains("Godot 4.8 released"));
     assert!(!body.contains("Bevy 0.17 is out"));
+
+    // A tier no engine has filters everything out rather than being ignored.
+    let (_, _, body) = get("/?tier=7").await;
+    assert!(body.contains("Showing tier 7 engines only"));
+    assert!(!body.contains("Godot 4.8 released"));
+    assert!(!body.contains("Bevy 0.17 is out"));
 }
 
 #[tokio::test]
@@ -787,6 +793,10 @@ async fn invalid_owners_rerender_the_form() {
         (
             "owner_kind=engine&id=x&name=X&tier=7&languages=C%23",
             "tier must be",
+        ),
+        (
+            "owner_kind=engine&id=x&name=X&tier=abc&languages=C%23",
+            "Choose a tier.",
         ),
         (
             "owner_kind=engine&id=x&name=X&tier=1&languages=+%2C+",

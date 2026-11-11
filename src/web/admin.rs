@@ -246,7 +246,10 @@ impl AddOwnerForm {
             Some("engine") => Ok(NewOwner::Engine(EngineConfig {
                 id,
                 name,
-                tier: non_empty(&self.tier).ok_or("Choose a tier.")?.parse()?,
+                tier: non_empty(&self.tier)
+                    .and_then(|t| t.parse::<u8>().ok())
+                    .ok_or("Choose a tier.")?
+                    .try_into()?,
                 languages: split_list(self.languages.as_deref()),
                 language_note: non_empty(&self.language_note),
                 homepage,
