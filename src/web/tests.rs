@@ -340,6 +340,17 @@ async fn timeline_filters() {
     assert!(!body.contains("Godot 4.8 released"));
     assert!(body.contains("Bevy 0.17 is out"));
 
+    let (_, _, body) = get("/?lang=C%23").await;
+    assert!(body.contains("Godot 4.8 released"));
+    assert!(body.contains("New C# engine appears"));
+    assert!(!body.contains("Bevy 0.17 is out"));
+
+    let (_, _, body) = get("/?lang=Rust").await;
+    assert!(!body.contains("Godot 4.8 released"));
+    assert!(!body.contains("New C# engine appears"));
+    assert!(body.contains("Bevy 0.17 is out"));
+
+    // The old C# toggle is an alias of `lang=C#`.
     let (_, _, body) = get("/?csharp=1").await;
     assert!(body.contains("Godot 4.8 released"));
     assert!(body.contains("New C# engine appears"));
@@ -348,6 +359,62 @@ async fn timeline_filters() {
     let (_, _, body) = get("/?tier=3").await;
     assert!(!body.contains("Godot 4.8 released"));
     assert!(body.contains("Bevy 0.17 is out"));
+}
+
+#[tokio::test]
+async fn timeline_language_picker() {
+    let (_, _, body) = get("/").await;
+    // The languages of enabled engines, each used by one engine here, so by name.
+    assert_eq!(
+        language_picker(&body),
+        ["all languages", "C#", "C++", "GDScript", "Rust"]
+    );
+    assert!(body.contains(r#"href="&#x2f;?lang=C%23">C#<"#));
+    assert!(!body.contains("C# only"));
+
+    // A chosen language is shown as active and kept by the other filter links.
+    let (_, _, body) = get("/?lang=Rust").await;
+    assert!(body.contains(r#"href="&#x2f;?lang=Rust" aria-current="page">Rust<"#));
+    assert!(body.contains(r#"href="&#x2f;?kind=news&amp;lang=Rust""#));
+    assert!(body.contains(r#"href="&#x2f;?engine=bevy&amp;lang=Rust""#));
+    assert!(body.contains(r#"name="lang" value="Rust""#));
+    assert!(body.contains(r#"href="&#x2f;">all languages<"#));
+
+    // A language no enabled engine uses is still shown, as the active one.
+    let (_, _, body) = get("/?lang=Lua").await;
+    assert_eq!(
+        language_picker(&body),
+        ["all languages", "C#", "C++", "GDScript", "Rust", "Lua"]
+    );
+    assert!(body.contains(r#"href="&#x2f;?lang=Lua" aria-current="page">Lua<"#));
+}
+
+/// The labels of the timeline's language picker in `body`.
+fn language_picker(body: &str) -> Vec<String> {
+    let picker = &body[body.find(r#"aria-label="Language""#).unwrap()..];
+    let picker = &picker[..picker.find("</nav>").unwrap()];
+    picker
+        .split("</a>")
+        .filter_map(|a| a.rsplit('>').next())
+        .filter(|l| !l.trim().is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+#[tokio::test]
+async fn language_picker_merges_spellings_and_puts_common_languages_first() {
+    let st = state();
+    let cookie = login(&st).await;
+    let form = "owner_kind=engine&id=mine&name=Mine&tier=3&languages=rust%2C+c%23%2C+Rust";
+    let (status, _, _) = send(&st, post_form("/owners/add", form, Some(&cookie))).await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+
+    // Mine lists Rust twice; it still counts as one engine using Rust.
+    let (_, body) = get_as(&st, "/", &cookie).await;
+    assert_eq!(
+        language_picker(&body),
+        ["all languages", "C#", "Rust", "C++", "GDScript"]
+    );
 }
 
 #[tokio::test]
@@ -373,8 +440,11 @@ async fn engines_and_sources_pages() {
     assert_eq!(status, StatusCode::OK);
     assert!(body.contains("Major C# engines"));
     assert!(body.contains("Bevy"));
-    assert!(body.contains("<dt>Languages</dt><dd>Rust"));
-    assert!(body.contains("<dt>Languages</dt><dd>GDScript, C#, C++"));
+    // Each language links to the timeline filtered on it.
+    assert!(body.contains(r#"<dt>Languages</dt><dd><a href="&#x2f;?lang=Rust">Rust</a>"#));
+    assert!(body.contains(
+        r#"<dt>Languages</dt><dd><a href="&#x2f;?lang=GDScript">GDScript</a>, <a href="&#x2f;?lang=C%23">C#</a>, <a href="&#x2f;?lang=C%2B%2B">C++</a>"#
+    ));
     assert!(!body.contains("<dt>C#</dt>"));
 
     let (status, _, body) = get("/sources").await;
@@ -1490,8 +1560,12 @@ async fn json_api_searches() {
     // Combined with the other filters.
     let (_, _, body) = get("/api/items?q=released&kind=news").await;
     assert!(api_titles(&body).is_empty());
-    let (_, _, body) = get(&format!("/api/items?q={}&csharp=1", urlenc("c# engine"))).await;
-    assert_eq!(api_titles(&body), ["New C# engine appears"]);
+    for lang in ["lang=C%23", "csharp=1"] {
+        let (_, _, body) = get(&format!("/api/items?q={}&{lang}", urlenc("c# engine"))).await;
+        assert_eq!(api_titles(&body), ["New C# engine appears"], "{lang}");
+    }
+    let (_, _, body) = get(&format!("/api/items?q={}&lang=Rust", urlenc("c# engine"))).await;
+    assert!(api_titles(&body).is_empty());
 }
 
 #[tokio::test]

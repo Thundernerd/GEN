@@ -424,7 +424,7 @@ Its subscriptions are changed in Discord. On the website you can add keywords an
 
 | Route | Description |
 |---|---|
-| `/` | Latest items from all enabled sources, grouped by day. **Compact** shows one line per item (descriptions on hover); **Expanded** shows every description. The choice is remembered in a cookie and applies to engine pages too. |
+| `/` | Latest items from all enabled sources, grouped by day. Filter by kind, engine and language (`lang=Rust` keeps items about engines programmed in Rust; `lang=C#` also keeps news-outlet articles that mention C# or .NET). **Compact** shows one line per item (descriptions on hover); **Expanded** shows every description. The choice is remembered in a cookie and applies to engine pages too. |
 | `/engines` | Engine list with tier, languages and recent activity. |
 | `/engine/{id}` | Items for one engine. |
 | `/sources` | Every source with its health, last fetch time and errors; `?health=unhealthy` lists only failing and stale sources. Admins can switch sources on and off, add sources, engines and outlets (by hand or from the suggestions) and remove them here. |
@@ -432,7 +432,7 @@ Its subscriptions are changed in Discord. On the website you can add keywords an
 | `/view?mode=compact\|expanded` | Sets the timeline layout and goes back to the page it came from. |
 | `/login`, `/logout` | Admin login with `server.admin_token`. |
 | `/feed.xml` | Combined Atom feed. Takes `engine`, `kind` and `q`. |
-| `/api/items` | JSON API for items. Takes `engine`, `kind`, `tier`, `csharp`, `q`, `page` and `limit`. |
+| `/api/items` | JSON API for items. Takes `engine`, `kind`, `tier`, `lang`, `q`, `page` and `limit`. `csharp=1` is an alias of `lang=C#`. |
 | `/health` | Liveness check that returns `ok`. |
 
 **Search:** `/`, `/feed.xml` and `/api/items` take `q=` to search item titles and summaries; the timeline has a search box for it. Every word must match, as a word or the start of one (`god` finds Godot), regardless of case and accents. Punctuation is ignored, and words like `AND` or `NEAR` are searched for as words, not used as operators. Search combines with the other filters, so `/feed.xml?engine=godot&q=shader` is a feed you can subscribe to.
