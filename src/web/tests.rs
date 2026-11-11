@@ -453,7 +453,10 @@ async fn engines_and_sources_pages() {
     // Tiers are headed by prominence and kind, not by language.
     assert!(body.contains("Major engines"));
     assert!(body.contains("Smaller engines"));
-    assert!(!body.contains("Frameworks and libraries"), "tier 3 is empty here");
+    assert!(
+        !body.contains("Frameworks and libraries"),
+        "tier 3 is empty here"
+    );
     for heading in tier_headings(&body) {
         assert!(!heading.contains("C#"), "{heading}");
     }
