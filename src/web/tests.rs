@@ -409,7 +409,7 @@ fn language_picker(body: &str) -> Vec<String> {
 fn tier_headings(body: &str) -> Vec<&str> {
     body.split(r#"<h2 class="tier-title">"#)
         .skip(1)
-        .map(|h| h[..h.find(" <a ").unwrap()].trim())
+        .map(|h| h[..h.find(" <a ").expect("tier heading has a news link")].trim())
         .collect()
 }
 
