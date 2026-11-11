@@ -15,6 +15,7 @@ pub const SEEDED: &[&str] = &["unity", "unreal", "godot"];
 const SEEDED_KEY: &str = "seeded";
 /// `meta` key set once the catalog's engine icons were copied into stored engines.
 const ICONS_KEY: &str = "catalog_icons_backfilled";
+/// `meta` key set once the catalog's languages were copied into stored engines.
 const LANGUAGES_KEY: &str = "catalog_languages_backfilled";
 
 static CATALOG: LazyLock<SourcesConfig> = LazyLock::new(|| {
@@ -173,7 +174,7 @@ pub fn backfill_languages_once(registry: &SourceRegistry, store: &mut Store) -> 
         let edit = SourceEdit::SetEngineLanguages {
             engine_id: engine.id.clone(),
             languages: catalog_engine.languages.clone(),
-            note: catalog_engine.language_note.clone(),
+            language_note: catalog_engine.language_note.clone(),
         };
         registry
             .apply(store, edit)

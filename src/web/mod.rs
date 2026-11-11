@@ -518,7 +518,7 @@ async fn engines_page(st: &AppState, admin: bool) -> PageResult {
                     json!({
                         "id": e.id,
                         "name": e.name,
-                        "languages": e.languages.join(", "),
+                        "languages": e.languages,
                         "language_note": e.language_note,
                         "homepage": e.homepage,
                         "items": s.items,
@@ -616,7 +616,7 @@ async fn engine_page(
                 "name": engine.name,
                 "tier": engine.tier,
                 "tier_label": TIER_LABELS.iter().find(|t| t.0 == engine.tier).map(|t| t.1),
-                "languages": engine.languages.join(", "),
+                "languages": engine.languages,
                 "language_note": engine.language_note,
                 "homepage": engine.homepage,
                 "enabled": engine.enabled,

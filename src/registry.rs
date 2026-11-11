@@ -239,7 +239,7 @@ pub enum SourceEdit {
     SetEngineLanguages {
         engine_id: String,
         languages: Vec<String>,
-        note: Option<String>,
+        language_note: Option<String>,
     },
     /// Adds exclude phrases to an engine. Phrases it already has (ignoring case) are
     /// skipped; none are removed.
@@ -373,10 +373,10 @@ impl SourceRegistry {
             SourceEdit::SetEngineLanguages {
                 engine_id,
                 languages,
-                note,
+                language_note,
             } => self.edit_engine(store, stored, &engine_id, |engine| {
                 engine.languages = languages;
-                engine.language_note = note;
+                engine.language_note = language_note;
             }),
             SourceEdit::AddEngineExcludes { engine_id, phrases } => {
                 self.edit_engine(store, stored, &engine_id, |engine| {
@@ -756,12 +756,12 @@ mod tests {
         };
         tier7.tier = 7;
         assert!(invalid(&reg, &mut store, NewOwner::Engine(tier7)).contains("tier"));
-        let NewOwner::Engine(mut wordless) = engine("x") else {
+        let NewOwner::Engine(mut no_languages) = engine("x") else {
             unreachable!()
         };
-        wordless.languages.clear();
+        no_languages.languages.clear();
         assert_eq!(
-            invalid(&reg, &mut store, NewOwner::Engine(wordless)),
+            invalid(&reg, &mut store, NewOwner::Engine(no_languages)),
             "Enter at least one language."
         );
         let NewOwner::Engine(mut twice) = engine("x") else {

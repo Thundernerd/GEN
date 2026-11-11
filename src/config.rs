@@ -85,8 +85,8 @@ impl TryFrom<StoredEngineConfig> for EngineConfig {
             None => e.language_note,
             Some(_) if !e.languages.is_empty() || e.language_note.is_some() => {
                 return Err(format!(
-                    "engine `{}`: `csharp` is replaced by `languages` and `language_note`; \
-                     use only those",
+                    "Engine “{}”: `csharp` is replaced by `languages` and `language_note`; \
+                     use only those.",
                     e.id
                 ));
             }
