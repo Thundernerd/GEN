@@ -379,6 +379,14 @@ async fn timeline_language_picker() {
     assert!(body.contains(r#"href="&#x2f;?engine=bevy&amp;lang=Rust""#));
     assert!(body.contains(r#"name="lang" value="Rust""#));
     assert!(body.contains(r#"href="&#x2f;">all languages<"#));
+
+    // A language no enabled engine uses is still shown, as the active one.
+    let (_, _, body) = get("/?lang=Lua").await;
+    assert_eq!(
+        language_picker(&body),
+        ["all languages", "C#", "C++", "GDScript", "Rust", "Lua"]
+    );
+    assert!(body.contains(r#"href="&#x2f;?lang=Lua" aria-current="page">Lua<"#));
 }
 
 /// The labels of the timeline's language picker in `body`.

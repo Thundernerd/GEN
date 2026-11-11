@@ -500,12 +500,15 @@ async fn index_page(
             })
         })
         .collect();
+    let mut languages = languages_of(snapshot.config.enabled_engines());
+    // Keep a language from an old link or a disabled engine visible while it's active.
+    if let Some(lang) = &filter.lang
+        && !languages.iter().any(|l| queries::same_language(l, lang))
+    {
+        languages.push(lang.clone());
+    }
     let language_links: Vec<_> = std::iter::once(None)
-        .chain(
-            languages_of(snapshot.config.enabled_engines())
-                .into_iter()
-                .map(Some),
-        )
+        .chain(languages.into_iter().map(Some))
         .map(|l| {
             let active = match (&l, &filter.lang) {
                 (Some(l), Some(f)) => queries::same_language(l, f),
