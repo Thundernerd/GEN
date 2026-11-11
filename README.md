@@ -3,9 +3,9 @@
 [![CI](https://github.com/Thundernerd/GEN/actions/workflows/ci.yml/badge.svg)](https://github.com/Thundernerd/GEN/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Thundernerd/GEN)](https://github.com/Thundernerd/GEN/releases/latest)
 
-GEN tracks new releases and news for game engines and collects them on one page, in one feed and in your notification channels. It focuses on engines you can script in C#:
+GEN tracks new releases and news for game engines and collects them on one page, in one feed and in your notification channels. It covers engines of any language, from major engines to small frameworks and libraries:
 
-- **Tracked engines:** Unity, Unreal, Godot, Stride, Flax, S&Box, Prowl, LODZERO and OpenEngine, plus other C#-capable and notable engines.
+- **Tracked engines:** Unity, Unreal, Godot, GameMaker, Defold, Bevy, Stride, Flax, S&Box, Fyrox, MonoGame, raylib and Phaser, among many others. Each engine lists the languages you write games in with it.
 - **News outlets:** general game-dev outlets such as GameFromScratch. Their articles are tagged with the engines they mention.
 
 GEN is a single Rust binary. It contains a web server and a background poller, and stores its data in SQLite.
@@ -202,7 +202,7 @@ Without `retention_days`, the database keeps every item and grows without bound.
 
 Engines, outlets and their sources live in the database and are managed on the Sources page (see "Managing sources from the web"). The first start on a database adds the engines in `catalog::SEEDED` (Unity, Unreal Engine and Godot) with their sources, once. On a database from before sources moved into it, that first start also deletes the items and fetch state of sources that are no longer configured.
 
-Everything else in the built-in catalog, `src/catalog.toml`, is offered as a suggestion on the Sources page. It includes the other C# engines and frameworks (tiers 1 and 2), notable engines without C# (tier 3) and general news outlets. It has no YouTube, forum, Reddit or Hacker News sources. To change the catalog, edit `src/catalog.toml` and rebuild; existing databases keep what they have, except that on every start each stored engine gets the catalog `exclude` phrases it lacks (phrases are only added, never removed, and engines that aren't in the catalog are left alone). Engines stored before engines had `languages` keep loading: on the first start after the upgrade, catalog engines get their catalog languages and note, and other engines show their old C# text as the language note.
+Everything else in the built-in catalog, `src/catalog.toml`, is offered as a suggestion on the Sources page. It includes other engines (tiers 1 and 2), frameworks and libraries (tier 3) and general news outlets. It has no YouTube, forum, Reddit or Hacker News sources. To change the catalog, edit `src/catalog.toml` and rebuild; existing databases keep what they have, except that on every start each stored engine gets the catalog `exclude` phrases it lacks (phrases are only added, never removed, and engines that aren't in the catalog are left alone). A stored engine keeps its tier even when the catalog moves it to another tier, since you may have chosen it. Engines stored before engines had `languages` keep loading: on the first start after the upgrade, catalog engines get their catalog languages and note, and other engines show their old C# text as the language note.
 
 There are two kinds of owners, and each has one or more `source` entries:
 
@@ -213,7 +213,7 @@ There are two kinds of owners, and each has one or more `source` entries:
 [[engine]]
 id = "stride"                    # unique; used in URLs and notify rules
 name = "Stride"
-tier = 1                         # 1 = major C#, 2 = niche C#, 3 = notable without C#
+tier = 1                         # 1 = major engine, 2 = smaller engine, 3 = framework or library
 languages = ["C#"]               # what you write games in, primary first; at least one
 language_note = "engine written in C#"  # optional nuance, shown after the languages
 homepage = "https://www.stride3d.net"
@@ -268,9 +268,11 @@ All source kinds also accept these fields:
 
 **Tiers:**
 
-- Tier 1 covers major or very active engines with C# support, plus Unreal (C# via plugins only): Unity, Unreal, Godot (.NET), Stride, Flax, S&Box, Prowl, OpenEngine, MonoGame, FNA, NeoAxis, Evergine, UNIGINE, Silk.NET and BRUTAL.
-- Tier 2 covers niche C# engines, frameworks and libraries, such as LODZERO, KNI, Murder, Raylib-cs, Foster, MonoGame.Extended, Myra, Arch and BEPUphysics.
-- Tier 3 covers notable engines without C# support, such as Bevy, Defold, O3DE and GameMaker.
+Tiers say how prominent and active something is and whether it's a full engine, not which language it uses; the languages show separately.
+
+- Tier 1, major engines: widely used or very active full engines, such as Unity, Unreal, Godot, GameMaker, Defold, Bevy, Cocos, GDevelop, O3DE, Stride, Flax, S&Box and PlayCanvas.
+- Tier 2, smaller engines: niche, young or less active full engines, such as Prowl, OpenEngine, LODZERO, NeoAxis, Evergine, UNIGINE, Murder, Nu, Fyrox, CRYENGINE, Wicked Engine and Solar2D.
+- Tier 3, frameworks and libraries: frameworks, bindings and libraries for physics, ECS, networking, UI and more, such as MonoGame, FNA, Silk.NET, raylib, Phaser, libGDX, Arch, BEPUphysics and Mirror.
 
 The tier only groups engines; it doesn't decide whether they are polled. Every catalog engine and outlet the database doesn't have, of any tier, is offered as a suggestion, and its sources are polled once you add it (see "Adding and removing sources, engines and outlets"). Catalog engines and outlets are always enabled; the catalog tests check this. A single catalog source with `enabled = false` is added switched off; switch it on from the Sources page (see "Switching sources on and off").
 
