@@ -7,6 +7,7 @@
 #   release   = GitHub releases/tags and release feeds (the classifier turns
 #               version strings like "-beta"/"-rc"/"-preview" into prerelease)
 # YouTube, forum, Reddit and Hacker News sources are left out on purpose.
+# Commit-mode sources poll every 360 minutes because commits are noisy.
 #
 # Tiers say how prominent and active something is and whether it's a full engine, not
 # which language it uses: 1 = major engines (widely used or very active full engines),
@@ -170,6 +171,7 @@ aliases = ["s&box", "sbox", "s and box"]
   mode = "tags"
   category = "release"
 
+# --- Bevy ---------------------------------------------------------------------------
 [[engine]]
 id = "bevy"
 name = "Bevy"
@@ -188,6 +190,7 @@ aliases = ["bevy", "bevy engine"]
   repo = "bevyengine/bevy"
   category = "release"
 
+# --- Defold -------------------------------------------------------------------------
 [[engine]]
 id = "defold"
 name = "Defold"
@@ -206,6 +209,7 @@ aliases = ["defold"]
   repo = "defold/defold"
   category = "release"
 
+# --- O3DE ---------------------------------------------------------------------------
 [[engine]]
 id = "o3de"
 name = "O3DE"
@@ -225,6 +229,7 @@ aliases = ["o3de", "open 3d engine"]
   repo = "o3de/o3de"
   category = "release"
 
+# --- GameMaker ----------------------------------------------------------------------
 [[engine]]
 id = "gamemaker"
 name = "GameMaker"
@@ -245,6 +250,7 @@ aliases = ["gamemaker", "game maker studio"]
   category = "release"
   interval_minutes = 180
 
+# --- Cocos --------------------------------------------------------------------------
 [[engine]]
 id = "cocos"
 name = "Cocos"
@@ -258,6 +264,7 @@ aliases = ["cocos creator", "cocos2d", "cocos engine"]
   repo = "cocos/cocos-engine"
   category = "release"
 
+# --- PlayCanvas ---------------------------------------------------------------------
 [[engine]]
 id = "playcanvas"
 name = "PlayCanvas"
@@ -276,6 +283,7 @@ aliases = ["playcanvas"]
   repo = "playcanvas/engine"
   category = "release"
 
+# --- GDevelop -----------------------------------------------------------------------
 [[engine]]
 id = "gdevelop"
 name = "GDevelop"
@@ -290,10 +298,48 @@ aliases = ["gdevelop"]
   repo = "4ian/GDevelop"
   category = "release"
 
+# --- Fyrox --------------------------------------------------------------------------
+[[engine]]
+id = "fyrox"
+name = "Fyrox"
+tier = 1
+languages = ["Rust"]
+homepage = "https://fyrox.rs"
+icon = "https://fyrox.rs/assets/favicon/apple-touch-icon.png"
+aliases = ["fyrox"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://fyrox.rs/rss.xml"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "FyroxEngine/Fyrox"
+  category = "release"
+
+# --- Babylon.js ---------------------------------------------------------------------
+[[engine]]
+id = "babylonjs"
+name = "Babylon.js"
+tier = 1
+languages = ["TypeScript", "JavaScript"]
+homepage = "https://www.babylonjs.com"
+icon = "https://avatars.githubusercontent.com/u/4855800?s=128&v=4"
+aliases = ["babylon.js", "babylonjs"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://babylonjs.medium.com/feed"
+  category = "news"
+  interval_minutes = 180
+  # Near-daily releases.
+  [[engine.source]]
+  kind = "github"
+  repo = "BabylonJS/Babylon.js"
+  category = "release"
+
 # ===========================================================================
 # Tier 2: smaller engines
 # Niche, young or less active full engines, any language.
-# Commit-mode sources poll every 360 minutes because commits are noisy.
 # ===========================================================================
 
 # --- Prowl Engine ---------------------------------------------------------------
@@ -405,6 +451,7 @@ aliases = ["unigine"]
   category = "news"
   interval_minutes = 180
 
+# --- Murder Engine ------------------------------------------------------------------
 # Murder has no releases; commits are frequent, so disabled by default.
 [[engine]]
 id = "murder"
@@ -422,6 +469,7 @@ aliases = ["murder engine"]
   interval_minutes = 360
   enabled = false
 
+# --- FlatRedBall --------------------------------------------------------------------
 # FlatRedBall publishes a rolling "glue-daily" prerelease plus dated releases.
 [[engine]]
 id = "flatredball"
@@ -437,6 +485,7 @@ aliases = ["flatredball", "flat red ball"]
   repo = "vchelaru/FlatRedBall"
   category = "release"
 
+# --- Nu Game Engine -----------------------------------------------------------------
 [[engine]]
 id = "nu"
 name = "Nu Game Engine"
@@ -450,6 +499,7 @@ aliases = ["nu game engine", "nu engine"]
   repo = "bryanedds/Nu"
   category = "release"
 
+# --- rbfx (Rebel Fork Framework) ----------------------------------------------------
 # rbfx has only stale "latest"/"test" releases; commits are busy, so disabled.
 [[engine]]
 id = "rbfx"
@@ -468,6 +518,7 @@ aliases = ["rbfx", "rebel fork framework"]
   interval_minutes = 360
   enabled = false
 
+# --- Blazium ------------------------------------------------------------------------
 # Blazium: Godot fork with C# support (kept; separate from the excluded Redot).
 # Publishes frequent "-nightly" prereleases.
 [[engine]]
@@ -484,24 +535,7 @@ aliases = ["blazium", "blazium engine"]
   repo = "blazium-games/blazium"
   category = "release"
 
-[[engine]]
-id = "fyrox"
-name = "Fyrox"
-tier = 2
-languages = ["Rust"]
-homepage = "https://fyrox.rs"
-icon = "https://fyrox.rs/assets/favicon/apple-touch-icon.png"
-aliases = ["fyrox"]
-  [[engine.source]]
-  kind = "feed"
-  url = "https://fyrox.rs/rss.xml"
-  category = "news"
-  interval_minutes = 180
-  [[engine.source]]
-  kind = "github"
-  repo = "FyroxEngine/Fyrox"
-  category = "release"
-
+# --- CRYENGINE ----------------------------------------------------------------------
 # CRYENGINE is largely dormant.
 [[engine]]
 id = "cryengine"
@@ -518,6 +552,7 @@ aliases = ["cryengine"]
   category = "news"
   interval_minutes = 180
 
+# --- Solar2D ------------------------------------------------------------------------
 [[engine]]
 id = "solar2d"
 name = "Solar2D"
@@ -531,6 +566,7 @@ aliases = ["solar2d", "corona sdk"]
   repo = "coronalabs/corona"
   category = "release"
 
+# --- Wicked Engine ------------------------------------------------------------------
 [[engine]]
 id = "wicked"
 name = "Wicked Engine"
@@ -544,6 +580,7 @@ aliases = ["wicked engine", "wickedengine"]
   repo = "turanszkij/WickedEngine"
   category = "release"
 
+# --- ezEngine -----------------------------------------------------------------------
 [[engine]]
 id = "ezengine"
 name = "ezEngine"
@@ -558,6 +595,7 @@ aliases = ["ezengine", "ez engine"]
   repo = "ezEngine/ezEngine"
   category = "release"
 
+# --- Armory3D -----------------------------------------------------------------------
 [[engine]]
 id = "armory"
 name = "Armory3D"
@@ -574,7 +612,6 @@ aliases = ["armory3d", "armory engine"]
 # ===========================================================================
 # Tier 3: frameworks and libraries
 # Frameworks, bindings and libraries (physics, ECS, networking, UI, ...).
-# Commit-mode sources poll every 360 minutes because commits are noisy.
 # ===========================================================================
 
 # --- MonoGame -------------------------------------------------------------------
@@ -667,6 +704,7 @@ aliases = ["BRUTAL C#", "brutal framework", "brutal game framework", "brutal c# 
   interval_minutes = 360
   enabled = false
 
+# --- KNI ----------------------------------------------------------------------------
 [[engine]]
 id = "kni"
 name = "KNI"
@@ -681,6 +719,7 @@ aliases = ["kni engine", "kniengine"]
   repo = "kniEngine/kni"
   category = "release"
 
+# --- Raylib-cs ----------------------------------------------------------------------
 [[engine]]
 id = "raylibcs"
 name = "Raylib-cs"
@@ -695,6 +734,7 @@ aliases = ["raylib-cs"]
   repo = "raylib-cs/raylib-cs"
   category = "release"
 
+# --- Foster -------------------------------------------------------------------------
 [[engine]]
 id = "foster"
 name = "Foster"
@@ -709,6 +749,7 @@ aliases = ["foster framework", "fosterframework"]
   repo = "FosterFramework/Foster"
   category = "release"
 
+# --- MoonWorks ----------------------------------------------------------------------
 # MoonWorks has no releases; commits are low-volume, kept enabled.
 [[engine]]
 id = "moonworks"
@@ -726,6 +767,7 @@ aliases = ["moonworks"]
   category = "news"
   interval_minutes = 360
 
+# --- MonoGame.Extended --------------------------------------------------------------
 [[engine]]
 id = "monogame-extended"
 name = "MonoGame.Extended"
@@ -740,6 +782,7 @@ aliases = ["monogame.extended", "monogame extended"]
   repo = "MonoGame-Extended/Monogame-Extended"
   category = "release"
 
+# --- Nez ----------------------------------------------------------------------------
 # Nez's last release is from 2019; commits are rare, kept enabled.
 [[engine]]
 id = "nez"
@@ -756,6 +799,7 @@ aliases = ["nez framework"]
   category = "news"
   interval_minutes = 360
 
+# --- Gum ----------------------------------------------------------------------------
 [[engine]]
 id = "gum"
 name = "Gum"
@@ -769,6 +813,7 @@ aliases = ["gum ui", "gum layout"]
   repo = "vchelaru/Gum"
   category = "release"
 
+# --- Myra ---------------------------------------------------------------------------
 [[engine]]
 id = "myra"
 name = "Myra"
@@ -783,6 +828,7 @@ aliases = ["myra ui"]
   repo = "MyraUI/Myra"
   category = "release"
 
+# --- SadConsole ---------------------------------------------------------------------
 [[engine]]
 id = "sadconsole"
 name = "SadConsole"
@@ -796,6 +842,7 @@ aliases = ["sadconsole"]
   repo = "Thraka/SadConsole"
   category = "release"
 
+# --- osu!framework ------------------------------------------------------------------
 [[engine]]
 id = "osu-framework"
 name = "osu!framework"
@@ -810,6 +857,7 @@ aliases = ["osu!framework", "osu-framework", "osu framework"]
   repo = "ppy/osu-framework"
   category = "release"
 
+# --- Arch ECS -----------------------------------------------------------------------
 [[engine]]
 id = "arch"
 name = "Arch ECS"
@@ -823,6 +871,7 @@ aliases = ["arch ecs"]
   repo = "genaray/Arch"
   category = "release"
 
+# --- Friflo.Engine.ECS --------------------------------------------------------------
 [[engine]]
 id = "friflo"
 name = "Friflo.Engine.ECS"
@@ -836,6 +885,7 @@ aliases = ["friflo", "friflo.engine.ecs"]
   repo = "friflo/Friflo.Engine.ECS"
   category = "release"
 
+# --- BEPUphysics v2 -----------------------------------------------------------------
 [[engine]]
 id = "bepu"
 name = "BEPUphysics v2"
@@ -850,6 +900,7 @@ aliases = ["bepu", "bepuphysics"]
   repo = "bepu/bepuphysics2"
   category = "release"
 
+# --- Jitter Physics 2 ---------------------------------------------------------------
 [[engine]]
 id = "jitter"
 name = "Jitter Physics 2"
@@ -863,6 +914,7 @@ aliases = ["jitter physics", "jitterphysics"]
   repo = "notgiven688/jitterphysics2"
   category = "release"
 
+# --- Mirror -------------------------------------------------------------------------
 # Unity networking libraries. No bare "mirror" alias: the word is too common.
 [[engine]]
 id = "mirror"
@@ -878,6 +930,7 @@ aliases = ["mirror networking"]
   repo = "MirrorNetworking/Mirror"
   category = "release"
 
+# --- FishNet ------------------------------------------------------------------------
 [[engine]]
 id = "fishnet"
 name = "FishNet"
@@ -892,6 +945,7 @@ aliases = ["fishnet", "fish-networking", "fish networking"]
   repo = "FirstGearGames/FishNet"
   category = "release"
 
+# --- Box2D.NET ----------------------------------------------------------------------
 [[engine]]
 id = "box2dnet"
 name = "Box2D.NET"
@@ -905,6 +959,7 @@ aliases = ["box2d.net"]
   repo = "ikpil/Box2D.NET"
   category = "release"
 
+# --- DotRecast ----------------------------------------------------------------------
 [[engine]]
 id = "dotrecast"
 name = "DotRecast"
@@ -918,6 +973,7 @@ aliases = ["dotrecast"]
   repo = "ikpil/DotRecast"
   category = "release"
 
+# --- MoonSharp ----------------------------------------------------------------------
 [[engine]]
 id = "moonsharp"
 name = "MoonSharp"
@@ -932,6 +988,7 @@ aliases = ["moonsharp"]
   repo = "moonsharp-devs/moonsharp"
   category = "release"
 
+# --- raylib -------------------------------------------------------------------------
 [[engine]]
 id = "raylib"
 name = "raylib"
@@ -945,25 +1002,7 @@ aliases = ["raylib"]
   repo = "raysan5/raylib"
   category = "release"
 
-[[engine]]
-id = "babylonjs"
-name = "Babylon.js"
-tier = 3
-languages = ["TypeScript", "JavaScript"]
-homepage = "https://www.babylonjs.com"
-icon = "https://avatars.githubusercontent.com/u/4855800?s=128&v=4"
-aliases = ["babylon.js", "babylonjs"]
-  [[engine.source]]
-  kind = "feed"
-  url = "https://babylonjs.medium.com/feed"
-  category = "news"
-  interval_minutes = 180
-  # Near-daily releases.
-  [[engine.source]]
-  kind = "github"
-  repo = "BabylonJS/Babylon.js"
-  category = "release"
-
+# --- Phaser -------------------------------------------------------------------------
 [[engine]]
 id = "phaser"
 name = "Phaser"
@@ -982,6 +1021,7 @@ aliases = ["phaser.js", "phaserjs", "phaser 4", "phaser framework"]
   repo = "phaserjs/phaser"
   category = "release"
 
+# --- libGDX -------------------------------------------------------------------------
 [[engine]]
 id = "libgdx"
 name = "libGDX"
@@ -1000,6 +1040,7 @@ aliases = ["libgdx"]
   repo = "libgdx/libgdx"
   category = "release"
 
+# --- Excalibur.js -------------------------------------------------------------------
 [[engine]]
 id = "excalibur"
 name = "Excalibur.js"
@@ -1018,6 +1059,7 @@ aliases = ["excalibur.js", "excaliburjs"]
   repo = "excaliburjs/Excalibur"
   category = "release"
 
+# --- Ebitengine ---------------------------------------------------------------------
 # ebitengine.org has no RSS/Atom feed (checked 2026-11-10); its blog posts a few times a
 # year (releases, game jams, yearly reviews), so only GitHub releases are tracked.
 [[engine]]
