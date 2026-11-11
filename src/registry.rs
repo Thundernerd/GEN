@@ -229,8 +229,8 @@ pub enum SourceEdit {
         config: SourceConfig,
     },
     RemoveSource(String),
-    /// Stops polling a source and forgets its fetch state, but keeps its items. For
-    /// migrations that replace a catalog source with another.
+    /// Stops polling a source and forgets its fetch state, but keeps its items until its
+    /// owner is removed. For migrations that replace a catalog source with another.
     RetireSource(String),
     /// Replaces a source's spec, keeping its id, interval and enabled state. The new spec
     /// must give the same id.
@@ -429,13 +429,21 @@ impl SourceRegistry {
                         "There is no engine or outlet “{id}”."
                     )));
                 }
-                let source_ids: Vec<String> = current
+                let mut source_ids: Vec<String> = current
                     .config
                     .all_sources()
                     .into_iter()
                     .filter(|s| s.owner.id() == id)
                     .map(|s| s.id)
                     .collect();
+                // Data of retired sources (see `RetireSource`), whose ids start with the
+                // owner's id: owner ids can't contain a colon.
+                let prefix = format!("{id}:");
+                for retired in store.stored_source_ids()? {
+                    if retired.starts_with(&prefix) && !source_ids.contains(&retired) {
+                        source_ids.push(retired);
+                    }
+                }
                 stored.owners.retain(|o| o.id() != id);
                 stored.sources.retain(|s| s.owner_id != id);
                 self.commit(stored, || store.remove_owner(&id, is_engine, &source_ids))?;

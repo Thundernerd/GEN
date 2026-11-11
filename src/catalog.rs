@@ -622,6 +622,23 @@ mod tests {
     }
 
     #[test]
+    fn removing_flame_after_the_migration_deletes_the_retired_sources_items() {
+        let (mut store, reg) = store_with_old_flame("v");
+        let tag_item = crate::model::NewItem {
+            engines: vec!["flame".into()],
+            ..crate::model::NewItem::test(FLAME_TAGS, "flame-v2.0.0")
+        };
+        let tag_item = store.insert_items(&[tag_item]).unwrap().remove(0);
+        migrate_flame_sources_once(&reg, &mut store).unwrap();
+
+        reg.apply(&mut store, SourceEdit::RemoveOwner("flame".into()))
+            .unwrap();
+
+        assert!(store.item(tag_item.id).unwrap().is_none());
+        assert!(store.stored_source_ids().unwrap().is_empty());
+    }
+
+    #[test]
     fn migrating_flame_sources_twice_changes_nothing() {
         let (mut store, reg) = store_with_old_flame("v");
         migrate_flame_sources_once(&reg, &mut store).unwrap();
