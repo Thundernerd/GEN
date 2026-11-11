@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use tokio::sync::watch;
 
+use crate::catalog;
 use crate::classify::Classifier;
 use crate::config::{
     EngineConfig, OutletConfig, Owner, SourceConfig, SourcesConfig, check_url, source_id,
@@ -146,6 +147,13 @@ impl NewOwner {
             return Err("Enter at least one language.".into());
         }
         Ok(())
+    }
+
+    /// Spells an engine's languages the way `known` spells them: see [`spell_languages`].
+    fn spell_languages<'a>(&mut self, known: impl IntoIterator<Item = &'a str>) {
+        if let NewOwner::Engine(e) = self {
+            e.languages = spell_languages(std::mem::take(&mut e.languages), known);
+        }
     }
 
     /// Checks an engine/outlet before it is added or changed. The error is a message for
@@ -343,6 +351,16 @@ impl SourceRegistry {
                 if current.has_owner(&id) {
                     return Err(EditError::Invalid(format!("“{id}” is already used.")));
                 }
+                // The catalog's spelling first, then the stored engines'.
+                let mut known: Vec<&str> = catalog::languages().collect();
+                known.extend(
+                    current
+                        .config
+                        .engines
+                        .iter()
+                        .flat_map(|e| e.languages.iter().map(String::as_str)),
+                );
+                owner.spell_languages(known);
                 let mut rows = Vec::new();
                 for config in owner.take_sources() {
                     config.check().map_err(EditError::Invalid)?;
@@ -523,6 +541,31 @@ impl Lookup {
         }
         names
     }
+}
+
+/// Spells each of `typed` the way `known` spells it (ignoring case; the first spelling in
+/// `known` wins) and drops repeats, keeping the order. Unknown languages stay as typed.
+fn spell_languages<'a>(
+    typed: Vec<String>,
+    known: impl IntoIterator<Item = &'a str>,
+) -> Vec<String> {
+    let mut spellings: HashMap<String, &str> = HashMap::new();
+    for language in known {
+        spellings.entry(language.to_lowercase()).or_insert(language);
+    }
+    let mut seen = HashSet::new();
+    let mut spelled = Vec::new();
+    for language in typed {
+        let key = language.to_lowercase();
+        if seen.insert(key.clone()) {
+            spelled.push(
+                spellings
+                    .get(&key)
+                    .map_or(language, |known| known.to_string()),
+            );
+        }
+    }
+    spelled
 }
 
 #[cfg(test)]
@@ -775,6 +818,29 @@ mod tests {
         bad_source.sources = vec![hn("")];
         invalid(&reg, &mut store, NewOwner::Engine(bad_source));
         assert_eq!(store.owners().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn spells_new_engine_languages_the_existing_way() {
+        let mut store = Store::open_in_memory().unwrap();
+        let reg = registry(&mut store);
+        let languages = |reg: &SourceRegistry, id: &str| {
+            reg.current().config.engine(id).unwrap().languages.clone()
+        };
+        let add = |reg: &SourceRegistry, store: &mut Store, id: &str, typed: &[&str]| {
+            let NewOwner::Engine(mut new) = engine(id) else {
+                unreachable!()
+            };
+            new.languages = typed.iter().map(|l| l.to_string()).collect();
+            reg.apply(store, SourceEdit::AddOwner(NewOwner::Engine(new)))
+                .unwrap();
+        };
+        // The catalog spells it "C#"; an unknown language is kept as typed.
+        add(&reg, &mut store, "x", &["c#", "C#", "Zig"]);
+        assert_eq!(languages(&reg, "x"), ["C#", "Zig"]);
+        // A stored engine's spelling counts too.
+        add(&reg, &mut store, "y", &["zig", "c#"]);
+        assert_eq!(languages(&reg, "y"), ["Zig", "C#"]);
     }
 
     #[test]
