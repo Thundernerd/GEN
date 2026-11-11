@@ -21,6 +21,12 @@ use crate::model::{RawItem, SourceState};
 /// Max chars kept from a release body.
 const SUMMARY_MAX: usize = 500;
 
+/// Releases asked of the API per poll.
+const RELEASES_PER_PAGE: u32 = 30;
+
+/// Releases asked of the API per poll for a `tag_prefix` source: GitHub's largest page.
+const RELEASES_PER_PAGE_PREFIXED: u32 = 100;
+
 /// Polls a repository's releases, tags or commits.
 pub async fn fetch(
     http: &Http,
@@ -225,7 +231,11 @@ fn tag_from_url(url: &str) -> Option<String> {
 /// is widened to 100, GitHub's maximum page, to keep the matching release in it: still one
 /// request per poll.
 fn releases_api_url(repo: &str, tag_prefix: Option<&str>) -> String {
-    let per_page = if tag_prefix.is_some() { 100 } else { 30 };
+    let per_page = if tag_prefix.is_some() {
+        RELEASES_PER_PAGE_PREFIXED
+    } else {
+        RELEASES_PER_PAGE
+    };
     format!("https://api.github.com/repos/{repo}/releases?per_page={per_page}")
 }
 
@@ -280,7 +290,7 @@ mod tests {
     #[test]
     fn releases_api_url_widens_the_window_for_a_tag_prefix() {
         assert_eq!(
-            releases_api_url("flame-engine/flame", Some("flame-v")),
+            releases_api_url("flame-engine/flame", Some("v")),
             "https://api.github.com/repos/flame-engine/flame/releases?per_page=100"
         );
         assert_eq!(
