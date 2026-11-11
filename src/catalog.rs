@@ -19,6 +19,10 @@ const ICONS_KEY: &str = "catalog_icons_backfilled";
 const LANGUAGES_KEY: &str = "catalog_languages_backfilled";
 /// `meta` key set once Flame's sources from before #70 were migrated.
 const FLAME_SOURCES_KEY: &str = "flame_sources_migrated";
+/// Flame's releases source, which kept its id across #70.
+const FLAME_RELEASES: &str = "flame:github:flame-engine/flame";
+/// Flame's tags source, which #70 dropped from the catalog.
+const FLAME_TAGS: &str = "flame:github-tags:flame-engine/flame";
 
 static CATALOG: LazyLock<SourcesConfig> = LazyLock::new(|| {
     let catalog: SourcesConfig =
@@ -204,8 +208,6 @@ pub fn migrate_flame_sources_once(
     registry: &SourceRegistry,
     store: &mut Store,
 ) -> anyhow::Result<()> {
-    const RELEASES: &str = "flame:github:flame-engine/flame";
-    const TAGS: &str = "flame:github-tags:flame-engine/flame";
     if store.meta(FLAME_SOURCES_KEY)?.is_some() {
         return Ok(());
     }
@@ -214,7 +216,9 @@ pub fn migrate_flame_sources_once(
         mode,
         tag_prefixes: TagPrefixes::new(prefixes),
     };
-    let new_releases = flame(GithubMode::Releases, &["v", "flame-v"]);
+    let new_releases = source(FLAME_RELEASES)
+        .expect("Flame's releases source is in the catalog")
+        .spec;
     let spec = |id: &str| {
         registry
             .current()
@@ -224,21 +228,21 @@ pub fn migrate_flame_sources_once(
             .find(|s| s.id == id)
             .map(|s| s.spec)
     };
-    if spec(RELEASES) == Some(flame(GithubMode::Releases, &["v"])) {
+    if spec(FLAME_RELEASES) == Some(flame(GithubMode::Releases, &["v"])) {
         let edit = SourceEdit::ReplaceSourceSpec {
-            source_id: RELEASES.into(),
+            source_id: FLAME_RELEASES.into(),
             spec: new_releases.clone(),
         };
         registry
             .apply(store, edit)
-            .map_err(|err| anyhow::anyhow!("migrating {RELEASES}: {err}"))?;
+            .map_err(|err| anyhow::anyhow!("migrating {FLAME_RELEASES}: {err}"))?;
     }
-    if spec(RELEASES) == Some(new_releases)
-        && spec(TAGS) == Some(flame(GithubMode::Tags, &["flame-v"]))
+    if spec(FLAME_RELEASES) == Some(new_releases)
+        && spec(FLAME_TAGS) == Some(flame(GithubMode::Tags, &["flame-v"]))
     {
         registry
-            .apply(store, SourceEdit::RetireSource(TAGS.into()))
-            .map_err(|err| anyhow::anyhow!("retiring {TAGS}: {err}"))?;
+            .apply(store, SourceEdit::RetireSource(FLAME_TAGS.into()))
+            .map_err(|err| anyhow::anyhow!("retiring {FLAME_TAGS}: {err}"))?;
     }
     store.set_meta(FLAME_SOURCES_KEY, &chrono::Utc::now().to_rfc3339())?;
     Ok(())
@@ -548,9 +552,6 @@ mod tests {
         let tags = reg.current().classifier.match_engines(title);
         assert!(!tags.contains(&"unity".into()), "{tags:?}");
     }
-
-    const FLAME_RELEASES: &str = "flame:github:flame-engine/flame";
-    const FLAME_TAGS: &str = "flame:github-tags:flame-engine/flame";
 
     /// Flame as added from the catalog before #70: a releases source with the `v` prefix and
     /// a tags source with the `flame-v` prefix. `releases_prefix` stands in for the first.

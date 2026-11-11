@@ -220,7 +220,8 @@ impl StoredSources {
     }
 }
 
-/// A change requested in the web UI.
+/// A change to the stored engines, outlets and sources: requested in the web UI, or made
+/// by a once-per-database migration (`RetireSource`, `ReplaceSourceSpec`).
 #[derive(Debug, Clone)]
 pub enum SourceEdit {
     AddSource {
@@ -326,58 +327,33 @@ impl SourceRegistry {
                 Ok(Vec::new())
             }
             SourceEdit::RemoveSource(id) => {
-                if !current.config.all_sources().iter().any(|s| s.id == id) {
-                    return Err(EditError::Invalid(format!("There is no source “{id}”.")));
-                }
-                stored.sources.retain(|s| s.id != id);
-                self.commit(stored, || store.remove_source(&id))?;
+                self.remove_source(stored, &id, || store.remove_source(&id))?;
                 tracing::info!(source = %id, "source removed");
                 Ok(vec![id])
             }
             SourceEdit::RetireSource(id) => {
-                if !current.config.all_sources().iter().any(|s| s.id == id) {
-                    return Err(EditError::Invalid(format!("There is no source “{id}”.")));
-                }
-                stored.sources.retain(|s| s.id != id);
-                self.commit(stored, || store.retire_source(&id))?;
+                self.remove_source(stored, &id, || store.retire_source(&id))?;
                 tracing::info!(source = %id, "source retired, its items kept");
                 Ok(vec![id])
             }
             SourceEdit::ReplaceSourceSpec { source_id, spec } => {
-                let Some(stored_source) = stored.sources.iter_mut().find(|s| s.id == source_id)
-                else {
-                    return Err(EditError::Invalid(format!(
-                        "There is no source “{source_id}”."
-                    )));
-                };
-                if crate::config::source_id(&stored_source.owner_id, &spec) != source_id {
-                    return Err(EditError::Invalid(format!(
-                        "The new spec would change the id of “{source_id}”."
-                    )));
-                }
-                stored_source.config.spec = spec;
-                stored_source.config.check().map_err(EditError::Invalid)?;
-                let json =
-                    serde_json::to_string(&stored_source.config).map_err(anyhow::Error::from)?;
-                self.commit(stored, || {
-                    store.update_source(&source_id, &json).map(|_| ())
+                self.edit_source(store, stored, &source_id, |source| {
+                    if crate::config::source_id(&source.owner_id, &spec) != source.id {
+                        return Err(format!(
+                            "The new spec would change the id of “{}”.",
+                            source.id
+                        ));
+                    }
+                    source.config.spec = spec;
+                    Ok(())
                 })?;
                 tracing::info!(source = %source_id, "source spec replaced");
                 Ok(Vec::new())
             }
             SourceEdit::SetInterval { source_id, minutes } => {
-                let Some(stored_source) = stored.sources.iter_mut().find(|s| s.id == source_id)
-                else {
-                    return Err(EditError::Invalid(format!(
-                        "There is no source “{source_id}”."
-                    )));
-                };
-                stored_source.config.interval_minutes = minutes;
-                stored_source.config.check().map_err(EditError::Invalid)?;
-                let json =
-                    serde_json::to_string(&stored_source.config).map_err(anyhow::Error::from)?;
-                self.commit(stored, || {
-                    store.update_source(&source_id, &json).map(|_| ())
+                self.edit_source(store, stored, &source_id, |source| {
+                    source.config.interval_minutes = minutes;
+                    Ok(())
                 })?;
                 tracing::info!(source = %source_id, ?minutes, "polling interval changed");
                 Ok(Vec::new())
@@ -467,6 +443,42 @@ impl SourceRegistry {
                 Ok(source_ids)
             }
         }
+    }
+
+    /// Removes the stored source `id`, deleting it from `store` with `persist`.
+    fn remove_source(
+        &self,
+        mut stored: StoredSources,
+        id: &str,
+        persist: impl FnOnce() -> anyhow::Result<()>,
+    ) -> Result<(), EditError> {
+        if !stored.sources.iter().any(|s| s.id == id) {
+            return Err(EditError::Invalid(format!("There is no source “{id}”.")));
+        }
+        stored.sources.retain(|s| s.id != id);
+        self.commit(stored, persist)?;
+        Ok(())
+    }
+
+    /// Applies `change` to the stored source `source_id`, checks it and stores it. An error
+    /// from `change` is a message for the user.
+    fn edit_source(
+        &self,
+        store: &mut Store,
+        mut stored: StoredSources,
+        source_id: &str,
+        change: impl FnOnce(&mut StoredSource) -> Result<(), String>,
+    ) -> Result<(), EditError> {
+        let Some(source) = stored.sources.iter_mut().find(|s| s.id == source_id) else {
+            return Err(EditError::Invalid(format!(
+                "There is no source “{source_id}”."
+            )));
+        };
+        change(source).map_err(EditError::Invalid)?;
+        source.config.check().map_err(EditError::Invalid)?;
+        let json = serde_json::to_string(&source.config).map_err(anyhow::Error::from)?;
+        self.commit(stored, || store.update_source(source_id, &json).map(|_| ()))?;
+        Ok(())
     }
 
     /// Applies `change` to the stored engine `engine_id`, checks it and stores it.
