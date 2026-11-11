@@ -65,7 +65,7 @@
               {%- endfor %}
             </select>
           </label>
-          <label><span>Tag prefix (optional)</span><input name="tag_prefix" value="{{ f.tag_prefix or "" }}" placeholder="releases/"></label>
+          <label><span>Tag prefixes (optional, comma-separated)</span><input name="tag_prefix" value="{{ f.tag_prefix or "" }}" placeholder="releases/"></label>
         </div>
       </fieldset>
       <fieldset data-kind="html">
