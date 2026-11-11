@@ -3,6 +3,9 @@
   "private": true,
   "description": "Retakes the README screenshots in docs/screenshots/",
   "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
   "scripts": {
     "screenshots": "node screenshots.mjs"
   },

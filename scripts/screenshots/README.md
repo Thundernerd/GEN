@@ -16,10 +16,10 @@ The script:
 3. adds Bevy, Defold and GameFromScratch to the seeded Unity, Unreal Engine and Godot, and runs `gen fetch` once;
 4. starts `gen serve`, waits for `/health`, and logs in through `/login` for the admin views;
 5. captures `/`, `/engine/godot`, `/sources` and `/notifications` at 1280×900, in light and dark mode, as `docs/screenshots/<view>-<light|dark>.png`;
-6. stops the server and removes the temp folder, also when a step fails.
+6. stops the server and removes the temp folder, also when a step fails or you press Ctrl+C.
 
 The repo's `data/` folder is never touched. Set `GITHUB_TOKEN` to have the GitHub sources use the API, as `gen` does (e.g. `GITHUB_TOKEN=$(gh auth token) npm run screenshots`).
 
-The example channels' secrets are `${GEN_SCREENSHOT_*}` references, set only for the server to values that lead nowhere (a closed local port and reserved `example.com` hosts), so nothing is ever sent.
+The example channels' secrets are `${GEN_SCREENSHOT_*}` references, set only for the server to values that lead nowhere: a closed local port and reserved `example.com` hosts that don't resolve. A health alert or an item that arrives while the server runs may be attempted, but it can't reach a real destination.
 
 The items are fetched live, so every run gives different images. Retake them when the web UI changes, and check each image by eye before committing.

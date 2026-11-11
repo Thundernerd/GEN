@@ -512,7 +512,7 @@ cargo clippy --all-targets
 cargo fmt
 ```
 
-To retake the README screenshots in `docs/screenshots/` after a change to the web UI, run `npm ci`, `npx playwright install chromium` and then `npm run screenshots` in `scripts/screenshots/` (see its [README](scripts/screenshots/README.md)). It needs Node.js; it builds GEN, serves it on a throwaway database with live items, and captures each view in light and dark mode.
+To retake the README screenshots in `docs/screenshots/` after a change to the web UI, run `npm ci`, `npx playwright install chromium` and then `npm run screenshots` in `scripts/screenshots/` (see its [README](scripts/screenshots/README.md)). It needs Node.js 18 or newer; it builds GEN, serves it on a throwaway database with live items, and captures each view in light and dark mode.
 
 Layout of `src/`:
 

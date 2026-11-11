@@ -3,7 +3,8 @@
 // Builds GEN, writes a throwaway gen.toml and database in a temp folder, adds a few catalog
 // engines and an outlet, fetches once, serves on a free port, logs in as admin and captures
 // each view in light and dark mode. The repo's data/ is never touched, and the temp folder is
-// removed and the server stopped even when a step fails. See README.md in this folder.
+// removed and the server stopped even when a step fails or the run is interrupted. See
+// README.md in this folder.
 
 import { spawn, execFileSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
@@ -16,7 +17,8 @@ import { chromium } from "playwright";
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const OUT = join(REPO, "docs/screenshots");
-const GEN = join(REPO, "target/debug/gen");
+const TARGET = resolve(REPO, process.env.CARGO_TARGET_DIR ?? "target");
+const GEN = join(TARGET, "debug", process.platform === "win32" ? "gen.exe" : "gen");
 const ADMIN_TOKEN = "screenshot-admin-token";
 const VIEWPORT = { width: 1280, height: 900 };
 
@@ -144,7 +146,8 @@ async function logIn(context, base) {
   const page = await context.newPage();
   await page.goto(`${base}/login`);
   await page.fill('input[name="token"]', ADMIN_TOKEN);
-  await Promise.all([page.waitForNavigation(), page.click('button[type="submit"]')]);
+  await page.click('button[type="submit"]');
+  await page.waitForURL((url) => url.pathname !== "/login");
   if ((await page.locator('.site-nav a[href="/notifications"]').count()) === 0) {
     throw new Error("admin login failed: no Notifications link after logging in");
   }
@@ -155,7 +158,7 @@ async function logIn(context, base) {
 async function capture(context, base, view, theme) {
   const page = await context.newPage();
   const res = await page.goto(`${base}${view.path}`, { waitUntil: "networkidle" });
-  if (!res.ok()) throw new Error(`${view.path} answered ${res.status()}`);
+  if (!res?.ok()) throw new Error(`${view.path} answered ${res?.status()}`);
   if (new URL(page.url()).pathname === "/login") throw new Error(`${view.path} redirected to the login form`);
   await page.evaluate(() => document.fonts.ready);
   const file = join(OUT, `${view.name}-${theme}.png`);
@@ -170,11 +173,20 @@ async function main() {
 
   const dir = mkdtempSync(join(tmpdir(), "gen-screenshots-"));
   let server;
+  // On Ctrl+C or a kill, stop the server and remove the temp folder before exiting; a
+  // failing step is cleaned up by the finally below.
+  const interrupted = (signal) => {
+    if (server && server.exitCode === null) server.kill("SIGTERM");
+    rmSync(dir, { recursive: true, force: true });
+    console.error(`[screenshots] interrupted by ${signal}; removed temp folder`);
+    process.exit(130);
+  };
+  process.once("SIGINT", interrupted);
+  process.once("SIGTERM", interrupted);
   try {
-    const port = await freePort();
     const config = join(dir, "gen.toml");
-    writeFileSync(config, configToml(dir, port));
-    log(`temp folder ${dir}, port ${port}`);
+    writeFileSync(config, configToml(dir, 0));
+    log(`temp folder ${dir}`);
 
     for (const id of EXTRA_OWNERS) {
       gen(config, "add", id);
@@ -182,6 +194,9 @@ async function main() {
     }
     log(`fetched: ${gen(config, "fetch").split("\n").pop()}`);
 
+    // Picked just before serving, so nothing else is likely to take the port in between.
+    const port = await freePort();
+    writeFileSync(config, configToml(dir, port));
     const base = `http://127.0.0.1:${port}`;
     server = startServer(config);
     await waitForHealth(base, server);
