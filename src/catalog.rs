@@ -4,7 +4,7 @@
 use std::collections::HashSet;
 use std::sync::LazyLock;
 
-use crate::config::{Owner, ResolvedSource, SourcesConfig};
+use crate::config::{GithubMode, Owner, ResolvedSource, SourceSpec, SourcesConfig, TagPrefixes};
 use crate::registry::{NewOwner, Snapshot, SourceEdit, SourceRegistry};
 use crate::store::Store;
 
@@ -17,6 +17,12 @@ const SEEDED_KEY: &str = "seeded";
 const ICONS_KEY: &str = "catalog_icons_backfilled";
 /// `meta` key set once the catalog's languages were copied into stored engines.
 const LANGUAGES_KEY: &str = "catalog_languages_backfilled";
+/// `meta` key set once Flame's sources from before #70 were migrated.
+const FLAME_SOURCES_KEY: &str = "flame_sources_migrated";
+/// Flame's releases source, which kept its id across #70.
+const FLAME_RELEASES: &str = "flame:github:flame-engine/flame";
+/// Flame's tags source, which #70 dropped from the catalog.
+const FLAME_TAGS: &str = "flame:github-tags:flame-engine/flame";
 
 static CATALOG: LazyLock<SourcesConfig> = LazyLock::new(|| {
     let catalog: SourcesConfig =
@@ -192,6 +198,56 @@ pub fn backfill_languages_once(registry: &SourceRegistry, store: &mut Store) -> 
     Ok(())
 }
 
+/// Once per database: moves Flame from its catalog sources before #70 (a releases source
+/// with the `v` prefix and a tags source with `flame-v`, which reads only the 10 entries of
+/// `tags.atom`) to the one releases source with both prefixes. The releases source keeps
+/// its id, interval and enabled state; the tags source stops being polled but keeps its
+/// items. A source the admin changed is left alone, and the tags source is only retired
+/// once the releases source covers `flame-v` tags.
+pub fn migrate_flame_sources_once(
+    registry: &SourceRegistry,
+    store: &mut Store,
+) -> anyhow::Result<()> {
+    if store.meta(FLAME_SOURCES_KEY)?.is_some() {
+        return Ok(());
+    }
+    let flame = |mode, prefixes: &[&str]| SourceSpec::Github {
+        repo: "flame-engine/flame".into(),
+        mode,
+        tag_prefixes: TagPrefixes::new(prefixes),
+    };
+    let new_releases = source(FLAME_RELEASES)
+        .expect("Flame's releases source is in the catalog")
+        .spec;
+    let spec = |id: &str| {
+        registry
+            .current()
+            .config
+            .all_sources()
+            .into_iter()
+            .find(|s| s.id == id)
+            .map(|s| s.spec)
+    };
+    if spec(FLAME_RELEASES) == Some(flame(GithubMode::Releases, &["v"])) {
+        let edit = SourceEdit::ReplaceSourceSpec {
+            source_id: FLAME_RELEASES.into(),
+            spec: new_releases.clone(),
+        };
+        registry
+            .apply(store, edit)
+            .map_err(|err| anyhow::anyhow!("migrating {FLAME_RELEASES}: {err}"))?;
+    }
+    if spec(FLAME_RELEASES) == Some(new_releases)
+        && spec(FLAME_TAGS) == Some(flame(GithubMode::Tags, &["flame-v"]))
+    {
+        registry
+            .apply(store, SourceEdit::RetireSource(FLAME_TAGS.into()))
+            .map_err(|err| anyhow::anyhow!("retiring {FLAME_TAGS}: {err}"))?;
+    }
+    store.set_meta(FLAME_SOURCES_KEY, &chrono::Utc::now().to_rfc3339())?;
+    Ok(())
+}
+
 /// On every start: adds the catalog's exclude phrases that stored engines of the same id
 /// lack, so catalog fixes reach existing databases. Never removes a phrase, and leaves
 /// engines that aren't in the catalog alone. An engine the edit fails for is logged and
@@ -229,7 +285,7 @@ pub fn merge_catalog_excludes(registry: &SourceRegistry, store: &mut Store) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::{SourceSpec, Tier};
+    use crate::config::{SourceSpec, TagPrefixes, Tier};
     use std::collections::HashMap;
 
     #[test]
@@ -495,6 +551,138 @@ mod tests {
 
         let tags = reg.current().classifier.match_engines(title);
         assert!(!tags.contains(&"unity".into()), "{tags:?}");
+    }
+
+    /// Flame as added from the catalog before #70: a releases source with the `v` prefix and
+    /// a tags source with the `flame-v` prefix. `releases_prefix` stands in for the first.
+    fn store_with_old_flame(releases_prefix: &str) -> (Store, SourceRegistry) {
+        let mut store = Store::open_in_memory().unwrap();
+        let toml = format!(
+            r#"
+            [[engine]]
+            id = "flame"
+            name = "Flame"
+            tier = 3
+            languages = ["Dart"]
+              [[engine.source]]
+              kind = "github"
+              repo = "flame-engine/flame"
+              tag_prefix = "{releases_prefix}"
+              category = "release"
+              interval_minutes = 90
+              [[engine.source]]
+              kind = "github"
+              repo = "flame-engine/flame"
+              mode = "tags"
+              tag_prefix = "flame-v"
+              category = "release"
+            "#
+        );
+        let reg = SourceRegistry::with_owners(&mut store, &toml);
+        (store, reg)
+    }
+
+    /// The stored Flame sources: (id, tag prefixes, interval).
+    fn flame_sources(reg: &SourceRegistry) -> Vec<(String, TagPrefixes, Option<u64>)> {
+        reg.current()
+            .config
+            .all_sources()
+            .into_iter()
+            .map(|s| {
+                let SourceSpec::Github { tag_prefixes, .. } = &s.spec else {
+                    panic!("{} is not a GitHub source", s.id);
+                };
+                (s.id.clone(), tag_prefixes.clone(), s.interval_minutes)
+            })
+            .collect()
+    }
+
+    #[test]
+    fn migrates_old_flame_sources_to_one_releases_source() {
+        let (mut store, reg) = store_with_old_flame("v");
+        let tag_item = crate::model::NewItem {
+            engines: vec!["flame".into()],
+            ..crate::model::NewItem::test(FLAME_TAGS, "flame-v2.0.0")
+        };
+        let tag_item = store.insert_items(&[tag_item]).unwrap().remove(0);
+
+        migrate_flame_sources_once(&reg, &mut store).unwrap();
+
+        let migrated = vec![(
+            FLAME_RELEASES.to_string(),
+            TagPrefixes::new(["v", "flame-v"]),
+            Some(90),
+        )];
+        assert_eq!(flame_sources(&reg), migrated);
+        // Stored, so it survives a restart.
+        let reloaded = SourceRegistry::load(&store).unwrap();
+        assert_eq!(flame_sources(&reloaded), migrated);
+        // The tags source only stops being polled: its items stay.
+        assert!(store.item(tag_item.id).unwrap().is_some());
+    }
+
+    #[test]
+    fn removing_flame_after_the_migration_deletes_the_retired_sources_items() {
+        let (mut store, reg) = store_with_old_flame("v");
+        let tag_item = crate::model::NewItem {
+            engines: vec!["flame".into()],
+            ..crate::model::NewItem::test(FLAME_TAGS, "flame-v2.0.0")
+        };
+        let tag_item = store.insert_items(&[tag_item]).unwrap().remove(0);
+        migrate_flame_sources_once(&reg, &mut store).unwrap();
+
+        reg.apply(&mut store, SourceEdit::RemoveOwner("flame".into()))
+            .unwrap();
+
+        assert!(store.item(tag_item.id).unwrap().is_none());
+        assert!(store.stored_source_ids().unwrap().is_empty());
+    }
+
+    #[test]
+    fn migrating_flame_sources_twice_changes_nothing() {
+        let (mut store, reg) = store_with_old_flame("v");
+        migrate_flame_sources_once(&reg, &mut store).unwrap();
+        // The admin adds the tags source back after the migration.
+        let tags = source_config(
+            r#"kind = "github"
+            repo = "flame-engine/flame"
+            mode = "tags"
+            tag_prefix = "flame-v""#,
+        );
+        reg.apply(
+            &mut store,
+            SourceEdit::AddSource {
+                owner_id: "flame".into(),
+                config: tags,
+            },
+        )
+        .unwrap();
+        let before = flame_sources(&reg);
+
+        let restarted = SourceRegistry::load(&store).unwrap();
+        migrate_flame_sources_once(&restarted, &mut store).unwrap();
+
+        assert_eq!(flame_sources(&restarted), before);
+        assert!(before.iter().any(|(id, ..)| id == FLAME_TAGS));
+    }
+
+    #[test]
+    fn migrating_flame_sources_leaves_an_admin_chosen_prefix_alone() {
+        let (mut store, reg) = store_with_old_flame("v1.");
+        let before = flame_sources(&reg);
+
+        migrate_flame_sources_once(&reg, &mut store).unwrap();
+
+        assert_eq!(flame_sources(&reg), before);
+        assert_eq!(
+            flame_sources(&SourceRegistry::load(&store).unwrap()),
+            before
+        );
+        assert_eq!(before.len(), 2, "{before:?}");
+    }
+
+    fn source_config(toml: &str) -> crate::config::SourceConfig {
+        toml::from_str(toml).unwrap()
     }
 
     /// Asserts which catalog engines each outlet title is tagged with.
