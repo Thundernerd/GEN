@@ -2,8 +2,9 @@
 //!
 //! Releases use the REST API when a token is configured (it carries the prerelease flag
 //! and hides drafts), otherwise the public `releases.atom` feed. Tags and commits always
-//! use the Atom feeds. Conditional requests (ETag / 304) go through `Http::get_conditional`;
-//! GitHub does not count 304s against the API rate limit.
+//! use the Atom feeds. A releases source with a `tag_prefix` asks the API for a wider page,
+//! since monorepos publish many packages at once. Conditional requests (ETag / 304) go
+//! through `Http::get_conditional`; GitHub does not count 304s against the API rate limit.
 //!
 //! Titles that are just a version (e.g. Godot's `4.7.2-stable`, S&Box's `26.10.13`) are
 //! prefixed with the repository name so they make sense out of context
@@ -21,6 +22,12 @@ use crate::model::{RawItem, SourceState};
 /// Max chars kept from a release body.
 const SUMMARY_MAX: usize = 500;
 
+/// Releases asked of the API per poll.
+const RELEASES_PER_PAGE: u32 = 30;
+
+/// Releases asked of the API per poll for a `tag_prefix` source: GitHub's largest page.
+const RELEASES_PER_PAGE_PREFIXED: u32 = 100;
+
 /// Polls a repository's releases, tags or commits.
 pub async fn fetch(
     http: &Http,
@@ -30,10 +37,9 @@ pub async fn fetch(
     state: &SourceState,
 ) -> Result<FetchOutcome, FetchError> {
     let (url, headers) = match (mode, http.github_token.as_deref()) {
-        (GithubMode::Releases, Some(token)) => (
-            format!("https://api.github.com/repos/{repo}/releases?per_page=30"),
-            api_headers(token)?,
-        ),
+        (GithubMode::Releases, Some(token)) => {
+            (releases_api_url(repo, tag_prefix), api_headers(token)?)
+        }
         (GithubMode::Releases, None) => (
             format!("https://github.com/{repo}/releases.atom"),
             HeaderMap::new(),
@@ -221,6 +227,19 @@ fn tag_from_url(url: &str) -> Option<String> {
     (!tag.is_empty()).then_some(tag)
 }
 
+/// The REST URL for a repository's newest releases. A `tag_prefix` usually means a monorepo
+/// that publishes many packages at once (Flame releases about 30 per batch), so the window
+/// is widened to 100, GitHub's maximum page, to keep the matching release in it: still one
+/// request per poll.
+fn releases_api_url(repo: &str, tag_prefix: Option<&str>) -> String {
+    let per_page = if tag_prefix.is_some() {
+        RELEASES_PER_PAGE_PREFIXED
+    } else {
+        RELEASES_PER_PAGE
+    };
+    format!("https://api.github.com/repos/{repo}/releases?per_page={per_page}")
+}
+
 fn has_prefix(tag: &str, prefix: Option<&str>) -> bool {
     prefix.is_none_or(|p| tag.starts_with(p))
 }
@@ -265,6 +284,20 @@ mod tests {
                 tag_prefix: None,
             },
         }
+    }
+
+    /// A monorepo publishes many packages at once, so a `tag_prefix` source asks for a wider
+    /// window; plain repositories keep the default 30.
+    #[test]
+    fn releases_api_url_widens_the_window_for_a_tag_prefix() {
+        assert_eq!(
+            releases_api_url("flame-engine/flame", Some("v")),
+            "https://api.github.com/repos/flame-engine/flame/releases?per_page=100"
+        );
+        assert_eq!(
+            releases_api_url("godotengine/godot", None),
+            "https://api.github.com/repos/godotengine/godot/releases?per_page=30"
+        );
     }
 
     /// Without a token, releases come from the Atom feed (no prerelease flag), so

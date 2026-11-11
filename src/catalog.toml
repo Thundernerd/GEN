@@ -1166,8 +1166,11 @@ aliases = ["heaps.io", "heaps engine", "heaps framework", "heapsio"]
 # flame-engine/flame is a monorepo that releases about 30 packages at a time; the
 # engine's own tags are `v1.x` up to 1.38 and `flame-v...` before and after (2.0
 # previews). The tags source keeps `flame-v` tags and the releases source `v` tags (1.x
-# maintenance releases). A batch can push the engine's tag out of the window GitHub
-# returns, so some engine releases may be missed. The site has no feed. "flame" is an ordinary word, so only multi-word aliases.
+# maintenance releases). With a token the releases source reads a wider API window that
+# spans a few batches. Without one it falls back to the 10 entries of `releases.atom`, and
+# the tags source always reads the 10 entries of `tags.atom`, so a batch can push the
+# engine's tag out of that window and some engine releases may be missed. The site has no
+# feed. "flame" is an ordinary word, so only multi-word aliases.
 [[engine]]
 id = "flame"
 name = "Flame"
