@@ -22,7 +22,7 @@ const SOURCES: &str = r#"
 id = "godot"
 name = "Godot"
 tier = 1
-csharp = "first-class (.NET build)"
+languages = ["GDScript", "C#", "C++"]
 homepage = "https://godotengine.org"
   [[engine.source]]
   kind = "github"
@@ -33,7 +33,7 @@ homepage = "https://godotengine.org"
 id = "bevy"
 name = "Bevy"
 tier = 3
-csharp = "none"
+languages = ["Rust"]
   [[engine.source]]
   kind = "feed"
   url = "https://bevyengine.org/news/rss.xml"
@@ -354,7 +354,8 @@ async fn timeline_filters() {
 async fn engine_pages() {
     let (status, _, body) = get("/engine/godot").await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body.contains("first-class (.NET build)"));
+    assert!(body.contains("<dt>Languages</dt><dd>GDScript, C#, C++"));
+    assert!(!body.contains("C# support"));
     assert!(body.contains("Godot 4.8 released"));
     assert!(body.contains("godotengine&#x2f;godot"));
 
@@ -372,6 +373,9 @@ async fn engines_and_sources_pages() {
     assert_eq!(status, StatusCode::OK);
     assert!(body.contains("Major C# engines"));
     assert!(body.contains("Bevy"));
+    assert!(body.contains("<dt>Languages</dt><dd>Rust"));
+    assert!(body.contains("<dt>Languages</dt><dd>GDScript, C#, C++"));
+    assert!(!body.contains("<dt>C#</dt>"));
 
     let (status, _, body) = get("/sources").await;
     assert_eq!(status, StatusCode::OK);
@@ -460,7 +464,7 @@ async fn managing_sources_requires_admin() {
         ),
         (
             "/owners/add",
-            "owner_kind=engine&id=stride&name=Stride&tier=1",
+            "owner_kind=engine&id=stride&name=Stride&tier=1&languages=C%23",
         ),
         ("/owners/remove", "owner_id=godot"),
         ("/suggestions/owner", "owner_id=stride"),
@@ -621,7 +625,8 @@ async fn admin_adds_an_engine_and_its_first_source() {
     let st = state();
     let cookie = login(&st).await;
     let form = "owner_kind=engine&id=stride&name=Stride&homepage=https%3A%2F%2Fstride3d.net\
-                &tier=1&csharp=native&aliases=stride%2C+Stride3D";
+                &tier=1&languages=C%23%2C+F%23&language_note=engine+written+in+C%23\
+                &aliases=stride%2C+Stride3D";
     let (status, headers, _) = send(&st, post_form("/owners/add", form, Some(&cookie))).await;
     assert_eq!(status, StatusCode::SEE_OTHER);
     assert_eq!(
@@ -636,11 +641,17 @@ async fn admin_adds_an_engine_and_its_first_source() {
         .cloned()
         .unwrap();
     assert_eq!(engine.aliases, ["stride", "Stride3D"]);
+    assert_eq!(engine.languages, ["C#", "F#"]);
+    assert_eq!(
+        engine.language_note.as_deref(),
+        Some("engine written in C#")
+    );
 
     // It shows up everywhere, with an empty group on /sources.
     let (status, body) = get_as(&st, "/engine/stride", &cookie).await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body.contains("native"));
+    assert!(body.contains("C#, F#"));
+    assert!(body.contains("engine written in C#"));
     let (_, body) = get_as(&st, "/engines", &cookie).await;
     assert!(body.contains("Stride"));
     let (_, body) = get_as(&st, "/sources?owner=stride", &cookie).await;
@@ -674,14 +685,21 @@ async fn invalid_owners_rerender_the_form() {
     let cookie = login(&st).await;
     for (form, message) in [
         (
-            "owner_kind=engine&id=godot&name=Godot+2&tier=1",
+            "owner_kind=engine&id=godot&name=Godot+2&tier=1&languages=GDScript",
             "already used",
         ),
         (
-            "owner_kind=engine&id=Bad+Id&name=X&tier=1",
+            "owner_kind=engine&id=Bad+Id&name=X&tier=1&languages=C%23",
             "be used as an id",
         ),
-        ("owner_kind=engine&id=x&name=X&tier=7", "tier must be"),
+        (
+            "owner_kind=engine&id=x&name=X&tier=7&languages=C%23",
+            "tier must be",
+        ),
+        (
+            "owner_kind=engine&id=x&name=X&tier=1&languages=+%2C+",
+            "Enter at least one language.",
+        ),
         ("owner_kind=outlet&id=x&name=", "Enter a name"),
         ("id=x&name=X", "Choose engine or news outlet"),
     ] {
@@ -1108,7 +1126,7 @@ async fn admin_schedules_sources() {
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert!(body.contains("whole number of minutes"));
     assert!(
-        body.contains("first-class (.NET build)"),
+        body.contains("GDScript, C#, C++"),
         "back on the engine page"
     );
 

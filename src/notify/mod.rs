@@ -469,12 +469,12 @@ pub(crate) mod tests {
             id = "godot"
             name = "Godot"
             tier = 1
-            csharp = "first-class"
+            languages = ["GDScript", "C#", "C++"]
             [[engine]]
             id = "unity"
             name = "Unity"
             tier = 1
-            csharp = "native"
+            languages = ["C#"]
             "#,
         )
         .unwrap()

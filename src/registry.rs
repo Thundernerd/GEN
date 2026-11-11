@@ -135,7 +135,21 @@ impl NewOwner {
         })
     }
 
-    /// Checks an engine/outlet before it is added. The error is a message for the user.
+    /// Checks an engine/outlet before it is added: [`Self::check`], plus the rules that
+    /// engines stored before them may break (they still load and can be edited). The error
+    /// is a message for the user.
+    fn check_new(&self) -> Result<(), String> {
+        self.check()?;
+        if let NewOwner::Engine(e) = self
+            && e.languages.is_empty()
+        {
+            return Err("Enter at least one language.".into());
+        }
+        Ok(())
+    }
+
+    /// Checks an engine/outlet before it is added or changed. The error is a message for
+    /// the user.
     fn check(&self) -> Result<(), String> {
         let id = self.id();
         if !valid_owner_id(id) {
@@ -220,6 +234,12 @@ pub enum SourceEdit {
     SetEngineIcon {
         engine_id: String,
         icon: Option<String>,
+    },
+    /// Sets an engine's languages and language note.
+    SetEngineLanguages {
+        engine_id: String,
+        languages: Vec<String>,
+        language_note: Option<String>,
     },
     /// Adds exclude phrases to an engine. Phrases it already has (ignoring case) are
     /// skipped; none are removed.
@@ -318,7 +338,7 @@ impl SourceRegistry {
                 Ok(Vec::new())
             }
             SourceEdit::AddOwner(mut owner) => {
-                owner.check().map_err(EditError::Invalid)?;
+                owner.check_new().map_err(EditError::Invalid)?;
                 let id = owner.id().to_string();
                 if current.has_owner(&id) {
                     return Err(EditError::Invalid(format!("“{id}” is already used.")));
@@ -350,6 +370,14 @@ impl SourceRegistry {
             SourceEdit::SetEngineIcon { engine_id, icon } => {
                 self.edit_engine(store, stored, &engine_id, |engine| engine.icon = icon)
             }
+            SourceEdit::SetEngineLanguages {
+                engine_id,
+                languages,
+                language_note,
+            } => self.edit_engine(store, stored, &engine_id, |engine| {
+                engine.languages = languages;
+                engine.language_note = language_note;
+            }),
             SourceEdit::AddEngineExcludes { engine_id, phrases } => {
                 self.edit_engine(store, stored, &engine_id, |engine| {
                     for phrase in phrases {
@@ -507,7 +535,7 @@ mod tests {
         id = "godot"
         name = "Godot"
         tier = 1
-        csharp = "first-class"
+        languages = ["GDScript", "C#", "C++"]
         aliases = ["godot"]
           [[engine.source]]
           kind = "github"
@@ -659,7 +687,8 @@ mod tests {
             id: id.into(),
             name: "Stride".into(),
             tier: 1,
-            csharp: "native".into(),
+            languages: vec!["C#".into()],
+            language_note: None,
             homepage: None,
             icon: None,
             enabled: true,
@@ -727,6 +756,14 @@ mod tests {
         };
         tier7.tier = 7;
         assert!(invalid(&reg, &mut store, NewOwner::Engine(tier7)).contains("tier"));
+        let NewOwner::Engine(mut no_languages) = engine("x") else {
+            unreachable!()
+        };
+        no_languages.languages.clear();
+        assert_eq!(
+            invalid(&reg, &mut store, NewOwner::Engine(no_languages)),
+            "Enter at least one language."
+        );
         let NewOwner::Engine(mut twice) = engine("x") else {
             unreachable!()
         };
@@ -738,6 +775,29 @@ mod tests {
         bad_source.sources = vec![hn("")];
         invalid(&reg, &mut store, NewOwner::Engine(bad_source));
         assert_eq!(store.owners().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn loads_engines_stored_with_the_old_csharp_field() {
+        let mut store = Store::open_in_memory().unwrap();
+        registry(&mut store);
+        let json = r#"{"id":"mine","name":"Mine","tier":3,"csharp":"none (Rust)",
+            "homepage":null,"enabled":true,"aliases":["mine"],"exclude":[],"source":[]}"#;
+        store.add_owner("mine", "engine", json, &[]).unwrap();
+        let reg = SourceRegistry::load(&store).unwrap();
+        let snapshot = reg.current();
+        let mine = snapshot.config.engine("mine").unwrap();
+        assert!(mine.languages.is_empty());
+        assert_eq!(mine.language_note.as_deref(), Some("none (Rust)"));
+        // An engine without languages can still be edited.
+        reg.apply(
+            &mut store,
+            SourceEdit::SetEngineIcon {
+                engine_id: "mine".into(),
+                icon: Some("https://example.org/mine.png".into()),
+            },
+        )
+        .unwrap();
     }
 
     #[test]

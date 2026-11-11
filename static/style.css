@@ -340,6 +340,7 @@ main.wrap { padding-top: 2.5rem; padding-bottom: 3rem; }
 }
 .engine-card dt, .facts dt { color: var(--muted); }
 .engine-card dd, .facts dd { margin: 0; }
+.language-note { color: var(--muted); }
 .homepage { font-family: var(--mono); font-size: 0.75rem; color: var(--muted); margin-top: auto; }
 
 .engine-header { margin-bottom: 1rem; }

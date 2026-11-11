@@ -706,7 +706,7 @@ mod tests {
             id = "godot"
             name = "Godot"
             tier = 1
-            csharp = "first-class"
+            languages = ["GDScript", "C#", "C++"]
               [[engine.source]]
               kind = "feed"
               url = "http://{addr}/rss.xml"
@@ -772,7 +772,7 @@ mod tests {
             id = "godot"
             name = "Godot"
             tier = 1
-            csharp = "first-class"
+            languages = ["GDScript", "C#", "C++"]
               [[engine.source]]
               kind = "feed"
               url = "http://{addr}/a.xml"

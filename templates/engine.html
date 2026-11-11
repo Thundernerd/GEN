@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_languages.html" import languages %}
 {% block title %}{{ engine.name }} — GEN{% endblock %}
 {% block content %}
 <header class="engine-header">
@@ -6,7 +7,7 @@
   <h1 class="page-title">{{ engine.name }}</h1>
   <dl class="facts">
     <dt>Tier</dt><dd>{{ engine.tier }}{% if engine.tier_label %} · {{ engine.tier_label }}{% endif %}</dd>
-    <dt>C# support</dt><dd>{{ engine.csharp }}</dd>
+    <dt>Languages</dt><dd>{{ languages(engine) }}</dd>
     {%- if engine.homepage %}
     <dt>Homepage</dt><dd><a href="{{ engine.homepage }}" rel="noopener">{{ engine.homepage }}</a></dd>
     {%- endif %}

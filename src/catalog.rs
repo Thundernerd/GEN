@@ -15,6 +15,8 @@ pub const SEEDED: &[&str] = &["unity", "unreal", "godot"];
 const SEEDED_KEY: &str = "seeded";
 /// `meta` key set once the catalog's engine icons were copied into stored engines.
 const ICONS_KEY: &str = "catalog_icons_backfilled";
+/// `meta` key set once the catalog's languages were copied into stored engines.
+const LANGUAGES_KEY: &str = "catalog_languages_backfilled";
 
 static CATALOG: LazyLock<SourcesConfig> = LazyLock::new(|| {
     let catalog: SourcesConfig =
@@ -152,6 +154,36 @@ pub fn backfill_icons_once(registry: &SourceRegistry, store: &mut Store) -> anyh
     Ok(())
 }
 
+/// Once per database: gives engines stored before engines had `languages` (whose old C#
+/// text was read as their `language_note`) the catalog's languages and note. Engines that
+/// aren't in the catalog keep the old text as their note.
+pub fn backfill_languages_once(registry: &SourceRegistry, store: &mut Store) -> anyhow::Result<()> {
+    if store.meta(LANGUAGES_KEY)?.is_some() {
+        return Ok(());
+    }
+    let snapshot = registry.current();
+    for engine in snapshot
+        .config
+        .engines
+        .iter()
+        .filter(|e| e.languages.is_empty())
+    {
+        let Some(catalog_engine) = CATALOG.engine(&engine.id) else {
+            continue;
+        };
+        let edit = SourceEdit::SetEngineLanguages {
+            engine_id: engine.id.clone(),
+            languages: catalog_engine.languages.clone(),
+            language_note: catalog_engine.language_note.clone(),
+        };
+        registry
+            .apply(store, edit)
+            .map_err(|err| anyhow::anyhow!("setting the languages of {}: {err}", engine.id))?;
+    }
+    store.set_meta(LANGUAGES_KEY, &chrono::Utc::now().to_rfc3339())?;
+    Ok(())
+}
+
 /// On every start: adds the catalog's exclude phrases that stored engines of the same id
 /// lack, so catalog fixes reach existing databases. Never removes a phrase, and leaves
 /// engines that aren't in the catalog alone. An engine the edit fails for is logged and
@@ -190,6 +222,7 @@ pub fn merge_catalog_excludes(registry: &SourceRegistry, store: &mut Store) {
 mod tests {
     use super::*;
     use crate::config::SourceSpec;
+    use std::collections::HashMap;
 
     #[test]
     fn catalog_is_valid_without_noisy_channels() {
@@ -204,6 +237,22 @@ mod tests {
         }
         assert!(CATALOG.engines.iter().all(|e| e.enabled));
         assert!(CATALOG.outlets.iter().all(|o| o.enabled));
+    }
+
+    #[test]
+    fn every_catalog_engine_has_languages_spelled_one_way() {
+        let mut spellings: HashMap<String, &str> = HashMap::new();
+        for engine in &CATALOG.engines {
+            assert!(
+                !engine.languages.is_empty(),
+                "{} has no languages",
+                engine.id
+            );
+            for language in &engine.languages {
+                let spelled = spellings.entry(language.to_lowercase()).or_insert(language);
+                assert_eq!(spelled, language, "{} spells it differently", engine.id);
+            }
+        }
     }
 
     #[test]
@@ -306,6 +355,51 @@ mod tests {
         .unwrap();
         backfill_icons_once(&reg, &mut store).unwrap();
         assert_eq!(icon(&reg, "godot"), None);
+    }
+
+    #[test]
+    fn backfills_engine_languages_once() {
+        let mut store = Store::open_in_memory().unwrap();
+        store_old_engine(&mut store, "godot", "first-class (.NET build)");
+        store_old_engine(&mut store, "mine", "none (Rust)");
+        let reg = SourceRegistry::load(&store).unwrap();
+
+        backfill_languages_once(&reg, &mut store).unwrap();
+        let languages = |reg: &SourceRegistry, id: &str| {
+            let snapshot = reg.current();
+            let engine = snapshot.config.engine(id).unwrap();
+            (engine.languages.clone(), engine.language_note.clone())
+        };
+        assert_eq!(
+            languages(&reg, "godot"),
+            (
+                vec!["GDScript".into(), "C#".into(), "C++".into()],
+                Some("C# in the .NET build".into())
+            )
+        );
+        assert_eq!(
+            languages(&reg, "mine"),
+            (Vec::new(), Some("none (Rust)".into())),
+            "not in the catalog"
+        );
+        // Stored, so it survives a restart.
+        let reloaded = SourceRegistry::load(&store).unwrap();
+        assert_eq!(languages(&reloaded, "godot").0.len(), 3);
+
+        // Only once: an engine stored in the old shape later is left alone.
+        store_old_engine(&mut store, "unity", "native (C# scripting)");
+        let reg = SourceRegistry::load(&store).unwrap();
+        backfill_languages_once(&reg, &mut store).unwrap();
+        assert!(languages(&reg, "unity").0.is_empty());
+    }
+
+    /// Stores engine `id` as JSON in the shape used before `languages` existed.
+    fn store_old_engine(store: &mut Store, id: &str, csharp: &str) {
+        let json = format!(
+            r#"{{"id":"{id}","name":"{id}","tier":1,"csharp":"{csharp}","homepage":null,
+                "enabled":true,"aliases":[],"exclude":[],"source":[]}}"#
+        );
+        store.add_owner(id, "engine", &json, &[]).unwrap();
     }
 
     /// Unity as stored before #13, with a phrase of the user's own, plus an engine that

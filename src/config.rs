@@ -22,30 +22,90 @@ pub struct SourcesConfig {
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
+#[serde(try_from = "StoredEngineConfig")]
 pub struct EngineConfig {
     pub id: EngineId,
     pub name: String,
     /// 1 = major C#, 2 = niche C#, 3 = notable without C#.
     pub tier: u8,
-    /// Human description of C# support, e.g. "native", "first-class (.NET build)", "none".
-    pub csharp: String,
+    /// The languages games are written in with this engine, primary first, e.g.
+    /// `["GDScript", "C#", "C++"]`. Empty only for engines stored before this field existed
+    /// that aren't in the catalog.
+    pub languages: Vec<String>,
+    /// Nuance the list can't carry, e.g. "C# via the UnrealSharp plugin".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub language_note: Option<String>,
     pub homepage: Option<String>,
     /// Logo shown next to the engine's name in Discord messages: a PNG, JPEG or WebP URL
     /// (Discord shows no SVG or ICO).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[serde(skip_serializing_if = "Option::is_none")]
     pub icon: Option<String>,
-    #[serde(default = "default_true")]
     pub enabled: bool,
     /// Whole-word phrases that tag outlet items with this engine. All-lowercase aliases match
     /// in any case; an alias with an uppercase letter (e.g. "Unity") matches case-sensitively.
-    #[serde(default)]
     pub aliases: Vec<String>,
     /// Phrases that veto an alias match (e.g. "ubuntu unity").
-    #[serde(default)]
     pub exclude: Vec<String>,
-    #[serde(default, rename = "source")]
+    #[serde(rename = "source")]
     pub sources: Vec<SourceConfig>,
+}
+
+/// How [`EngineConfig`] is read: also accepts engines stored before `languages` existed,
+/// whose free-text `csharp` field becomes the `language_note`.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct StoredEngineConfig {
+    id: EngineId,
+    name: String,
+    tier: u8,
+    #[serde(default)]
+    languages: Vec<String>,
+    #[serde(default)]
+    language_note: Option<String>,
+    #[serde(default)]
+    csharp: Option<String>,
+    homepage: Option<String>,
+    #[serde(default)]
+    icon: Option<String>,
+    #[serde(default = "default_true")]
+    enabled: bool,
+    #[serde(default)]
+    aliases: Vec<String>,
+    #[serde(default)]
+    exclude: Vec<String>,
+    #[serde(default, rename = "source")]
+    sources: Vec<SourceConfig>,
+}
+
+impl TryFrom<StoredEngineConfig> for EngineConfig {
+    type Error = String;
+
+    fn try_from(e: StoredEngineConfig) -> Result<Self, Self::Error> {
+        let language_note = match e.csharp {
+            None => e.language_note,
+            Some(_) if !e.languages.is_empty() || e.language_note.is_some() => {
+                return Err(format!(
+                    "Engine “{}”: `csharp` is replaced by `languages` and `language_note`; \
+                     use only those.",
+                    e.id
+                ));
+            }
+            Some(csharp) => Some(csharp),
+        };
+        Ok(EngineConfig {
+            id: e.id,
+            name: e.name,
+            tier: e.tier,
+            languages: e.languages,
+            language_note,
+            homepage: e.homepage,
+            icon: e.icon,
+            enabled: e.enabled,
+            aliases: e.aliases,
+            exclude: e.exclude,
+            sources: e.sources,
+        })
+    }
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -921,6 +981,43 @@ mod tests {
     use super::*;
 
     #[test]
+    fn reads_an_engine_stored_with_the_old_csharp_field() {
+        let json = r#"{"id":"mine","name":"Mine","tier":3,"csharp":"none (Rust)",
+            "homepage":null,"enabled":true,"aliases":["mine"],"exclude":[],"source":[]}"#;
+        let engine: EngineConfig = serde_json::from_str(json).unwrap();
+        assert!(engine.languages.is_empty());
+        assert_eq!(engine.language_note.as_deref(), Some("none (Rust)"));
+        assert_eq!(engine.aliases, ["mine"]);
+        // Stored again, it is in the new shape.
+        let json = serde_json::to_string(&engine).unwrap();
+        assert!(!json.contains("csharp"), "{json}");
+    }
+
+    #[test]
+    fn engine_languages_round_trip_through_json() {
+        let json = r#"{"id":"flax","name":"Flax","tier":1,"languages":["C#","C++"],
+            "language_note":"engine written in C++","homepage":null,"source":[]}"#;
+        let engine: EngineConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(engine.languages, ["C#", "C++"]);
+        assert_eq!(
+            engine.language_note.as_deref(),
+            Some("engine written in C++")
+        );
+        let again: EngineConfig =
+            serde_json::from_str(&serde_json::to_string(&engine).unwrap()).unwrap();
+        assert_eq!(again.languages, engine.languages);
+        assert_eq!(again.language_note, engine.language_note);
+    }
+
+    #[test]
+    fn refuses_an_engine_with_both_csharp_and_languages() {
+        let json = r#"{"id":"x","name":"X","tier":1,"csharp":"native","languages":["C#"],
+            "homepage":null}"#;
+        let err = serde_json::from_str::<EngineConfig>(json).unwrap_err();
+        assert!(err.to_string().contains("csharp"), "{err}");
+    }
+
+    #[test]
     fn parses_engine_and_outlet_sources() {
         let cfg: SourcesConfig = toml::from_str(
             r#"
@@ -928,7 +1025,7 @@ mod tests {
             id = "godot"
             name = "Godot"
             tier = 1
-            csharp = "first-class"
+            languages = ["GDScript", "C#", "C++"]
             aliases = ["godot"]
               [[engine.source]]
               kind = "feed"
@@ -965,7 +1062,7 @@ mod tests {
             id = "x"
             name = "X"
             tier = 1
-            csharp = "none"
+            languages = ["C++"]
               [[engine.source]]
               kind = "feed"
               url = "https://x.org/feed"

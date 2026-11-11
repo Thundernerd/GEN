@@ -518,7 +518,8 @@ async fn engines_page(st: &AppState, admin: bool) -> PageResult {
                     json!({
                         "id": e.id,
                         "name": e.name,
-                        "csharp": e.csharp,
+                        "languages": e.languages,
+                        "language_note": e.language_note,
                         "homepage": e.homepage,
                         "items": s.items,
                         "latest": s.latest.map(|d| DateView::new(d, now)),
@@ -615,7 +616,8 @@ async fn engine_page(
                 "name": engine.name,
                 "tier": engine.tier,
                 "tier_label": TIER_LABELS.iter().find(|t| t.0 == engine.tier).map(|t| t.1),
-                "csharp": engine.csharp,
+                "languages": engine.languages,
+                "language_note": engine.language_note,
                 "homepage": engine.homepage,
                 "enabled": engine.enabled,
             },
@@ -791,7 +793,7 @@ fn suggestions_view(snapshot: &Snapshot) -> serde_json::Value {
                     NewOwner::Engine(e) if e.tier == tier => Some(owner_view(
                         &e.name,
                         &e.id,
-                        format!("C#: {}", e.csharp),
+                        e.languages.join(", "),
                         e.sources.len(),
                     )),
                     _ => None,

@@ -288,7 +288,7 @@ mod tests {
         id = "unity"
         name = "Unity"
         tier = 1
-        csharp = "native"
+        languages = ["C#"]
         aliases = ["Unity", "unity 6", "unity3d", "unity engine", "urp", "hdrp", "dots"]
         exclude = ["ubuntu unity", "unity desktop"]
 
@@ -296,49 +296,49 @@ mod tests {
         id = "unreal"
         name = "Unreal Engine"
         tier = 3
-        csharp = "none"
+        languages = ["C++"]
         aliases = ["unreal", "unreal engine", "ue5", "ue6", "uefn", "nanite", "metahuman"]
 
         [[engine]]
         id = "godot"
         name = "Godot"
         tier = 1
-        csharp = "first-class (.NET build)"
+        languages = ["GDScript", "C#", "C++"]
         aliases = ["godot", "gdscript"]
 
         [[engine]]
         id = "stride"
         name = "Stride"
         tier = 1
-        csharp = "native"
+        languages = ["C#"]
         aliases = ["stride3d", "stride engine", "xenko"]
 
         [[engine]]
         id = "flax"
         name = "Flax Engine"
         tier = 1
-        csharp = "native"
+        languages = ["C#", "C++"]
         aliases = ["flax engine", "flaxengine"]
 
         [[engine]]
         id = "sbox"
         name = "s&box"
         tier = 2
-        csharp = "native"
+        languages = ["C#"]
         aliases = ["s&box", "sbox"]
 
         [[engine]]
         id = "monogame"
         name = "MonoGame"
         tier = 1
-        csharp = "native"
+        languages = ["C#"]
         aliases = ["monogame", "xna", "fna"]
 
         [[engine]]
         id = "defold"
         name = "Defold"
         tier = 3
-        csharp = "none"
+        languages = ["Lua"]
         enabled = false
         aliases = ["defold"]
     "#;

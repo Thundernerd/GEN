@@ -1,0 +1,6 @@
+{#- An engine's languages, with its language note after them in muted text. An engine
+    stored before engines had languages may have only the note. -#}
+{%- macro languages(engine) -%}
+{{ engine.languages | join(", ") }}
+{%- if engine.language_note %}{% if engine.languages %} {% endif %}<span class="language-note">{% if engine.languages %}({{ engine.language_note }}){% else %}{{ engine.language_note }}{% endif %}</span>{% endif %}
+{%- endmacro %}
