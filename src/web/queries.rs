@@ -10,8 +10,13 @@ use crate::store::{ItemQuery, Store};
 
 use super::view::{Lookup, mentions_csharp};
 
-/// The language whose outlet articles are also kept when they mention it.
+/// The one language with a keyword rule for outlet articles, and what `?csharp=1` means.
 pub const CSHARP: &str = "C#";
+
+/// Whether two language names are the same language, ignoring case.
+pub fn same_language(a: &str, b: &str) -> bool {
+    a.to_lowercase() == b.to_lowercase()
+}
 
 /// Rows fetched per round when filtering in Rust (tier / language filters).
 const SCAN_BATCH: u32 = 500;
@@ -57,10 +62,10 @@ impl ItemFilter {
             let lang_engine = item.engines.iter().any(|e| {
                 sources
                     .engine(e)
-                    .is_some_and(|e| e.languages.iter().any(|l| l.eq_ignore_ascii_case(lang)))
+                    .is_some_and(|e| e.languages.iter().any(|l| same_language(l, lang)))
             });
             // Only C# has a keyword rule: names like "Go" or "Rust" are too ambiguous in prose.
-            let outlet_mention = lang.eq_ignore_ascii_case(CSHARP)
+            let outlet_mention = same_language(lang, CSHARP)
                 && lookup.outlet_sources.contains(&item.source_id)
                 && (mentions_csharp(&item.title)
                     || item.summary.as_deref().is_some_and(mentions_csharp));

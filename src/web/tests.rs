@@ -397,10 +397,11 @@ fn language_picker(body: &str) -> Vec<String> {
 async fn language_picker_merges_spellings_and_puts_common_languages_first() {
     let st = state();
     let cookie = login(&st).await;
-    let form = "owner_kind=engine&id=mine&name=Mine&tier=3&languages=rust%2C+c%23";
+    let form = "owner_kind=engine&id=mine&name=Mine&tier=3&languages=rust%2C+c%23%2C+Rust";
     let (status, _, _) = send(&st, post_form("/owners/add", form, Some(&cookie))).await;
     assert_eq!(status, StatusCode::SEE_OTHER);
 
+    // Mine lists Rust twice; it still counts as one engine using Rust.
     let (_, body) = get_as(&st, "/", &cookie).await;
     assert_eq!(
         language_picker(&body),

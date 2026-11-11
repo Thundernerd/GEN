@@ -396,17 +396,25 @@ fn pagination(
     })
 }
 
-/// The languages `engines` are programmed in, deduplicated regardless of case (keeping
-/// the first spelling), the most used first, then by name.
+/// The languages `engines` are programmed in, each once whatever its case (the first
+/// spelling wins), the ones most engines use first, then by name.
 fn languages_of<'a>(engines: impl Iterator<Item = &'a EngineConfig>) -> Vec<String> {
     let mut counted: Vec<(String, usize)> = Vec::new();
-    for language in engines.flat_map(|e| &e.languages) {
-        match counted
-            .iter_mut()
-            .find(|(l, _)| l.eq_ignore_ascii_case(language))
-        {
-            Some((_, n)) => *n += 1,
-            None => counted.push((language.clone(), 1)),
+    for engine in engines {
+        // An engine counts once per language, however often it lists it.
+        let mut seen: Vec<&String> = Vec::new();
+        for language in &engine.languages {
+            if seen.iter().any(|l| queries::same_language(l, language)) {
+                continue;
+            }
+            seen.push(language);
+            match counted
+                .iter_mut()
+                .find(|(l, _)| queries::same_language(l, language))
+            {
+                Some((_, n)) => *n += 1,
+                None => counted.push((language.clone(), 1)),
+            }
         }
     }
     counted.sort_by(|(a, an), (b, bn)| {
@@ -500,7 +508,7 @@ async fn index_page(
         )
         .map(|l| {
             let active = match (&l, &filter.lang) {
-                (Some(l), Some(f)) => l.eq_ignore_ascii_case(f),
+                (Some(l), Some(f)) => queries::same_language(l, f),
                 (l, f) => l.is_none() && f.is_none(),
             };
             json!({
