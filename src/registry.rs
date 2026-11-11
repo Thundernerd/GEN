@@ -7,6 +7,7 @@ use std::sync::Arc;
 
 use tokio::sync::watch;
 
+use crate::catalog;
 use crate::classify::Classifier;
 use crate::config::{
     EngineConfig, OutletConfig, Owner, SourceConfig, SourcesConfig, check_url, source_id,
@@ -146,6 +147,13 @@ impl NewOwner {
             return Err("Enter at least one language.".into());
         }
         Ok(())
+    }
+
+    /// Spells an engine's languages the way `known` spells them: see [`spell_languages`].
+    fn spell_languages<'a>(&mut self, known: impl IntoIterator<Item = &'a str>) {
+        if let NewOwner::Engine(e) = self {
+            e.languages = spell_languages(std::mem::take(&mut e.languages), known);
+        }
     }
 
     /// Checks an engine/outlet before it is added or changed. The error is a message for
@@ -339,18 +347,20 @@ impl SourceRegistry {
             }
             SourceEdit::AddOwner(mut owner) => {
                 owner.check_new().map_err(EditError::Invalid)?;
-                if let NewOwner::Engine(engine) = &mut owner {
-                    // The catalog's spelling first, then the stored engines'.
-                    let mut known: Vec<&str> = crate::catalog::languages().collect();
-                    let stored_languages = current.config.engines.iter().flat_map(|e| &e.languages);
-                    known.extend(stored_languages.map(String::as_str));
-                    engine.languages =
-                        spell_languages(std::mem::take(&mut engine.languages), known);
-                }
                 let id = owner.id().to_string();
                 if current.has_owner(&id) {
                     return Err(EditError::Invalid(format!("“{id}” is already used.")));
                 }
+                // The catalog's spelling first, then the stored engines'.
+                let mut known: Vec<&str> = catalog::languages().collect();
+                known.extend(
+                    current
+                        .config
+                        .engines
+                        .iter()
+                        .flat_map(|e| e.languages.iter().map(String::as_str)),
+                );
+                owner.spell_languages(known);
                 let mut rows = Vec::new();
                 for config in owner.take_sources() {
                     config.check().map_err(EditError::Invalid)?;
@@ -543,17 +553,16 @@ fn spell_languages<'a>(
     for language in known {
         spellings.entry(language.to_lowercase()).or_insert(language);
     }
-    let mut spelled: Vec<String> = Vec::new();
+    let mut seen = HashSet::new();
+    let mut spelled = Vec::new();
     for language in typed {
-        let language = match spellings.get(&language.to_lowercase()) {
-            Some(existing) => existing.to_string(),
-            None => language,
-        };
-        if !spelled
-            .iter()
-            .any(|l| l.to_lowercase() == language.to_lowercase())
-        {
-            spelled.push(language);
+        let key = language.to_lowercase();
+        if seen.insert(key.clone()) {
+            spelled.push(
+                spellings
+                    .get(&key)
+                    .map_or(language, |known| known.to_string()),
+            );
         }
     }
     spelled
