@@ -17,7 +17,8 @@
 # spelled one way across the catalog (C#, C++, F#, GDScript, Lua, ...); `language_note`
 # adds nuance the list can't carry, e.g. "C# via the UnrealSharp plugin".
 # Sources with `enabled = false` are added switched off.
-# Aliases are matched case-insensitively as whole words against outlet articles.
+# Aliases are matched as whole words against outlet articles: case-insensitively when
+# all lowercase, case-sensitively when they contain an uppercase letter ("SDL").
 # `icon` is a PNG/JPEG/WebP logo for Discord messages: the engine's own icon, or its
 # GitHub organization's avatar (never a person's).
 #
@@ -619,7 +620,7 @@ languages = ["Python"]
 language_note = "Ren'Py script, a Python-based language"
 homepage = "https://www.renpy.org"
 icon = "https://avatars.githubusercontent.com/u/1900740?s=128&v=4"
-aliases = ["ren'py", "renpy"]
+aliases = ["ren'py"]
   [[engine.source]]
   kind = "feed"
   url = "https://www.renpy.org/feed/"
@@ -1131,6 +1132,7 @@ aliases = ["ebitengine", "ebiten"]
   category = "release"
 
 # --- LÖVE ---------------------------------------------------------------------------
+# love2d.org has no news feed; its releases.xml repeats the GitHub releases.
 # "love" is an ordinary word, so only the umlauted name and "love2d" are aliases.
 [[engine]]
 id = "love"
@@ -1140,11 +1142,6 @@ languages = ["Lua"]
 homepage = "https://love2d.org"
 icon = "https://love2d.org/apple-touch-icon.png"
 aliases = ["löve", "löve2d", "love2d"]
-  [[engine.source]]
-  kind = "feed"
-  url = "https://love2d.org/releases.xml"
-  category = "release"
-  interval_minutes = 180
   [[engine.source]]
   kind = "github"
   repo = "love2d/love"
@@ -1166,11 +1163,11 @@ aliases = ["heaps.io", "heaps engine", "heaps framework", "heapsio"]
   category = "release"
 
 # --- Flame --------------------------------------------------------------------------
-# flame-engine/flame is a monorepo that releases many packages; the engine's own tags
-# are `v1.x` up to 1.38 and `flame-v...` before and after (2.0 previews), so the
-# releases source keeps `flame-v` tags and the tags source keeps `v` tags. Each batch
-# tags about 20 packages, so a poll sees at most a few engine releases. The site has
-# no feed. "flame" is an ordinary word, so only multi-word aliases.
+# flame-engine/flame is a monorepo that releases about 30 packages at a time; the
+# engine's own tags are `v1.x` up to 1.38 and `flame-v...` before and after (2.0
+# previews). The tags source keeps `flame-v` tags and the releases source `v` tags (1.x
+# maintenance releases). A batch can push the engine's tag out of the window GitHub
+# returns, so some engine releases may be missed. The site has no feed. "flame" is an ordinary word, so only multi-word aliases.
 [[engine]]
 id = "flame"
 name = "Flame"
@@ -1182,13 +1179,13 @@ aliases = ["flame engine", "flame-engine", "flutter flame", "flame game engine"]
   [[engine.source]]
   kind = "github"
   repo = "flame-engine/flame"
-  tag_prefix = "flame-v"
+  tag_prefix = "v"
   category = "release"
   [[engine.source]]
   kind = "github"
   repo = "flame-engine/flame"
   mode = "tags"
-  tag_prefix = "v"
+  tag_prefix = "flame-v"
   category = "release"
 
 # --- SDL ----------------------------------------------------------------------------
@@ -1258,13 +1255,12 @@ aliases = ["openfl"]
 
 # --- Pygame -------------------------------------------------------------------------
 # pygame.org returned 502 on 2026-11-11 and has no usable feed. Both the original
-# pygame and its active community edition fork, pygame-ce, are tracked.
+# pygame and pygame-ce, its active community edition fork, are tracked.
 [[engine]]
 id = "pygame"
 name = "Pygame"
 tier = 3
 languages = ["Python"]
-language_note = "pygame-ce is the community edition fork"
 homepage = "https://www.pygame.org"
 icon = "https://avatars.githubusercontent.com/u/20628127?s=128&v=4"
 aliases = ["pygame", "pygame-ce"]
