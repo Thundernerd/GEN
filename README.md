@@ -271,8 +271,8 @@ All source kinds also accept these fields:
 Tiers say how prominent and active something is and whether it's a full engine, not which language it uses; the languages show separately.
 
 - Tier 1, major engines: widely used or very active full engines, such as Unity, Unreal, Godot, GameMaker, Defold, Bevy, Cocos, GDevelop, O3DE, Stride, Flax, S&Box, Fyrox, PlayCanvas and Babylon.js.
-- Tier 2, smaller engines: niche, young or less active full engines, such as Prowl, OpenEngine, LODZERO, NeoAxis, Evergine, UNIGINE, Murder, Nu, CRYENGINE, Wicked Engine and Solar2D.
-- Tier 3, frameworks and libraries: frameworks, bindings and libraries for physics, ECS, networking, UI and more, such as MonoGame, FNA, Silk.NET, raylib, Phaser, libGDX, Arch, BEPUphysics and Mirror.
+- Tier 2, smaller engines: niche, young or less active full engines, such as Prowl, OpenEngine, LODZERO, NeoAxis, Evergine, UNIGINE, Murder, Nu, CRYENGINE, Wicked Engine, Solar2D, Ren'Py, Panda3D and jMonkeyEngine.
+- Tier 3, frameworks and libraries: frameworks, bindings and libraries for physics, ECS, networking, UI and more, such as MonoGame, FNA, Silk.NET, raylib, SDL, LÖVE, Phaser, three.js, libGDX, HaxeFlixel, Pygame, Flame, Arch, BEPUphysics and Mirror.
 
 The tier only groups engines; it doesn't decide whether they are polled. Every catalog engine and outlet the database doesn't have, of any tier, is offered as a suggestion, and its sources are polled once you add it (see "Adding and removing sources, engines and outlets"). Catalog engines and outlets are always enabled; the catalog tests check this. A single catalog source with `enabled = false` is added switched off; switch it on from the Sources page (see "Switching sources on and off").
 
