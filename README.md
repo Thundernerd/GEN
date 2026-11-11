@@ -252,7 +252,7 @@ require_engine_match = false
 | kind | Fields | Notes |
 |---|---|---|
 | `feed` | `url`, `cache_bust` (bool) | RSS, Atom or JSON Feed. `cache_bust` defeats stale CDN caches. |
-| `github` | `repo` (`owner/repo`), `mode`, `tag_prefix` | Releases (with the prerelease flag), tags or commits. A bare version title is prefixed with the repo name minus a `-builds` suffix, so `godotengine/godot-builds` releases read `godot 4.8-beta3` and its stable releases merge with `godotengine/godot`'s. |
+| `github` | `repo` (`owner/repo`), `mode`, `tag_prefix` | Releases (with the prerelease flag), tags or commits. `tag_prefix` keeps only tags that start with it; with a token, a releases source with a `tag_prefix` reads the 100 newest releases instead of 30, so a monorepo's other packages don't push the matching release out. A bare version title is prefixed with the repo name minus a `-builds` suffix, so `godotengine/godot-builds` releases read `godot 4.8-beta3` and its stable releases merge with `godotengine/godot`'s. |
 | `unity` | `limit` (default 25) | Unity editor releases API. |
 | `hn` | `query` | Hacker News search via Algolia. |
 | `html` | `url`, `item`, `title`, `link`, `date` | Scrapes a page. `item` is a CSS selector matching one element per entry; the others are relative to it. |

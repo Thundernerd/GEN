@@ -2,8 +2,9 @@
 //!
 //! Releases use the REST API when a token is configured (it carries the prerelease flag
 //! and hides drafts), otherwise the public `releases.atom` feed. Tags and commits always
-//! use the Atom feeds. Conditional requests (ETag / 304) go through `Http::get_conditional`;
-//! GitHub does not count 304s against the API rate limit.
+//! use the Atom feeds. A releases source with a `tag_prefix` asks the API for a wider page,
+//! since monorepos publish many packages at once. Conditional requests (ETag / 304) go
+//! through `Http::get_conditional`; GitHub does not count 304s against the API rate limit.
 //!
 //! Titles that are just a version (e.g. Godot's `4.7.2-stable`, S&Box's `26.10.13`) are
 //! prefixed with the repository name so they make sense out of context
