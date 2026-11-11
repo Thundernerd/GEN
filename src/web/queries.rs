@@ -10,7 +10,10 @@ use crate::store::{ItemQuery, Store};
 
 use super::view::{Lookup, mentions_csharp};
 
-/// Rows fetched per round when filtering in Rust (tier / C# filters).
+/// The language whose outlet articles are also kept when they mention it.
+pub const CSHARP: &str = "C#";
+
+/// Rows fetched per round when filtering in Rust (tier / language filters).
 const SCAN_BATCH: u32 = 500;
 
 /// Item list filters shared by the timeline, the feed and the JSON API.
@@ -20,8 +23,9 @@ pub struct ItemFilter {
     pub kind: Option<ItemKind>,
     /// Only items tagged with an engine of this tier.
     pub tier: Option<u8>,
-    /// Only items tagged with a C#-capable engine, or outlet items mentioning C#.
-    pub csharp: bool,
+    /// Only items tagged with an engine programmed in this language (any case). For C#,
+    /// also outlet items mentioning C# or .NET.
+    pub lang: Option<String>,
     /// Full-text search over title and summary.
     pub q: Option<String>,
 }
@@ -38,7 +42,7 @@ impl ItemFilter {
     }
 
     fn needs_scan(&self) -> bool {
-        self.tier.is_some() || self.csharp
+        self.tier.is_some() || self.lang.is_some()
     }
 
     /// The part of the filter the store can't express.
@@ -49,15 +53,18 @@ impl ItemFilter {
         {
             return false;
         }
-        if self.csharp {
-            let csharp_engine = item
-                .engines
-                .iter()
-                .any(|e| tier_of(e).is_some_and(|t| t <= 2));
-            let outlet_mention = lookup.outlet_sources.contains(&item.source_id)
+        if let Some(lang) = &self.lang {
+            let lang_engine = item.engines.iter().any(|e| {
+                sources
+                    .engine(e)
+                    .is_some_and(|e| e.languages.iter().any(|l| l.eq_ignore_ascii_case(lang)))
+            });
+            // Only C# has a keyword rule: names like "Go" or "Rust" are too ambiguous in prose.
+            let outlet_mention = lang.eq_ignore_ascii_case(CSHARP)
+                && lookup.outlet_sources.contains(&item.source_id)
                 && (mentions_csharp(&item.title)
                     || item.summary.as_deref().is_some_and(mentions_csharp));
-            if !csharp_engine && !outlet_mention {
+            if !lang_engine && !outlet_mention {
                 return false;
             }
         }
@@ -140,4 +147,97 @@ pub fn engine_stats(store: &Store) -> anyhow::Result<HashMap<String, EngineStats
         ))
     })?;
     Ok(rows.collect::<Result<_, _>>()?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const SOURCES: &str = r#"
+[[engine]]
+id = "godot"
+name = "Godot"
+tier = 1
+languages = ["GDScript", "C#", "C++"]
+  [[engine.source]]
+  kind = "github"
+  repo = "godotengine/godot"
+  category = "release"
+
+[[engine]]
+id = "bevy"
+name = "Bevy"
+tier = 3
+languages = ["Rust"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://bevyengine.org/news/rss.xml"
+  category = "news"
+
+[[outlet]]
+id = "gfs"
+name = "GameFromScratch"
+  [[outlet.source]]
+  kind = "feed"
+  url = "https://gamefromscratch.com/feed/"
+  category = "news"
+"#;
+    const GODOT_SRC: &str = "godot:github:godotengine/godot";
+    const BEVY_SRC: &str = "bevy:feed:https://bevyengine.org/news/rss.xml";
+    const GFS_SRC: &str = "gfs:feed:https://gamefromscratch.com/feed/";
+
+    fn item(source: &str, engines: &[&str], title: &str) -> Item {
+        Item {
+            id: 1,
+            source_id: source.into(),
+            guid: title.into(),
+            engines: engines.iter().map(|e| e.to_string()).collect(),
+            kind: ItemKind::News,
+            title: title.into(),
+            url: None,
+            summary: None,
+            published: None,
+            first_seen: Utc::now(),
+            story_key: title.into(),
+            duplicate_of: None,
+            image_url: None,
+            image_checked: false,
+        }
+    }
+
+    /// Whether a filter on `lang` keeps `item`.
+    fn keeps(lang: &str, item: &Item) -> bool {
+        let sources: SourcesConfig = toml::from_str(SOURCES).unwrap();
+        let lookup = Lookup::new(&sources);
+        let filter = ItemFilter {
+            lang: Some(lang.into()),
+            ..Default::default()
+        };
+        filter.matches(item, &sources, &lookup)
+    }
+
+    #[test]
+    fn language_filter_keeps_items_of_engines_with_that_language() {
+        assert!(keeps("Rust", &item(BEVY_SRC, &["bevy"], "Bevy 0.17")));
+        assert!(!keeps("Rust", &item(GODOT_SRC, &["godot"], "Godot 4.8")));
+    }
+
+    #[test]
+    fn csharp_filter_ignores_case_and_keeps_outlet_items_mentioning_dotnet() {
+        let godot = item(GODOT_SRC, &["godot"], "Godot 4.8");
+        for lang in ["C#", "c#"] {
+            assert!(keeps(lang, &godot), "{lang}");
+        }
+        let article = Item {
+            summary: Some("Builds on .NET 10".into()),
+            ..item(GFS_SRC, &[], "A new engine appears")
+        };
+        assert!(keeps("c#", &article));
+    }
+
+    #[test]
+    fn other_languages_have_no_keyword_rule_for_outlet_items() {
+        let article = item(GFS_SRC, &[], "Why we rewrote our engine in Rust");
+        assert!(!keeps("Rust", &article));
+    }
 }

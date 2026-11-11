@@ -29,7 +29,7 @@ use tower_http::compression::CompressionLayer;
 use tower_http::services::ServeDir;
 
 use crate::catalog;
-use crate::config::{AppConfig, Owner, SourceSpec};
+use crate::config::{AppConfig, EngineConfig, Owner, SourceSpec};
 use crate::discord_bot::BotStatusHandle;
 use crate::fetch::Http;
 use crate::health::{FetchHistory, SourceHistory};
@@ -309,6 +309,8 @@ struct ListParams {
     engine: Option<String>,
     kind: Option<String>,
     tier: Option<String>,
+    lang: Option<String>,
+    /// Alias of `lang=C#`, kept for links made before the language filter.
     csharp: Option<String>,
     q: Option<String>,
     page: Option<String>,
@@ -328,10 +330,14 @@ impl ListParams {
             engine: non_empty(&self.engine),
             kind: non_empty(&self.kind).and_then(|k| ItemKind::parse(&k)),
             tier: non_empty(&self.tier).and_then(|t| t.parse().ok()),
-            csharp: matches!(
-                non_empty(&self.csharp).as_deref(),
-                Some("1" | "on" | "true" | "yes")
-            ),
+            // `csharp=1` is what the C# toggle linked to before languages; it means `lang=C#`.
+            lang: non_empty(&self.lang).or_else(|| {
+                matches!(
+                    non_empty(&self.csharp).as_deref(),
+                    Some("1" | "on" | "true" | "yes")
+                )
+                .then(|| queries::CSHARP.to_string())
+            }),
             q: non_empty(&self.q),
         }
     }
@@ -351,7 +357,7 @@ fn filter_pairs(f: &ItemFilter) -> Vec<(&'static str, Option<String>)> {
         ("engine", f.engine.clone()),
         ("kind", f.kind.map(|k| k.as_str().to_string())),
         ("tier", f.tier.map(|t| t.to_string())),
-        ("csharp", f.csharp.then(|| "1".to_string())),
+        ("lang", f.lang.clone()),
         ("q", f.q.clone()),
     ]
 }
@@ -388,6 +394,26 @@ fn pagination(
         "prev": (page > 1).then(|| link(page - 1)),
         "next": has_more.then(|| link(page + 1)),
     })
+}
+
+/// The languages `engines` are programmed in, deduplicated regardless of case (keeping
+/// the first spelling), the most used first, then by name.
+fn languages_of<'a>(engines: impl Iterator<Item = &'a EngineConfig>) -> Vec<String> {
+    let mut counted: Vec<(String, usize)> = Vec::new();
+    for language in engines.flat_map(|e| &e.languages) {
+        match counted
+            .iter_mut()
+            .find(|(l, _)| l.eq_ignore_ascii_case(language))
+        {
+            Some((_, n)) => *n += 1,
+            None => counted.push((language.clone(), 1)),
+        }
+    }
+    counted.sort_by(|(a, an), (b, bn)| {
+        bn.cmp(an)
+            .then_with(|| a.to_lowercase().cmp(&b.to_lowercase()))
+    });
+    counted.into_iter().map(|(l, _)| l).collect()
 }
 
 fn kind_names() -> Vec<&'static str> {
@@ -466,7 +492,24 @@ async fn index_page(
             })
         })
         .collect();
-    let csharp_link = link("csharp", (!filter.csharp).then(|| "1".to_string()));
+    let language_links: Vec<_> = std::iter::once(None)
+        .chain(
+            languages_of(snapshot.config.enabled_engines())
+                .into_iter()
+                .map(Some),
+        )
+        .map(|l| {
+            let active = match (&l, &filter.lang) {
+                (Some(l), Some(f)) => l.eq_ignore_ascii_case(f),
+                (l, f) => l.is_none() && f.is_none(),
+            };
+            json!({
+                "label": l.as_deref().unwrap_or("all languages"),
+                "url": link("lang", l.clone()),
+                "active": active,
+            })
+        })
+        .collect();
     let feed_pairs = filter_pairs(&filter.clone().for_feed());
     st.render(
         "index.html",
@@ -477,16 +520,16 @@ async fn index_page(
             "items": st.item_views(&items, &dups),
             "kind_tabs": kind_tabs,
             "engine_links": engine_links,
-            "csharp_link": csharp_link,
+            "language_links": language_links,
             "search": search_box("/", &pairs, link("q", None)),
             "filter": {
                 "engine": filter.engine,
                 "kind": filter.kind.map(ItemKind::as_str),
                 "tier": filter.tier,
-                "csharp": filter.csharp,
+                "lang": filter.lang,
                 "q": filter.q,
                 "active": filter.engine.is_some() || filter.kind.is_some()
-                    || filter.tier.is_some() || filter.csharp || filter.q.is_some(),
+                    || filter.tier.is_some() || filter.lang.is_some() || filter.q.is_some(),
             },
             "pagination": pagination("/", &pairs, page, has_more),
             "feed_url": format!("/feed.xml{}", query_string(&feed_pairs)),
