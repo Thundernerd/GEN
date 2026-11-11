@@ -100,7 +100,14 @@ impl Pipeline {
             })
             .await?;
         let was_seeded = state.is_seeded();
+        // An entry dated well before the source's newest item came into view late, e.g.
+        // because the source's window grew: it isn't news. Undated entries can't tell.
         let notify_cutoff = newest_published.map(|newest| newest - NOTIFY_GRACE);
+        let is_late_arrival = |item: &NewItem| {
+            item.published
+                .zip(notify_cutoff)
+                .is_some_and(|(published, cutoff)| published < cutoff)
+        };
 
         let outcome = match fetch::fetch_source(&self.http, source, &state).await {
             Ok(outcome) => outcome,
@@ -151,11 +158,7 @@ impl Pipeline {
                     .into_iter()
                     .filter_map(|raw| snapshot.classifier.classify(source, raw))
                     .map(|item| NewItem {
-                        notify: was_seeded
-                            && !matches!(
-                                (item.published, notify_cutoff),
-                                (Some(published), Some(cutoff)) if published < cutoff
-                            ),
+                        notify: was_seeded && !is_late_arrival(&item),
                         ..item
                     })
                     .collect();
