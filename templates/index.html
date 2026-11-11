@@ -8,11 +8,15 @@
   {%- for t in kind_tabs %}
   <a href="{{ t.url }}"{% if t.active %} aria-current="page"{% endif %}>{% if t.kind %}<i class="kind-dot kind-{{ t.kind }}" aria-hidden="true"></i>{% endif %}{{ t.label }}</a>
   {%- endfor %}
-  <a class="tab-toggle" href="{{ csharp_link }}"{% if filter.csharp %} aria-current="page"{% endif %}>C# only</a>
 </nav>
-<nav class="engine-filter" aria-label="Engine">
+<nav class="filter-row" aria-label="Engine">
   {%- for e in engine_links %}
   <a href="{{ e.url }}"{% if e.active %} aria-current="page"{% endif %}>{{ e.label }}</a>
+  {%- endfor %}
+</nav>
+<nav class="filter-row" aria-label="Language">
+  {%- for l in language_links %}
+  <a href="{{ l.url }}"{% if l.active %} aria-current="page"{% endif %}>{{ l.label }}</a>
   {%- endfor %}
 </nav>
 {% include "_search.html" %}
