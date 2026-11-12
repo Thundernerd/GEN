@@ -17,6 +17,8 @@ const SEEDED_KEY: &str = "seeded";
 const ICONS_KEY: &str = "catalog_icons_backfilled";
 /// `meta` key set once the catalog's languages were copied into stored engines.
 const LANGUAGES_KEY: &str = "catalog_languages_backfilled";
+/// `meta` key set once the language notes from before #81 were rewritten.
+const LANGUAGE_NOTES_KEY: &str = "catalog_language_notes_rewritten";
 /// `meta` key set once Flame's sources from before #70 were migrated.
 const FLAME_SOURCES_KEY: &str = "flame_sources_migrated";
 /// Flame's releases source, which kept its id across #70.
@@ -198,6 +200,85 @@ pub fn backfill_languages_once(registry: &SourceRegistry, store: &mut Store) -> 
     Ok(())
 }
 
+/// The catalog's language notes before #81, for the engines whose note changed. Their
+/// languages didn't change.
+const OLD_LANGUAGE_NOTES: &[(&str, &str)] = &[
+    ("unity", "C# scripting, C++ core"),
+    ("unreal", "C# via the UnrealSharp plugin"),
+    ("godot", "C# in the .NET build"),
+    ("stride", "engine written in C#"),
+    ("flax", "C# scripting, C++ core"),
+    ("sbox", "C# on Source 2"),
+    ("o3de", "community C# gem only"),
+    ("prowl", "engine written in C#, .NET 8"),
+    ("lodzero", "engine written in C#"),
+    ("openengine", ".NET 10 CoreCLR, hot reload"),
+    ("neoaxis", "C# engine and scripting"),
+    ("evergine", "engine written in C#"),
+    ("unigine", "C# API"),
+    ("murder", "engine written in C#"),
+    ("flatredball", "C# engine on MonoGame/FNA"),
+    ("nu", "engine written in F# on .NET"),
+    ("rbfx", "C# bindings; Urho3D fork"),
+    ("blazium", "Godot fork; C# in the .NET build"),
+    ("cryengine", "legacy C# support"),
+    ("monogame", "C# framework"),
+    ("fna", "XNA4 reimplementation in C#"),
+    ("brutal", "C# framework over native libraries, Vulkan"),
+    ("kni", "XNA-style C# framework"),
+    ("raylibcs", "raylib bindings for C#"),
+    ("foster", "C# framework"),
+    ("moonworks", "C# framework"),
+    ("gum", "C# UI layout tool and runtime"),
+    ("myra", "C# UI library"),
+    ("sadconsole", "C# console/roguelike library"),
+    ("osu-framework", "C# framework"),
+    ("arch", "C# ECS library"),
+    ("friflo", "C# ECS library"),
+    ("bepu", "C# physics library"),
+    ("jitter", "C# physics library"),
+    ("mirror", "Unity C# networking library"),
+    ("fishnet", "Unity C# networking library"),
+    ("box2dnet", "C# port of Box2D"),
+    ("dotrecast", "C# port of Recast & Detour"),
+    ("moonsharp", "Lua interpreter written in C#"),
+    ("raylib", "see Raylib-cs for C# bindings"),
+];
+
+/// Once per database: gives catalog engines whose language note and languages are still
+/// the catalog's from before #81 the catalog's new note. An engine whose note or
+/// languages the admin changed is left alone.
+pub fn rewrite_language_notes_once(
+    registry: &SourceRegistry,
+    store: &mut Store,
+) -> anyhow::Result<()> {
+    if store.meta(LANGUAGE_NOTES_KEY)?.is_some() {
+        return Ok(());
+    }
+    let snapshot = registry.current();
+    for (id, old_note) in OLD_LANGUAGE_NOTES {
+        let (Some(engine), Some(catalog_engine)) = (snapshot.config.engine(id), CATALOG.engine(id))
+        else {
+            continue;
+        };
+        if engine.language_note.as_deref() != Some(*old_note)
+            || engine.languages != catalog_engine.languages
+        {
+            continue;
+        }
+        let edit = SourceEdit::SetEngineLanguages {
+            engine_id: engine.id.clone(),
+            languages: catalog_engine.languages.clone(),
+            language_note: catalog_engine.language_note.clone(),
+        };
+        registry
+            .apply(store, edit)
+            .map_err(|err| anyhow::anyhow!("rewriting the language note of {id}: {err}"))?;
+    }
+    store.set_meta(LANGUAGE_NOTES_KEY, &chrono::Utc::now().to_rfc3339())?;
+    Ok(())
+}
+
 /// Once per database: moves Flame from its catalog sources before #70 (a releases source
 /// with the `v` prefix and a tags source with `flame-v`, which reads only the 10 entries of
 /// `tags.atom`) to the one releases source with both prefixes. The releases source keeps
@@ -320,6 +401,34 @@ mod tests {
     }
 
     #[test]
+    fn language_notes_add_what_the_languages_list_cannot() {
+        let dotnet_version = regex::Regex::new(r"(?i)\.net \d").unwrap();
+        for engine in &CATALOG.engines {
+            let Some(note) = &engine.language_note else {
+                continue;
+            };
+            let lower = note.to_lowercase();
+            assert!(!dotnet_version.is_match(note), "{}: {note}", engine.id);
+            for banned in ["hot reload", "written in c#", "plugin", "raylib-cs"] {
+                assert!(!lower.contains(banned), "{}: {note}", engine.id);
+            }
+            // "framework in C#" or "bindings for C#" only repeats the list.
+            for language in &engine.languages {
+                let language = language.to_lowercase();
+                for by in [" in ", " for "] {
+                    let repeats = lower.contains(&format!("{by}{language}"));
+                    assert!(!repeats, "{}: {note}", engine.id);
+                }
+            }
+            // So does "C# framework" on a C#-only engine.
+            if let [language] = &engine.languages[..] {
+                let repeats = lower.starts_with(&format!("{} ", language.to_lowercase()));
+                assert!(!repeats, "{}: {note}", engine.id);
+            }
+        }
+    }
+
+    #[test]
     fn godot_tracks_prereleases_from_godot_builds() {
         // Godot's dev, beta and RC builds are only published in godot-builds.
         assert!(has_source("godot:github:godotengine/godot-builds"));
@@ -429,32 +538,113 @@ mod tests {
         let reg = SourceRegistry::load(&store).unwrap();
 
         backfill_languages_once(&reg, &mut store).unwrap();
-        let languages = |reg: &SourceRegistry, id: &str| {
-            let snapshot = reg.current();
-            let engine = snapshot.config.engine(id).unwrap();
-            (engine.languages.clone(), engine.language_note.clone())
-        };
         assert_eq!(
-            languages(&reg, "godot"),
+            languages_and_note(&reg, "godot"),
             (
                 vec!["GDScript".into(), "C#".into(), "C++".into()],
-                Some("C# in the .NET build".into())
+                Some("C# needs the .NET build".into())
             )
         );
         assert_eq!(
-            languages(&reg, "mine"),
+            languages_and_note(&reg, "mine"),
             (Vec::new(), Some("none (Rust)".into())),
             "not in the catalog"
         );
         // Stored, so it survives a restart.
         let reloaded = SourceRegistry::load(&store).unwrap();
-        assert_eq!(languages(&reloaded, "godot").0.len(), 3);
+        assert_eq!(languages_and_note(&reloaded, "godot").0.len(), 3);
 
         // Only once: an engine stored in the old shape later is left alone.
         store_old_engine(&mut store, "unity", "native (C# scripting)");
         let reg = SourceRegistry::load(&store).unwrap();
         backfill_languages_once(&reg, &mut store).unwrap();
-        assert!(languages(&reg, "unity").0.is_empty());
+        assert!(languages_and_note(&reg, "unity").0.is_empty());
+    }
+
+    /// Adds catalog engine `id` with language note `note`, e.g. its note from before #81.
+    fn store_engine_with_note(reg: &SourceRegistry, store: &mut Store, id: &str, note: &str) {
+        let mut engine = CATALOG.engine(id).cloned().unwrap();
+        engine.language_note = Some(note.into());
+        engine.sources.clear();
+        reg.apply(store, SourceEdit::AddOwner(NewOwner::Engine(engine)))
+            .unwrap();
+    }
+
+    /// Stored engine `id`'s languages and language note.
+    fn languages_and_note(reg: &SourceRegistry, id: &str) -> (Vec<String>, Option<String>) {
+        let snapshot = reg.current();
+        let engine = snapshot.config.engine(id).unwrap();
+        (engine.languages.clone(), engine.language_note.clone())
+    }
+
+    #[test]
+    fn rewrites_old_catalog_language_notes_once() {
+        let mut store = Store::open_in_memory().unwrap();
+        let reg = SourceRegistry::load(&store).unwrap();
+        store_engine_with_note(&reg, &mut store, "unreal", "C# via the UnrealSharp plugin");
+        store_engine_with_note(&reg, &mut store, "godot", "C# in the .NET build");
+
+        rewrite_language_notes_once(&reg, &mut store).unwrap();
+
+        let unreal = (vec!["C++".to_string(), "Blueprints".to_string()], None);
+        let godot = (
+            vec!["GDScript".to_string(), "C#".to_string(), "C++".to_string()],
+            Some("C# needs the .NET build".to_string()),
+        );
+        assert_eq!(languages_and_note(&reg, "unreal"), unreal);
+        assert_eq!(languages_and_note(&reg, "godot"), godot);
+        // Stored, so it survives a restart.
+        let reloaded = SourceRegistry::load(&store).unwrap();
+        assert_eq!(languages_and_note(&reloaded, "unreal"), unreal);
+    }
+
+    #[test]
+    fn rewriting_language_notes_leaves_an_admin_edited_note_alone() {
+        let mut store = Store::open_in_memory().unwrap();
+        let reg = SourceRegistry::load(&store).unwrap();
+        store_engine_with_note(&reg, &mut store, "unreal", "C# via UnrealSharp, our pick");
+        // Old note, but the admin changed the languages.
+        store_engine_with_note(&reg, &mut store, "stride", "engine written in C#");
+        reg.apply(
+            &mut store,
+            SourceEdit::SetEngineLanguages {
+                engine_id: "stride".into(),
+                languages: vec!["C#".into(), "F#".into()],
+                language_note: Some("engine written in C#".into()),
+            },
+        )
+        .unwrap();
+
+        rewrite_language_notes_once(&reg, &mut store).unwrap();
+
+        assert_eq!(
+            languages_and_note(&reg, "unreal").1.as_deref(),
+            Some("C# via UnrealSharp, our pick")
+        );
+        assert_eq!(
+            languages_and_note(&reg, "stride"),
+            (
+                vec!["C#".to_string(), "F#".to_string()],
+                Some("engine written in C#".to_string())
+            )
+        );
+    }
+
+    #[test]
+    fn rewriting_language_notes_twice_changes_nothing() {
+        let mut store = Store::open_in_memory().unwrap();
+        let reg = SourceRegistry::load(&store).unwrap();
+        rewrite_language_notes_once(&reg, &mut store).unwrap();
+        // An engine added after the migration with the old note, e.g. restored by hand.
+        store_engine_with_note(&reg, &mut store, "unreal", "C# via the UnrealSharp plugin");
+
+        let restarted = SourceRegistry::load(&store).unwrap();
+        rewrite_language_notes_once(&restarted, &mut store).unwrap();
+
+        assert_eq!(
+            languages_and_note(&restarted, "unreal").1.as_deref(),
+            Some("C# via the UnrealSharp plugin")
+        );
     }
 
     /// Stores engine `id` as JSON in the shape used before `languages` existed.

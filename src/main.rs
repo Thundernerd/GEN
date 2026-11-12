@@ -392,6 +392,7 @@ fn build_pipeline(app: &AppConfig) -> anyhow::Result<Pipeline> {
     catalog::seed_once(&registry, &mut store)?;
     catalog::backfill_icons_once(&registry, &mut store)?;
     catalog::backfill_languages_once(&registry, &mut store)?;
+    catalog::rewrite_language_notes_once(&registry, &mut store)?;
     catalog::migrate_flame_sources_once(&registry, &mut store)?;
     catalog::merge_catalog_excludes(&registry, &mut store);
     notify::import_once(app, &store)?;
