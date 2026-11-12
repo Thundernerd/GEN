@@ -1,12 +1,22 @@
 {#- Search box. Expects `search` with `action`, `q`, `hidden` (other filters as
-    name/value pairs) and `clear` (the page without the search). -#}
-<form class="search" role="search" action="{{ search.action }}" method="get">
+    name/value pairs), `clear` (the page without the search, or none) and optionally
+    `selects` (dropdowns with `name`, `label` and `options` of `value`, `label`,
+    `selected`). With dropdowns it's a filter toolbar that submits as soon as one
+    changes (`static/inline-forms.js`). -#}
+<form class="{% if search.selects %}toolbar{% else %}search{% endif %}" role="search" action="{{ search.action }}" method="get"{% if search.selects %} data-autosubmit{% endif %}>
   {%- for h in search.hidden %}
   <input type="hidden" name="{{ h.name }}" value="{{ h.value }}">
   {%- endfor %}
   <input type="search" name="q" value="{{ search.q or "" }}" placeholder="Search titles and summaries" aria-label="Search">
+  {%- for s in search.selects or [] %}
+  <select name="{{ s.name }}" aria-label="{{ s.label }}">
+    {%- for o in s.options %}
+    <option value="{{ o.value }}"{% if o.selected %} selected{% endif %}>{{ o.label }}</option>
+    {%- endfor %}
+  </select>
+  {%- endfor %}
   <button type="submit">Search</button>
-  {%- if search.q %}
+  {%- if search.clear %}
   <a href="{{ search.clear }}">Clear</a>
   {%- endif %}
 </form>

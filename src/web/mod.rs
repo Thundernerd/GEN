@@ -357,7 +357,8 @@ fn filter_pairs(f: &ItemFilter) -> Vec<(&'static str, Option<String>)> {
 }
 
 /// The search box of a list page at `path` whose filters are `pairs`; the box resubmits
-/// the other filters as hidden fields. `clear` is the page without the search.
+/// the other filters as hidden fields. `clear` is the page without the search, linked
+/// while there is one.
 fn search_box(path: &str, pairs: &[(&str, Option<String>)], clear: String) -> serde_json::Value {
     let q = pairs
         .iter()
@@ -368,6 +369,7 @@ fn search_box(path: &str, pairs: &[(&str, Option<String>)], clear: String) -> se
         .filter(|(k, _)| *k != "q")
         .filter_map(|(k, v)| v.as_ref().map(|v| json!({"name": k, "value": v})))
         .collect();
+    let clear = q.is_some().then_some(clear);
     json!({"action": path, "q": q, "hidden": hidden, "clear": clear})
 }
 
@@ -521,25 +523,25 @@ async fn index_page(
             json!({"value": l, "label": l, "selected": selected})
         }))
         .collect();
-    // The filters the toolbar doesn't show, resubmitted so it keeps them.
-    let hidden: Vec<_> = pairs
+    // The toolbar: the search box with the engine and language dropdowns. It resubmits
+    // the filters it doesn't show as hidden fields.
+    let unshown: Vec<_> = pairs
         .iter()
-        .filter(|(k, _)| !matches!(*k, "q" | "engine" | "lang"))
-        .filter_map(|(k, v)| v.as_ref().map(|v| json!({"name": k, "value": v})))
+        .filter(|(k, _)| !matches!(*k, "engine" | "lang"))
+        .cloned()
         .collect();
+    let mut toolbar = search_box("/", &unshown, String::new());
     // Clear drops search, engine and language, and keeps the kind.
     let clear =
         (filter.q.is_some() || filter.engine.is_some() || filter.lang.is_some()).then(|| {
             let kind = filter.kind.map(|k| k.as_str().to_string());
             format!("/{}", query_string(&[("kind", kind)]))
         });
-    let toolbar = json!({
-        "q": filter.q,
-        "hidden": hidden,
-        "engines": engine_options,
-        "languages": language_options,
-        "clear": clear,
-    });
+    toolbar["clear"] = json!(clear);
+    toolbar["selects"] = json!([
+        {"name": "engine", "label": "Engine", "options": engine_options},
+        {"name": "lang", "label": "Language", "options": language_options},
+    ]);
     let feed_pairs = filter_pairs(&filter.clone().for_feed());
     st.render(
         "index.html",
@@ -549,7 +551,7 @@ async fn index_page(
             "view": view,
             "items": st.item_views(&items, &dups),
             "kind_tabs": kind_tabs,
-            "toolbar": toolbar,
+            "search": toolbar,
             "filter": {
                 "engine": filter.engine,
                 "kind": filter.kind.map(ItemKind::as_str),
