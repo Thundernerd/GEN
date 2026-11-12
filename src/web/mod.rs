@@ -464,7 +464,7 @@ async fn index_page(
     items.truncate(PAGE_SIZE as usize);
 
     let pairs = filter_pairs(&filter);
-    // Filter links that change one filter and keep the others.
+    // Kind tab links that change the kind and keep the other filters.
     let link = |key: &str, value: Option<String>| {
         let mut changed = pairs.clone();
         if let Some(pair) = changed.iter_mut().find(|(k, _)| *k == key) {
@@ -484,16 +484,16 @@ async fn index_page(
         })
         .collect();
     let snapshot = st.registry.current();
-    let mut engine_options: Vec<_> = snapshot
-        .config
-        .enabled_engines()
-        .map(|e| {
+    let all_engines =
+        json!({"value": "", "label": "All engines", "selected": filter.engine.is_none()});
+    let mut engine_options: Vec<_> = std::iter::once(all_engines)
+        .chain(snapshot.config.enabled_engines().map(|e| {
             json!({
                 "value": e.id,
                 "label": e.name,
                 "selected": Some(&e.id) == filter.engine.as_ref(),
             })
-        })
+        }))
         .collect();
     // Keep an engine from an old link, disabled or unknown, listed while it's active, so
     // changing the other dropdown doesn't drop it.
@@ -510,20 +510,21 @@ async fn index_page(
     {
         languages.push(lang.clone());
     }
-    let language_options: Vec<_> = languages
-        .into_iter()
-        .map(|l| {
+    let all_languages =
+        json!({"value": "", "label": "All languages", "selected": filter.lang.is_none()});
+    let language_options: Vec<_> = std::iter::once(all_languages)
+        .chain(languages.into_iter().map(|l| {
             let selected = filter
                 .lang
                 .as_ref()
                 .is_some_and(|f| queries::same_language(&l, f));
             json!({"value": l, "label": l, "selected": selected})
-        })
+        }))
         .collect();
     // The filters the toolbar doesn't show, resubmitted so it keeps them.
     let hidden: Vec<_> = pairs
         .iter()
-        .filter(|(k, _)| matches!(*k, "kind" | "tier"))
+        .filter(|(k, _)| !matches!(*k, "q" | "engine" | "lang"))
         .filter_map(|(k, v)| v.as_ref().map(|v| json!({"name": k, "value": v})))
         .collect();
     // Clear drops search, engine and language, and keeps the kind.

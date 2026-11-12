@@ -196,15 +196,14 @@ main.wrap { padding-top: 2.5rem; padding-bottom: 3rem; }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 1.25rem 0 1.5rem; }
 .toolbar input[type="search"] { flex: 1 1 14rem; min-width: 0; }
 .toolbar select { flex: 0 1 auto; min-width: 0; max-width: 13rem; }
-.toolbar input[type="search"], .toolbar select { font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.6rem; }
-.toolbar button { font: inherit; font-size: 0.85rem; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.75rem; cursor: pointer; }
-.toolbar a { font-size: 0.85rem; color: var(--muted); }
 .toolbar + .notice { margin-top: -0.5rem; }
 
 .search { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 1rem; }
-.search input[type="search"] { flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.6rem; }
-.search button { font: inherit; font-size: 0.85rem; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.75rem; cursor: pointer; }
-.search a { font-size: 0.85rem; color: var(--muted); }
+.search input[type="search"] { flex: 1; min-width: 0; }
+/* The search box and toolbar share their controls' look. */
+.search input[type="search"], .toolbar input[type="search"], .toolbar select { font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.6rem; }
+.search button, .toolbar button { font: inherit; font-size: 0.85rem; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.75rem; cursor: pointer; }
+.search a, .toolbar a { font-size: 0.85rem; color: var(--muted); }
 
 /* -- item timeline: one section per day, one row per item --------------------- */
 

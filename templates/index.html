@@ -15,13 +15,11 @@
   {%- endfor %}
   <input type="search" name="q" value="{{ toolbar.q or "" }}" placeholder="Search titles and summaries" aria-label="Search">
   <select name="engine" aria-label="Engine">
-    <option value=""{% if not filter.engine %} selected{% endif %}>All engines</option>
     {%- for e in toolbar.engines %}
     <option value="{{ e.value }}"{% if e.selected %} selected{% endif %}>{{ e.label }}</option>
     {%- endfor %}
   </select>
   <select name="lang" aria-label="Language">
-    <option value=""{% if not filter.lang %} selected{% endif %}>All languages</option>
     {%- for l in toolbar.languages %}
     <option value="{{ l.value }}"{% if l.selected %} selected{% endif %}>{{ l.label }}</option>
     {%- endfor %}
