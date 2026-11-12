@@ -1026,7 +1026,7 @@ id = "moonsharp"
 name = "MoonSharp"
 tier = 3
 languages = ["C#", "Lua"]
-language_note = "Lua interpreter to embed in C# games"
+language_note = "embeddable Lua interpreter"
 homepage = "https://www.moonsharp.org"
 icon = "https://avatars.githubusercontent.com/u/54413747?s=128&v=4"
 aliases = ["moonsharp"]

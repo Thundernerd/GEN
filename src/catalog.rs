@@ -412,13 +412,18 @@ mod tests {
             for banned in ["hot reload", "written in c#", "plugin", "raylib-cs"] {
                 assert!(!lower.contains(banned), "{}: {note}", engine.id);
             }
-            // "C# framework" on a C#-only engine only repeats the list.
+            // "framework in C#" or "bindings for C#" only repeats the list.
+            for language in &engine.languages {
+                let language = language.to_lowercase();
+                for by in [" in ", " for "] {
+                    let repeats = lower.contains(&format!("{by}{language}"));
+                    assert!(!repeats, "{}: {note}", engine.id);
+                }
+            }
+            // So does "C# framework" on a C#-only engine.
             if let [language] = &engine.languages[..] {
-                assert!(
-                    !lower.starts_with(&language.to_lowercase()),
-                    "{}: {note}",
-                    engine.id
-                );
+                let repeats = lower.starts_with(&format!("{} ", language.to_lowercase()));
+                assert!(!repeats, "{}: {note}", engine.id);
             }
         }
     }
