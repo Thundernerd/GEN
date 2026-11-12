@@ -257,8 +257,7 @@ pub fn rewrite_language_notes_once(
     }
     let snapshot = registry.current();
     for (id, old_note) in OLD_LANGUAGE_NOTES {
-        let (Some(engine), Some(catalog_engine)) =
-            (snapshot.config.engine(id), CATALOG.engine(id))
+        let (Some(engine), Some(catalog_engine)) = (snapshot.config.engine(id), CATALOG.engine(id))
         else {
             continue;
         };
