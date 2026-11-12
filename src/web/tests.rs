@@ -380,6 +380,10 @@ async fn timeline_language_picker() {
     // The kind tabs keep it.
     assert!(body.contains(r#"href="&#x2f;?kind=release&amp;lang=Rust""#));
 
+    // The old C# toggle selects C#.
+    let (_, _, body) = get("/?csharp=1").await;
+    assert_eq!(selected(&body, "lang"), ["C#"]);
+
     // A language no enabled engine uses is still listed, as the selected one.
     let (_, _, body) = get("/?lang=Lua").await;
     assert_eq!(
