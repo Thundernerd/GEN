@@ -320,6 +320,29 @@ mod tests {
     }
 
     #[test]
+    fn language_notes_add_what_the_languages_list_cannot() {
+        let dotnet_version = regex::Regex::new(r"(?i)\.net \d").unwrap();
+        for engine in &CATALOG.engines {
+            let Some(note) = &engine.language_note else {
+                continue;
+            };
+            let lower = note.to_lowercase();
+            assert!(!dotnet_version.is_match(note), "{}: {note}", engine.id);
+            for banned in ["hot reload", "written in c#", "plugin", "raylib-cs"] {
+                assert!(!lower.contains(banned), "{}: {note}", engine.id);
+            }
+            // "C# framework" on a C#-only engine only repeats the list.
+            if let [language] = &engine.languages[..] {
+                assert!(
+                    !lower.starts_with(&language.to_lowercase()),
+                    "{}: {note}",
+                    engine.id
+                );
+            }
+        }
+    }
+
+    #[test]
     fn godot_tracks_prereleases_from_godot_builds() {
         // Godot's dev, beta and RC builds are only published in godot-builds.
         assert!(has_source("godot:github:godotengine/godot-builds"));
@@ -438,7 +461,7 @@ mod tests {
             languages(&reg, "godot"),
             (
                 vec!["GDScript".into(), "C#".into(), "C++".into()],
-                Some("C# in the .NET build".into())
+                Some("C# needs the .NET build".into())
             )
         );
         assert_eq!(

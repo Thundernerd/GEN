@@ -14,8 +14,16 @@
 # 2 = smaller engines (niche, young or less active full engines), 3 = frameworks and
 # libraries (frameworks, bindings and libraries: physics, ECS, networking, UI, ...).
 # `languages` lists the languages you write games in with the engine, primary first,
-# spelled one way across the catalog (C#, C++, F#, GDScript, Lua, ...); `language_note`
-# adds nuance the list can't carry, e.g. "C# via the UnrealSharp plugin".
+# spelled one way across the catalog (C#, C++, F#, GDScript, Lua, ...). It lists what the
+# engine supports itself: a language only a third-party plugin or binding adds is left out.
+# `language_note` is optional and shown after the languages. Give one only when it tells a
+# reader of any language something the list can't, in language-neutral words:
+#   - how scripting works when the list doesn't say ("visual events, JavaScript"),
+#   - what it builds on ("Godot fork", "MonoGame library", "built on Source 2"),
+#   - a real restriction ("C# needs the .NET build", "C# support is legacy").
+# Leave it out when it would only repeat the list ("C# framework", "C# API"), give an
+# implementation detail (runtime versions, hot reload, what the engine itself is written
+# in), or point to a third-party plugin or binding for one language.
 # Sources with `enabled = false` are added switched off.
 # Aliases are matched as whole words against outlet articles: case-insensitively when
 # all lowercase, case-sensitively when they contain an uppercase letter ("SDL").
@@ -37,7 +45,6 @@ id = "unity"
 name = "Unity"
 tier = 1
 languages = ["C#"]
-language_note = "C# scripting, C++ core"
 homepage = "https://unity.com"
 icon = "https://unity.com/apple-touch-icon.png"
 aliases = ["Unity", "UNITY", "unity3d", "unity engine", "unity 6", "unity technologies"]
@@ -65,7 +72,6 @@ id = "unreal"
 name = "Unreal Engine"
 tier = 1
 languages = ["C++", "Blueprints"]
-language_note = "C# via the UnrealSharp plugin"
 homepage = "https://www.unrealengine.com"
 icon = "https://avatars.githubusercontent.com/u/6615685?s=128&v=4"
 aliases = ["unreal", "unreal engine", "ue5", "ue6", "uefn", "metahuman", "nanite", "unrealsharp"]
@@ -88,7 +94,7 @@ id = "godot"
 name = "Godot"
 tier = 1
 languages = ["GDScript", "C#", "C++"]
-language_note = "C# in the .NET build"
+language_note = "C# needs the .NET build"
 homepage = "https://godotengine.org"
 icon = "https://godotengine.org/assets/favicon.png"
 aliases = ["godot", "godot engine", "gdscript"]
@@ -113,7 +119,6 @@ id = "stride"
 name = "Stride"
 tier = 1
 languages = ["C#"]
-language_note = "engine written in C#"
 homepage = "https://www.stride3d.net"
 icon = "https://www.stride3d.net/favicon.png"
 aliases = ["stride3d", "stride engine", "stride game engine", "xenko"]
@@ -133,7 +138,6 @@ id = "flax"
 name = "Flax Engine"
 tier = 1
 languages = ["C#", "C++"]
-language_note = "C# scripting, C++ core"
 homepage = "https://flaxengine.com"
 icon = "https://flaxengine.com/wp-content/uploads/2020/12/cropped-Web_Logo_512-180x180.png"
 aliases = ["flax engine", "flaxengine"]
@@ -154,7 +158,7 @@ id = "sbox"
 name = "S&Box"
 tier = 1
 languages = ["C#"]
-language_note = "C# on Source 2"
+language_note = "built on Source 2"
 homepage = "https://sbox.game"
 icon = "https://sbox.game/apple-touch-icon.png"
 aliases = ["s&box", "sbox", "s and box"]
@@ -216,7 +220,6 @@ id = "o3de"
 name = "O3DE"
 tier = 1
 languages = ["C++", "Lua"]
-language_note = "community C# gem only"
 homepage = "https://o3de.org"
 icon = "https://o3de.org/wp-content/uploads/2023/06/URL-Logo.png"
 aliases = ["o3de", "open 3d engine"]
@@ -350,7 +353,6 @@ id = "prowl"
 name = "Prowl Engine"
 tier = 2
 languages = ["C#"]
-language_note = "engine written in C#, .NET 8"
 homepage = "https://github.com/ProwlEngine/Prowl"
 icon = "https://avatars.githubusercontent.com/u/163802774?s=128&v=4"
 aliases = ["prowl engine", "prowlengine"]
@@ -367,7 +369,6 @@ id = "lodzero"
 name = "LODZERO"
 tier = 2
 languages = ["C#"]
-language_note = "engine written in C#"
 homepage = "https://lodzero.com"
 aliases = ["lodzero"]
   [[engine.source]]
@@ -384,7 +385,6 @@ id = "openengine"
 name = "OpenEngine"
 tier = 2
 languages = ["C#"]
-language_note = ".NET 10 CoreCLR, hot reload"
 homepage = "https://openengine.dev"
 icon = "https://openengine.dev/apple-touch-icon.png"
 aliases = ["openengine", "game crafters guild"]
@@ -401,7 +401,6 @@ id = "neoaxis"
 name = "NeoAxis Engine"
 tier = 2
 languages = ["C#"]
-language_note = "C# engine and scripting"
 homepage = "https://www.neoaxis.com"
 icon = "https://www.neoaxis.com/images/favicon_180.png"
 aliases = ["neoaxis", "neoaxis engine"]
@@ -425,7 +424,6 @@ id = "evergine"
 name = "Evergine"
 tier = 2
 languages = ["C#"]
-language_note = "engine written in C#"
 homepage = "https://evergine.com"
 icon = "https://evergine.com/apple-touch-icon.png"
 aliases = ["evergine", "wave engine"]
@@ -442,7 +440,6 @@ id = "unigine"
 name = "UNIGINE"
 tier = 2
 languages = ["C++", "C#"]
-language_note = "C# API"
 homepage = "https://unigine.com"
 icon = "https://unigine.com/assets/images/favicons/apple-touch-icon/apple-touch-icon-152x152.png"
 aliases = ["unigine"]
@@ -459,7 +456,6 @@ id = "murder"
 name = "Murder Engine"
 tier = 2
 languages = ["C#"]
-language_note = "engine written in C#"
 homepage = "https://github.com/isadorasophia/murder"
 aliases = ["murder engine"]
   [[engine.source]]
@@ -477,7 +473,7 @@ id = "flatredball"
 name = "FlatRedBall"
 tier = 2
 languages = ["C#"]
-language_note = "C# engine on MonoGame/FNA"
+language_note = "built on MonoGame/FNA"
 homepage = "https://www.flatredball.com"
 icon = "https://flatredball.com/wp-content/uploads/2016/02/cropped-logo-1024-180x180.png"
 aliases = ["flatredball", "flat red ball"]
@@ -492,7 +488,6 @@ id = "nu"
 name = "Nu Game Engine"
 tier = 2
 languages = ["F#", "C#"]
-language_note = "engine written in F# on .NET"
 homepage = "https://github.com/bryanedds/Nu"
 aliases = ["nu game engine", "nu engine"]
   [[engine.source]]
@@ -507,7 +502,7 @@ id = "rbfx"
 name = "rbfx (Rebel Fork Framework)"
 tier = 2
 languages = ["C++", "C#"]
-language_note = "C# bindings; Urho3D fork"
+language_note = "Urho3D fork"
 homepage = "https://rebelfork.io"
 icon = "https://avatars.githubusercontent.com/u/56016730?s=128&v=4"
 aliases = ["rbfx", "rebel fork framework"]
@@ -527,7 +522,7 @@ id = "blazium"
 name = "Blazium"
 tier = 2
 languages = ["GDScript", "C#", "C++"]
-language_note = "Godot fork; C# in the .NET build"
+language_note = "Godot fork; C# needs the .NET build"
 homepage = "https://blazium.app"
 icon = "https://avatars.githubusercontent.com/u/184553414?s=128&v=4"
 aliases = ["blazium", "blazium engine"]
@@ -543,7 +538,7 @@ id = "cryengine"
 name = "CRYENGINE"
 tier = 2
 languages = ["C++", "C#"]
-language_note = "legacy C# support"
+language_note = "C# support is legacy"
 homepage = "https://www.cryengine.com"
 icon = "https://www.cryengine.com/icon-apple-touch-icon.png"
 aliases = ["cryengine"]
@@ -677,7 +672,6 @@ id = "monogame"
 name = "MonoGame"
 tier = 3
 languages = ["C#"]
-language_note = "C# framework"
 homepage = "https://monogame.net"
 icon = "https://monogame.net/favicon.png"
 aliases = ["monogame"]
@@ -698,7 +692,7 @@ id = "fna"
 name = "FNA"
 tier = 3
 languages = ["C#"]
-language_note = "XNA4 reimplementation in C#"
+language_note = "XNA 4 reimplementation"
 homepage = "https://fna-xna.github.io"
 icon = "https://fna-xna.github.io/assets/favicon.png"
 aliases = ["fna", "fna-xna"]
@@ -742,7 +736,7 @@ id = "brutal"
 name = "BRUTAL"
 tier = 3
 languages = ["C#"]
-language_note = "C# framework over native libraries, Vulkan"
+language_note = "built on native libraries and Vulkan"
 homepage = "https://ahwoo.com/brutal"
 icon = "https://avatars.githubusercontent.com/u/189169933?s=128&v=4"
 aliases = ["BRUTAL C#", "brutal framework", "brutal game framework", "brutal c# framework", "ahwootech"]
@@ -766,7 +760,7 @@ id = "kni"
 name = "KNI"
 tier = 3
 languages = ["C#"]
-language_note = "XNA-style C# framework"
+language_note = "XNA-style framework"
 homepage = "https://github.com/kniEngine/kni"
 icon = "https://avatars.githubusercontent.com/u/110910949?s=128&v=4"
 aliases = ["kni engine", "kniengine"]
@@ -781,7 +775,7 @@ id = "raylibcs"
 name = "Raylib-cs"
 tier = 3
 languages = ["C#"]
-language_note = "raylib bindings for C#"
+language_note = "raylib bindings"
 homepage = "https://github.com/raylib-cs/raylib-cs"
 icon = "https://avatars.githubusercontent.com/u/194473703?s=128&v=4"
 aliases = ["raylib-cs"]
@@ -796,7 +790,6 @@ id = "foster"
 name = "Foster"
 tier = 3
 languages = ["C#"]
-language_note = "C# framework"
 homepage = "https://github.com/FosterFramework/Foster"
 icon = "https://avatars.githubusercontent.com/u/155486525?s=128&v=4"
 aliases = ["foster framework", "fosterframework"]
@@ -812,7 +805,6 @@ id = "moonworks"
 name = "MoonWorks"
 tier = 3
 languages = ["C#"]
-language_note = "C# framework"
 homepage = "https://github.com/MoonsideGames/MoonWorks"
 icon = "https://avatars.githubusercontent.com/u/54976546?s=128&v=4"
 aliases = ["moonworks"]
@@ -861,7 +853,7 @@ id = "gum"
 name = "Gum"
 tier = 3
 languages = ["C#"]
-language_note = "C# UI layout tool and runtime"
+language_note = "UI layout tool and runtime"
 homepage = "https://github.com/vchelaru/Gum"
 aliases = ["gum ui", "gum layout"]
   [[engine.source]]
@@ -875,7 +867,7 @@ id = "myra"
 name = "Myra"
 tier = 3
 languages = ["C#"]
-language_note = "C# UI library"
+language_note = "UI library"
 homepage = "https://github.com/MyraUI/Myra"
 icon = "https://avatars.githubusercontent.com/u/290012421?s=128&v=4"
 aliases = ["myra ui"]
@@ -890,7 +882,7 @@ id = "sadconsole"
 name = "SadConsole"
 tier = 3
 languages = ["C#"]
-language_note = "C# console/roguelike library"
+language_note = "console/roguelike library"
 homepage = "https://sadconsole.com"
 aliases = ["sadconsole"]
   [[engine.source]]
@@ -904,7 +896,6 @@ id = "osu-framework"
 name = "osu!framework"
 tier = 3
 languages = ["C#"]
-language_note = "C# framework"
 homepage = "https://github.com/ppy/osu-framework"
 icon = "https://avatars.githubusercontent.com/u/995763?s=128&v=4"
 aliases = ["osu!framework", "osu-framework", "osu framework"]
@@ -919,7 +910,7 @@ id = "arch"
 name = "Arch ECS"
 tier = 3
 languages = ["C#"]
-language_note = "C# ECS library"
+language_note = "ECS library"
 homepage = "https://github.com/genaray/Arch"
 aliases = ["arch ecs"]
   [[engine.source]]
@@ -933,7 +924,7 @@ id = "friflo"
 name = "Friflo.Engine.ECS"
 tier = 3
 languages = ["C#"]
-language_note = "C# ECS library"
+language_note = "ECS library"
 homepage = "https://github.com/friflo/Friflo.Engine.ECS"
 aliases = ["friflo", "friflo.engine.ecs"]
   [[engine.source]]
@@ -947,7 +938,7 @@ id = "bepu"
 name = "BEPUphysics v2"
 tier = 3
 languages = ["C#"]
-language_note = "C# physics library"
+language_note = "physics library"
 homepage = "https://github.com/bepu/bepuphysics2"
 icon = "https://avatars.githubusercontent.com/u/28586344?s=128&v=4"
 aliases = ["bepu", "bepuphysics"]
@@ -962,7 +953,7 @@ id = "jitter"
 name = "Jitter Physics 2"
 tier = 3
 languages = ["C#"]
-language_note = "C# physics library"
+language_note = "physics library"
 homepage = "https://jitterphysics.com"
 aliases = ["jitter physics", "jitterphysics"]
   [[engine.source]]
@@ -977,7 +968,7 @@ id = "mirror"
 name = "Mirror"
 tier = 3
 languages = ["C#"]
-language_note = "Unity C# networking library"
+language_note = "Unity networking library"
 homepage = "https://mirror-networking.com"
 icon = "https://avatars.githubusercontent.com/u/65781588?s=128&v=4"
 aliases = ["mirror networking"]
@@ -992,7 +983,7 @@ id = "fishnet"
 name = "FishNet"
 tier = 3
 languages = ["C#"]
-language_note = "Unity C# networking library"
+language_note = "Unity networking library"
 homepage = "https://github.com/FirstGearGames/FishNet"
 icon = "https://avatars.githubusercontent.com/u/27169134?s=128&v=4"
 aliases = ["fishnet", "fish-networking", "fish networking"]
@@ -1007,7 +998,7 @@ id = "box2dnet"
 name = "Box2D.NET"
 tier = 3
 languages = ["C#"]
-language_note = "C# port of Box2D"
+language_note = "port of Box2D"
 homepage = "https://github.com/ikpil/Box2D.NET"
 aliases = ["box2d.net"]
   [[engine.source]]
@@ -1021,7 +1012,7 @@ id = "dotrecast"
 name = "DotRecast"
 tier = 3
 languages = ["C#"]
-language_note = "C# port of Recast & Detour"
+language_note = "port of Recast & Detour"
 homepage = "https://github.com/ikpil/DotRecast"
 aliases = ["dotrecast"]
   [[engine.source]]
@@ -1035,7 +1026,7 @@ id = "moonsharp"
 name = "MoonSharp"
 tier = 3
 languages = ["C#", "Lua"]
-language_note = "Lua interpreter written in C#"
+language_note = "Lua interpreter to embed in C# games"
 homepage = "https://www.moonsharp.org"
 icon = "https://avatars.githubusercontent.com/u/54413747?s=128&v=4"
 aliases = ["moonsharp"]
@@ -1050,7 +1041,6 @@ id = "raylib"
 name = "raylib"
 tier = 3
 languages = ["C"]
-language_note = "see Raylib-cs for C# bindings"
 homepage = "https://www.raylib.com"
 aliases = ["raylib"]
   [[engine.source]]
