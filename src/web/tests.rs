@@ -100,13 +100,24 @@ fn state() -> AppState {
         )])
         .unwrap();
     store.record_fetch_error(BEVY_SRC, "HTTP 503").unwrap();
+    let registry = SourceRegistry::with_owners(&mut store, SOURCES);
+    app_state(store, registry)
+}
 
+/// A new database: just the engines seeded from the built-in catalog.
+fn catalog_state() -> AppState {
+    let mut store = Store::open_in_memory().unwrap();
+    let registry = SourceRegistry::load(&store).unwrap();
+    crate::catalog::seed_once(&registry, &mut store).unwrap();
+    app_state(store, registry)
+}
+
+fn app_state(store: Store, registry: SourceRegistry) -> AppState {
     let mut config = AppConfig::default();
     config.server.templates_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/templates").into();
     config.server.static_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/static").into();
     config.server.base_url = "https://gen.example.org/".into();
     config.server.admin_token = Some(ADMIN_TOKEN.into());
-    let registry = SourceRegistry::with_owners(&mut store, SOURCES);
     let pipeline = Pipeline::test(store, registry);
     AppState::new(&pipeline, config).unwrap()
 }
@@ -438,6 +449,26 @@ async fn engine_pages() {
 
     let (status, _, _) = get("/no/such/page").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn catalog_language_notes_are_language_neutral() {
+    let st = catalog_state();
+    let get = |uri: &'static str| send(&st, Request::get(uri).body(Body::empty()).unwrap());
+
+    let (status, _, body) = get("/engine/godot").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(
+        body.contains(r#"<span class="language-note">(C# needs the .NET build)</span>"#),
+        "{body}"
+    );
+
+    let (status, _, body) = get("/engines").await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains(r#"<span class="language-note">(C# needs the .NET build)</span>"#));
+    // Unreal and Unity have nothing to add to their languages.
+    assert!(!body.contains("UnrealSharp"), "{body}");
+    assert!(!body.contains("C++ core"), "{body}");
 }
 
 #[tokio::test]
