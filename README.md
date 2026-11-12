@@ -43,7 +43,7 @@ cd gen-<version>-x86_64-unknown-linux-gnu
 Every release is also a multi-arch Docker image (amd64 and arm64):
 
 ```sh
-docker pull ghcr.io/thundernerd/gen:latest      # or pin: :1 (latest 1.x), :1.0 or :1.0.0
+docker pull ghcr.io/thundernerd/gen:latest      # or pin: :1 (latest 1.x), :1.1 or :1.1.0
 docker run -d --name gen -p 8080:8080 -v gen-data:/data ghcr.io/thundernerd/gen:latest
 ```
 
@@ -185,7 +185,7 @@ path = "data/gen.db"               # SQLite file; parent dir must be writable
 [polling]
 default_interval_minutes = 60      # until changed on the Sources page; per source: interval_minutes
 concurrency = 8                    # max sources fetched at the same time
-# user_agent = "GEN/1.0.0 (Game Engine News aggregator)"
+# user_agent = "GEN/1.1.0 (Game Engine News aggregator)"
 # github_token = "${GITHUB_TOKEN}" # optional; the GITHUB_TOKEN env var is used automatically
 
 # [[notify.channel]]               # imported once, then managed on the website; see "Notifications"
