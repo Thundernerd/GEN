@@ -484,7 +484,7 @@ async fn index_page(
         })
         .collect();
     let snapshot = st.registry.current();
-    let engine_options: Vec<_> = snapshot
+    let mut engine_options: Vec<_> = snapshot
         .config
         .enabled_engines()
         .map(|e| {
@@ -495,6 +495,14 @@ async fn index_page(
             })
         })
         .collect();
+    // Keep an engine from an old link, disabled or unknown, listed while it's active, so
+    // changing the other dropdown doesn't drop it.
+    if let Some(id) = &filter.engine
+        && !snapshot.config.enabled_engines().any(|e| &e.id == id)
+    {
+        let label = snapshot.config.engine(id).map_or(id, |e| &e.name);
+        engine_options.push(json!({"value": id, "label": label, "selected": true}));
+    }
     let mut languages = languages_of(snapshot.config.enabled_engines());
     // Keep a language from an old link or a disabled engine visible while it's active.
     if let Some(lang) = &filter.lang

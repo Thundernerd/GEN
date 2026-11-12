@@ -420,6 +420,18 @@ async fn timeline_engine_picker() {
 
     let (_, _, body) = get("/?kind=release").await;
     assert!(!body.contains(">Clear</a>"));
+    // An engine from an old link that isn't enabled stays listed while it's active, so
+    // changing the other dropdown keeps it.
+    let (_, _, body) = get("/?engine=unity").await;
+    assert_eq!(
+        options(&body, "engine"),
+        [
+            ("All engines".to_string(), false),
+            ("Godot".to_string(), false),
+            ("Bevy".to_string(), false),
+            ("unity".to_string(), true),
+        ]
+    );
 }
 
 /// The option labels of the timeline's language dropdown in `body`.
