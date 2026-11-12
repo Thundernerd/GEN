@@ -484,13 +484,14 @@ async fn index_page(
         })
         .collect();
     let snapshot = st.registry.current();
-    let engine_links: Vec<_> = std::iter::once(None)
-        .chain(snapshot.config.enabled_engines().map(Some))
+    let engine_options: Vec<_> = snapshot
+        .config
+        .enabled_engines()
         .map(|e| {
             json!({
-                "label": e.map_or("all engines", |e| e.name.as_str()),
-                "url": link("engine", e.map(|e| e.id.clone())),
-                "active": e.map(|e| &e.id) == filter.engine.as_ref(),
+                "value": e.id,
+                "label": e.name,
+                "selected": Some(&e.id) == filter.engine.as_ref(),
             })
         })
         .collect();
@@ -501,20 +502,35 @@ async fn index_page(
     {
         languages.push(lang.clone());
     }
-    let language_links: Vec<_> = std::iter::once(None)
-        .chain(languages.into_iter().map(Some))
+    let language_options: Vec<_> = languages
+        .into_iter()
         .map(|l| {
-            let active = match (&l, &filter.lang) {
-                (Some(l), Some(f)) => queries::same_language(l, f),
-                (l, f) => l.is_none() && f.is_none(),
-            };
-            json!({
-                "label": l.as_deref().unwrap_or("all languages"),
-                "url": link("lang", l.clone()),
-                "active": active,
-            })
+            let selected = filter
+                .lang
+                .as_ref()
+                .is_some_and(|f| queries::same_language(&l, f));
+            json!({"value": l, "label": l, "selected": selected})
         })
         .collect();
+    // The filters the toolbar doesn't show, resubmitted so it keeps them.
+    let hidden: Vec<_> = pairs
+        .iter()
+        .filter(|(k, _)| matches!(*k, "kind" | "tier"))
+        .filter_map(|(k, v)| v.as_ref().map(|v| json!({"name": k, "value": v})))
+        .collect();
+    // Clear drops search, engine and language, and keeps the kind.
+    let clear =
+        (filter.q.is_some() || filter.engine.is_some() || filter.lang.is_some()).then(|| {
+            let kind = filter.kind.map(|k| k.as_str().to_string());
+            format!("/{}", query_string(&[("kind", kind)]))
+        });
+    let toolbar = json!({
+        "q": filter.q,
+        "hidden": hidden,
+        "engines": engine_options,
+        "languages": language_options,
+        "clear": clear,
+    });
     let feed_pairs = filter_pairs(&filter.clone().for_feed());
     st.render(
         "index.html",
@@ -524,9 +540,7 @@ async fn index_page(
             "view": view,
             "items": st.item_views(&items, &dups),
             "kind_tabs": kind_tabs,
-            "engine_links": engine_links,
-            "language_links": language_links,
-            "search": search_box("/", &pairs, link("q", None)),
+            "toolbar": toolbar,
             "filter": {
                 "engine": filter.engine,
                 "kind": filter.kind.map(ItemKind::as_str),

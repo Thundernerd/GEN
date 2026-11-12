@@ -166,7 +166,7 @@ main.wrap { padding-top: 2.5rem; padding-bottom: 3rem; }
   margin: 0 0 1rem;
 }
 
-/* -- filters: kind tabs and engine links -------------------------------------- */
+/* -- filters: kind tabs and the filter toolbar -------------------------------- */
 
 .tabs {
   display: flex;
@@ -192,11 +192,14 @@ main.wrap { padding-top: 2.5rem; padding-bottom: 3rem; }
 .tabs a:hover { color: var(--text); }
 .tabs a[aria-current="page"] { color: var(--text); border-bottom-color: var(--text); font-weight: 600; }
 
-.filter-row { display: flex; gap: 0.35rem; padding: 0.75rem 0 0.5rem; overflow-x: auto; scrollbar-width: none; font-family: var(--mono); font-size: 0.75rem; }
-.filter-row a { padding: 0.2rem 0.5rem; border-radius: 4px; color: var(--muted); text-decoration: none; white-space: nowrap; }
-.filter-row a:hover { color: var(--text); background: var(--surface-2); }
-.filter-row a[aria-current="page"] { background: var(--text); color: var(--bg); }
-.filter-row + .filter-row { padding-top: 0; }
+/* One line under the kind tabs: search box, engine and language dropdowns. */
+.toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; margin: 1.25rem 0 1.5rem; }
+.toolbar input[type="search"] { flex: 1 1 14rem; min-width: 0; }
+.toolbar select { flex: 0 1 auto; min-width: 0; max-width: 13rem; }
+.toolbar input[type="search"], .toolbar select { font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.6rem; }
+.toolbar button { font: inherit; font-size: 0.85rem; color: var(--text); background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.75rem; cursor: pointer; }
+.toolbar a { font-size: 0.85rem; color: var(--muted); }
+.toolbar + .notice { margin-top: -0.5rem; }
 
 .search { display: flex; align-items: center; gap: 0.5rem; margin: 0 0 1rem; }
 .search input[type="search"] { flex: 1; min-width: 0; font: inherit; color: var(--text); background: var(--surface-2); border: 1px solid var(--border); border-radius: 6px; padding: 0.35rem 0.6rem; }
@@ -470,6 +473,9 @@ table.sources td.last-ok { white-space: nowrap; }
   /* Links stay on one line; the nav scrolls sideways when they don't fit. */
   .site-nav { gap: 0.9rem; overflow-x: auto; scrollbar-width: none; padding: 0.25rem 0; }
   .page-title { font-size: 1.9rem; }
+  /* The search box takes a line; the dropdowns share the next. */
+  .toolbar input[type="search"] { flex-basis: 100%; }
+  .toolbar select { flex: 1 1 0; max-width: none; }
   .day { grid-template-columns: 1fr; }
   .day-label { padding: 0.9rem 0 0.2rem; background: var(--bg); z-index: 1; }
   .item { grid-template-columns: 1fr; gap: 0.2rem; }

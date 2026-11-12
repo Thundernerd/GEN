@@ -365,37 +365,87 @@ async fn timeline_language_picker() {
     // The languages of enabled engines, each used by one engine here, so by name.
     assert_eq!(
         language_picker(&body),
-        ["all languages", "C#", "C++", "GDScript", "Rust"]
+        ["All languages", "C#", "C++", "GDScript", "Rust"]
     );
-    assert!(body.contains(r#"href="&#x2f;?lang=C%23">C#<"#));
+    assert_eq!(selected(&body, "lang"), ["All languages"]);
+    assert!(body.contains(r#"<option value="" selected>All languages</option>"#));
+    assert!(body.contains(r#"<option value="C#">C#</option>"#));
     assert!(!body.contains("C# only"));
 
-    // A chosen language is shown as active and kept by the other filter links.
-    let (_, _, body) = get("/?lang=Rust").await;
-    assert!(body.contains(r#"href="&#x2f;?lang=Rust" aria-current="page">Rust<"#));
-    assert!(body.contains(r#"href="&#x2f;?kind=news&amp;lang=Rust""#));
-    assert!(body.contains(r#"href="&#x2f;?engine=bevy&amp;lang=Rust""#));
-    assert!(body.contains(r#"name="lang" value="Rust""#));
-    assert!(body.contains(r#"href="&#x2f;">all languages<"#));
+    // A chosen language is selected, and the form keeps the filters it doesn't show.
+    let (_, _, body) = get("/?lang=Rust&kind=news").await;
+    assert_eq!(selected(&body, "lang"), ["Rust"]);
+    assert!(body.contains(r#"<input type="hidden" name="kind" value="news">"#));
+    assert!(!body.contains(r#"<input type="hidden" name="lang""#));
+    // The kind tabs keep it.
+    assert!(body.contains(r#"href="&#x2f;?kind=release&amp;lang=Rust""#));
 
-    // A language no enabled engine uses is still shown, as the active one.
+    // A language no enabled engine uses is still listed, as the selected one.
     let (_, _, body) = get("/?lang=Lua").await;
     assert_eq!(
         language_picker(&body),
-        ["all languages", "C#", "C++", "GDScript", "Rust", "Lua"]
+        ["All languages", "C#", "C++", "GDScript", "Rust", "Lua"]
     );
-    assert!(body.contains(r#"href="&#x2f;?lang=Lua" aria-current="page">Lua<"#));
+    assert_eq!(selected(&body, "lang"), ["Lua"]);
 }
 
-/// The labels of the timeline's language picker in `body`.
+#[tokio::test]
+async fn timeline_engine_picker() {
+    let (_, _, body) = get("/").await;
+    // Every enabled engine, in config order, after "All engines"; outlets aren't engines.
+    assert_eq!(
+        options(&body, "engine"),
+        [
+            ("All engines".to_string(), true),
+            ("Godot".to_string(), false),
+            ("Bevy".to_string(), false),
+        ]
+    );
+    assert!(body.contains(r#"<option value="bevy">Bevy</option>"#));
+
+    let (_, _, body) = get("/?engine=godot&lang=Rust&kind=release&q=shader").await;
+    assert_eq!(selected(&body, "engine"), ["Godot"]);
+    assert_eq!(selected(&body, "lang"), ["Rust"]);
+    assert!(body.contains(r#"<input type="search" name="q" value="shader""#));
+    assert!(body.contains(r#"<input type="hidden" name="kind" value="release">"#));
+    // Clear drops search, engine and language, and keeps the kind.
+    assert!(
+        body.contains(r#"<a href="&#x2f;?kind=release">Clear</a>"#),
+        "{body}"
+    );
+
+    let (_, _, body) = get("/?kind=release").await;
+    assert!(!body.contains(">Clear</a>"));
+}
+
+/// The option labels of the timeline's language dropdown in `body`.
 fn language_picker(body: &str) -> Vec<String> {
-    let picker = &body[body.find(r#"aria-label="Language""#).unwrap()..];
-    let picker = &picker[..picker.find("</nav>").unwrap()];
-    picker
-        .split("</a>")
-        .filter_map(|a| a.rsplit('>').next())
-        .filter(|l| !l.trim().is_empty())
-        .map(str::to_string)
+    options(body, "lang").into_iter().map(|(l, _)| l).collect()
+}
+
+/// The labels of the selected options of the `<select name="{name}">` in `body`.
+fn selected(body: &str, name: &str) -> Vec<String> {
+    options(body, name)
+        .into_iter()
+        .filter_map(|(l, s)| s.then_some(l))
+        .collect()
+}
+
+/// The options of the `<select name="{name}">` in `body`: label and whether it's selected.
+fn options(body: &str, name: &str) -> Vec<(String, bool)> {
+    let open = format!(r#"<select name="{name}""#);
+    let select = &body[body
+        .find(&open)
+        .unwrap_or_else(|| panic!("no {open} in {body}"))..];
+    let select = &select[..select.find("</select>").unwrap()];
+    select
+        .split("<option")
+        .skip(1)
+        .map(|o| {
+            let (attrs, rest) = o.split_once('>').unwrap();
+            let label = &rest[..rest.find("</option>").unwrap()];
+            (label.to_string(), attrs.contains(" selected"))
+        })
         .collect()
 }
 
@@ -419,7 +469,7 @@ async fn language_picker_merges_spellings_and_puts_common_languages_first() {
     let (_, body) = get_as(&st, "/", &cookie).await;
     assert_eq!(
         language_picker(&body),
-        ["all languages", "C#", "Rust", "C++", "GDScript"]
+        ["All languages", "C#", "Rust", "C++", "GDScript"]
     );
 }
 
@@ -1622,11 +1672,8 @@ async fn timeline_searches() {
         "{body}"
     );
     assert!(body.contains(r#"<input type="hidden" name="kind" value="news">"#));
-    // Filter links and the feed keep the search.
-    assert!(
-        body.contains("engine=godot&amp;kind=news&amp;q=bevy"),
-        "{body}"
-    );
+    // The kind tabs and the feed keep the search.
+    assert!(body.contains("?kind=release&amp;q=bevy"), "{body}");
     assert!(body.contains("feed.xml?kind=news&amp;q=bevy"));
 
     let (_, _, body) = get("/?q=nothingmatches").await;
