@@ -1,7 +1,9 @@
 // Submits forms marked `data-inline` in the background and swaps in the page the server
 // answers with, so admin actions don't reload the page, and runs the add-source and
 // add-engine/outlet dialogs. Without this script the forms work as ordinary posts, and
-// dialogs rendered `open` show in place.
+// dialogs rendered `open` show in place. It also submits a `data-autosubmit` form (the
+// timeline's filter toolbar) as soon as one of its dropdowns changes; without the
+// script, its Search button applies them.
 (() => {
   "use strict";
 
@@ -41,6 +43,13 @@
       if (button.getAttribute("command") === "show-modal") target.showModal();
       if (button.getAttribute("command") === "close") target.close();
     }
+  });
+
+  document.addEventListener("change", (event) => {
+    const select = event.target;
+    if (!(select instanceof HTMLSelectElement)) return;
+    const form = select.closest("form[data-autosubmit]");
+    if (form) form.requestSubmit();
   });
 
   let status;

@@ -357,7 +357,8 @@ fn filter_pairs(f: &ItemFilter) -> Vec<(&'static str, Option<String>)> {
 }
 
 /// The search box of a list page at `path` whose filters are `pairs`; the box resubmits
-/// the other filters as hidden fields. `clear` is the page without the search.
+/// the other filters as hidden fields. `clear` is the page without the search, linked
+/// while there is one.
 fn search_box(path: &str, pairs: &[(&str, Option<String>)], clear: String) -> serde_json::Value {
     let q = pairs
         .iter()
@@ -368,6 +369,7 @@ fn search_box(path: &str, pairs: &[(&str, Option<String>)], clear: String) -> se
         .filter(|(k, _)| *k != "q")
         .filter_map(|(k, v)| v.as_ref().map(|v| json!({"name": k, "value": v})))
         .collect();
+    let clear = q.is_some().then_some(clear);
     json!({"action": path, "q": q, "hidden": hidden, "clear": clear})
 }
 
@@ -464,7 +466,7 @@ async fn index_page(
     items.truncate(PAGE_SIZE as usize);
 
     let pairs = filter_pairs(&filter);
-    // Filter links that change one filter and keep the others.
+    // Kind tab links that change the kind and keep the other filters.
     let link = |key: &str, value: Option<String>| {
         let mut changed = pairs.clone();
         if let Some(pair) = changed.iter_mut().find(|(k, _)| *k == key) {
@@ -484,16 +486,25 @@ async fn index_page(
         })
         .collect();
     let snapshot = st.registry.current();
-    let engine_links: Vec<_> = std::iter::once(None)
-        .chain(snapshot.config.enabled_engines().map(Some))
-        .map(|e| {
+    let all_engines =
+        json!({"value": "", "label": "All engines", "selected": filter.engine.is_none()});
+    let mut engine_options: Vec<_> = std::iter::once(all_engines)
+        .chain(snapshot.config.enabled_engines().map(|e| {
             json!({
-                "label": e.map_or("all engines", |e| e.name.as_str()),
-                "url": link("engine", e.map(|e| e.id.clone())),
-                "active": e.map(|e| &e.id) == filter.engine.as_ref(),
+                "value": e.id,
+                "label": e.name,
+                "selected": Some(&e.id) == filter.engine.as_ref(),
             })
-        })
+        }))
         .collect();
+    // Keep an engine from an old link, disabled or unknown, listed while it's active, so
+    // changing the other dropdown doesn't drop it.
+    if let Some(id) = &filter.engine
+        && !snapshot.config.enabled_engines().any(|e| &e.id == id)
+    {
+        let label = snapshot.config.engine(id).map_or(id, |e| &e.name);
+        engine_options.push(json!({"value": id, "label": label, "selected": true}));
+    }
     let mut languages = languages_of(snapshot.config.enabled_engines());
     // Keep a language from an old link or a disabled engine visible while it's active.
     if let Some(lang) = &filter.lang
@@ -501,20 +512,36 @@ async fn index_page(
     {
         languages.push(lang.clone());
     }
-    let language_links: Vec<_> = std::iter::once(None)
-        .chain(languages.into_iter().map(Some))
-        .map(|l| {
-            let active = match (&l, &filter.lang) {
-                (Some(l), Some(f)) => queries::same_language(l, f),
-                (l, f) => l.is_none() && f.is_none(),
-            };
-            json!({
-                "label": l.as_deref().unwrap_or("all languages"),
-                "url": link("lang", l.clone()),
-                "active": active,
-            })
-        })
+    let all_languages =
+        json!({"value": "", "label": "All languages", "selected": filter.lang.is_none()});
+    let language_options: Vec<_> = std::iter::once(all_languages)
+        .chain(languages.into_iter().map(|l| {
+            let selected = filter
+                .lang
+                .as_ref()
+                .is_some_and(|f| queries::same_language(&l, f));
+            json!({"value": l, "label": l, "selected": selected})
+        }))
         .collect();
+    // The toolbar: the search box with the engine and language dropdowns. It resubmits
+    // the filters it doesn't show as hidden fields.
+    let unshown: Vec<_> = pairs
+        .iter()
+        .filter(|(k, _)| !matches!(*k, "engine" | "lang"))
+        .cloned()
+        .collect();
+    let mut toolbar = search_box("/", &unshown, String::new());
+    // Clear drops search, engine and language, and keeps the kind.
+    let clear =
+        (filter.q.is_some() || filter.engine.is_some() || filter.lang.is_some()).then(|| {
+            let kind = filter.kind.map(|k| k.as_str().to_string());
+            format!("/{}", query_string(&[("kind", kind)]))
+        });
+    toolbar["clear"] = json!(clear);
+    toolbar["selects"] = json!([
+        {"name": "engine", "label": "Engine", "options": engine_options},
+        {"name": "lang", "label": "Language", "options": language_options},
+    ]);
     let feed_pairs = filter_pairs(&filter.clone().for_feed());
     st.render(
         "index.html",
@@ -524,9 +551,7 @@ async fn index_page(
             "view": view,
             "items": st.item_views(&items, &dups),
             "kind_tabs": kind_tabs,
-            "engine_links": engine_links,
-            "language_links": language_links,
-            "search": search_box("/", &pairs, link("q", None)),
+            "search": toolbar,
             "filter": {
                 "engine": filter.engine,
                 "kind": filter.kind.map(ItemKind::as_str),

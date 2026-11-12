@@ -12,7 +12,7 @@ GEN is a single Rust binary. It contains a web server and a background poller, a
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/timeline-dark.png">
-  <img alt="The GEN timeline: the latest releases and news from Unity, Unreal Engine, Godot, Bevy, Defold and GameFromScratch, grouped by day, with filters by kind, engine and language" src="docs/screenshots/timeline-light.png">
+  <img alt="The GEN timeline: the latest releases and news from Unity, Unreal Engine, Godot, Bevy, Defold and GameFromScratch, grouped by day, under kind tabs and a toolbar with a search box and engine and language dropdowns" src="docs/screenshots/timeline-light.png">
 </picture>
 
 ## Features
