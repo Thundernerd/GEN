@@ -538,35 +538,30 @@ mod tests {
         let reg = SourceRegistry::load(&store).unwrap();
 
         backfill_languages_once(&reg, &mut store).unwrap();
-        let languages = |reg: &SourceRegistry, id: &str| {
-            let snapshot = reg.current();
-            let engine = snapshot.config.engine(id).unwrap();
-            (engine.languages.clone(), engine.language_note.clone())
-        };
         assert_eq!(
-            languages(&reg, "godot"),
+            languages_and_note(&reg, "godot"),
             (
                 vec!["GDScript".into(), "C#".into(), "C++".into()],
                 Some("C# needs the .NET build".into())
             )
         );
         assert_eq!(
-            languages(&reg, "mine"),
+            languages_and_note(&reg, "mine"),
             (Vec::new(), Some("none (Rust)".into())),
             "not in the catalog"
         );
         // Stored, so it survives a restart.
         let reloaded = SourceRegistry::load(&store).unwrap();
-        assert_eq!(languages(&reloaded, "godot").0.len(), 3);
+        assert_eq!(languages_and_note(&reloaded, "godot").0.len(), 3);
 
         // Only once: an engine stored in the old shape later is left alone.
         store_old_engine(&mut store, "unity", "native (C# scripting)");
         let reg = SourceRegistry::load(&store).unwrap();
         backfill_languages_once(&reg, &mut store).unwrap();
-        assert!(languages(&reg, "unity").0.is_empty());
+        assert!(languages_and_note(&reg, "unity").0.is_empty());
     }
 
-    /// Adds catalog engine `id` as stored before #81: with its old note, or `note`.
+    /// Adds catalog engine `id` with language note `note`, e.g. its note from before #81.
     fn store_engine_with_note(reg: &SourceRegistry, store: &mut Store, id: &str, note: &str) {
         let mut engine = CATALOG.engine(id).cloned().unwrap();
         engine.language_note = Some(note.into());
@@ -575,7 +570,8 @@ mod tests {
             .unwrap();
     }
 
-    fn language_note(reg: &SourceRegistry, id: &str) -> (Vec<String>, Option<String>) {
+    /// Stored engine `id`'s languages and language note.
+    fn languages_and_note(reg: &SourceRegistry, id: &str) -> (Vec<String>, Option<String>) {
         let snapshot = reg.current();
         let engine = snapshot.config.engine(id).unwrap();
         (engine.languages.clone(), engine.language_note.clone())
@@ -595,11 +591,11 @@ mod tests {
             vec!["GDScript".to_string(), "C#".to_string(), "C++".to_string()],
             Some("C# needs the .NET build".to_string()),
         );
-        assert_eq!(language_note(&reg, "unreal"), unreal);
-        assert_eq!(language_note(&reg, "godot"), godot);
+        assert_eq!(languages_and_note(&reg, "unreal"), unreal);
+        assert_eq!(languages_and_note(&reg, "godot"), godot);
         // Stored, so it survives a restart.
         let reloaded = SourceRegistry::load(&store).unwrap();
-        assert_eq!(language_note(&reloaded, "unreal"), unreal);
+        assert_eq!(languages_and_note(&reloaded, "unreal"), unreal);
     }
 
     #[test]
@@ -622,11 +618,11 @@ mod tests {
         rewrite_language_notes_once(&reg, &mut store).unwrap();
 
         assert_eq!(
-            language_note(&reg, "unreal").1.as_deref(),
+            languages_and_note(&reg, "unreal").1.as_deref(),
             Some("C# via UnrealSharp, our pick")
         );
         assert_eq!(
-            language_note(&reg, "stride"),
+            languages_and_note(&reg, "stride"),
             (
                 vec!["C#".to_string(), "F#".to_string()],
                 Some("engine written in C#".to_string())
@@ -646,7 +642,7 @@ mod tests {
         rewrite_language_notes_once(&restarted, &mut store).unwrap();
 
         assert_eq!(
-            language_note(&restarted, "unreal").1.as_deref(),
+            languages_and_note(&restarted, "unreal").1.as_deref(),
             Some("C# via the UnrealSharp plugin")
         );
     }

@@ -465,7 +465,10 @@ async fn catalog_language_notes_are_language_neutral() {
 
     let (status, _, body) = get("/engines").await;
     assert_eq!(status, StatusCode::OK);
-    assert!(body.contains(r#"<span class="language-note">(C# needs the .NET build)</span>"#));
+    assert!(
+        body.contains(r#"<span class="language-note">(C# needs the .NET build)</span>"#),
+        "{body}"
+    );
     // Unreal and Unity have nothing to add to their languages.
     assert!(!body.contains("UnrealSharp"), "{body}");
     assert!(!body.contains("C++ core"), "{body}");
