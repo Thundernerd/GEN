@@ -662,15 +662,20 @@ async fn engine_page(
     let has_more = items.len() > PAGE_SIZE as usize;
     items.truncate(PAGE_SIZE as usize);
 
-    let history = st.with_store(FetchHistory::load).await?;
-    let now = Utc::now();
-    let sources: Vec<_> = snapshot
-        .config
-        .manageable_sources()
-        .into_iter()
-        .filter(|s| s.owner == Owner::Engine(engine.id.clone()))
-        .map(|s| source_row(st, &s, &history.source(&s.id), now))
-        .collect();
+    // Source health is for admins only; readers get no sources section.
+    let sources: Vec<_> = if admin {
+        let history = st.with_store(FetchHistory::load).await?;
+        let now = Utc::now();
+        snapshot
+            .config
+            .manageable_sources()
+            .into_iter()
+            .filter(|s| s.owner == Owner::Engine(engine.id.clone()))
+            .map(|s| source_row(st, &s, &history.source(&s.id), now))
+            .collect()
+    } else {
+        Vec::new()
+    };
 
     let base = format!("/engine/{}", engine.id);
     let q_pair = ("q", filter.q.clone());

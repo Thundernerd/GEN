@@ -443,7 +443,7 @@ Its subscriptions are changed in Discord. On the website you can add keywords an
 |---|---|
 | `/` | Latest items from all enabled sources, grouped by day. Filter by kind, engine and language (`lang=Rust` keeps items about engines programmed in Rust; `lang=C#` also keeps news-outlet articles that mention C# or .NET). **Compact** shows one line per item (descriptions on hover); **Expanded** shows every description. The choice is remembered in a cookie and applies to engine pages too. |
 | `/engines` | Engine list with tier, languages and recent activity. |
-| `/engine/{id}` | Items for one engine. |
+| `/engine/{id}` | Items for one engine. Admins also get its sources with their health. |
 | `/sources` | Admin only (others are sent to `/login`). Every source with its health, last fetch time and errors; `?health=unhealthy` lists only failing and stale sources. Switch sources on and off, add sources, engines and outlets (by hand or from the suggestions) and remove them here. |
 | `/notifications` | Admin only: notification channels, their rules and last deliveries. |
 | `/view?mode=compact\|expanded` | Sets the timeline layout and goes back to the page it came from. |
@@ -465,7 +465,7 @@ With `admin_token` set under `[server]`, every page's footer shows an **Admin lo
 
 ### Source health
 
-Each source on `/sources` and on the engine pages has a status:
+Each source on `/sources` and on the engine pages has a status. Only admins see it; logged-out visitors get neither the Sources page nor the sources section on engine pages.
 
 | Status | Meaning |
 |---|---|

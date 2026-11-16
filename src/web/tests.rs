@@ -565,7 +565,15 @@ async fn engine_pages() {
     assert!(body.contains("<dt>Languages</dt><dd>GDScript, C#, C++"));
     assert!(!body.contains("C# support"));
     assert!(body.contains("Godot 4.8 released"));
+    // Source health is admin-only: readers get no sources section.
+    assert!(!body.contains("godotengine&#x2f;godot"));
+    assert!(!body.contains("engine-sources") && !body.contains("status-"));
+
+    let st = state();
+    let cookie = login(&st).await;
+    let (_, body) = get_as(&st, "/engine/godot", &cookie).await;
     assert!(body.contains("godotengine&#x2f;godot"));
+    assert!(body.contains("engine-sources"));
 
     let (status, _, body) = get("/engine/unknown").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
