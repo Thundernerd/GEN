@@ -88,6 +88,13 @@ impl AppState {
         // Fail at startup rather than on the first request when the directory is wrong.
         env.get_template("base.html")
             .with_context(|| format!("loading templates from {}", dir.display()))?;
+        // Every page's footer offers the admin login when there is a token to log in with.
+        let login_available = config
+            .server
+            .admin_token
+            .as_deref()
+            .is_some_and(|t| !t.is_empty());
+        env.add_global("login_available", login_available);
         let bot_api = BotApi::from_config(&config);
         Ok(AppState {
             store: pipeline.store.clone(),
@@ -731,8 +738,11 @@ async fn sources(
     Query(params): Query<SourcesParams>,
     headers: HeaderMap,
 ) -> Response {
-    let admin = st.is_admin(&headers);
-    let result = sources_page(&st, admin, params, None, None).await;
+    // Source health and management are for admins; readers have no use for the page.
+    if !st.is_admin(&headers) {
+        return Redirect::to("/login?next=/sources").into_response();
+    }
+    let result = sources_page(&st, true, params, None, None).await;
     st.respond(result)
 }
 
@@ -839,7 +849,6 @@ async fn sources_page(
             "summary": summary,
             "health_filter": health_filter,
             "admin": admin,
-            "login_available": st.admin_token().is_some(),
             "next": next,
             "owners": {"engines": owners(true), "outlets": owners(false)},
             "categories": kind_names(),
@@ -1064,14 +1073,15 @@ async fn logout(State(st): State<AppState>) -> Response {
         "{ADMIN_COOKIE}=; Path=/; Max-Age=0; HttpOnly; SameSite=Strict{}",
         secure_attr(&st)
     );
-    ([(header::SET_COOKIE, cookie)], Redirect::to("/sources")).into_response()
+    // `/sources` is admin-only, so after logging out go back to the timeline.
+    ([(header::SET_COOKIE, cookie)], Redirect::to("/")).into_response()
 }
 
 fn render_login(st: &AppState, next: Option<&str>, error: Option<&str>) -> PageResult {
     st.render(
         "login.html",
         json!({
-            "nav": "sources",
+            "nav": "login",
             "available": st.admin_token().is_some(),
             "next": safe_next(next),
             "error": error,

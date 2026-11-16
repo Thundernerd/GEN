@@ -444,7 +444,7 @@ Its subscriptions are changed in Discord. On the website you can add keywords an
 | `/` | Latest items from all enabled sources, grouped by day. Filter by kind, engine and language (`lang=Rust` keeps items about engines programmed in Rust; `lang=C#` also keeps news-outlet articles that mention C# or .NET). **Compact** shows one line per item (descriptions on hover); **Expanded** shows every description. The choice is remembered in a cookie and applies to engine pages too. |
 | `/engines` | Engine list with tier, languages and recent activity. |
 | `/engine/{id}` | Items for one engine. |
-| `/sources` | Every source with its health, last fetch time and errors; `?health=unhealthy` lists only failing and stale sources. Admins can switch sources on and off, add sources, engines and outlets (by hand or from the suggestions) and remove them here. |
+| `/sources` | Admin only (others are sent to `/login`). Every source with its health, last fetch time and errors; `?health=unhealthy` lists only failing and stale sources. Switch sources on and off, add sources, engines and outlets (by hand or from the suggestions) and remove them here. |
 | `/notifications` | Admin only: notification channels, their rules and last deliveries. |
 | `/view?mode=compact\|expanded` | Sets the timeline layout and goes back to the page it came from. |
 | `/login`, `/logout` | Admin login with `server.admin_token`. |
@@ -456,7 +456,7 @@ Its subscriptions are changed in Discord. On the website you can add keywords an
 
 ## Managing sources from the web
 
-With `admin_token` set under `[server]`, the Sources page shows a **Manage sources** link. Log in with the token to manage sources without restarting. All changes are stored in the database and take effect right away. The buttons and forms update the page in place (via `static/inline-forms.js`); without JavaScript they work as ordinary form posts.
+With `admin_token` set under `[server]`, every page's footer shows an **Admin login** link. Log in with the token to open the Sources page (it's hidden from everyone else) and manage sources without restarting. All changes are stored in the database and take effect right away. The buttons and forms update the page in place (via `static/inline-forms.js`); without JavaScript they work as ordinary form posts.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/sources-dark.png">

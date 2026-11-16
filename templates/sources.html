@@ -9,8 +9,6 @@
   {%- endif %}
   {%- if admin %}
   <form method="post" action="/logout"><button type="submit" class="btn-small btn-quiet">Log out</button></form>
-  {%- elif login_available %}
-  <a class="btn-small btn-quiet" href="/login?next=/sources">Manage sources</a>
   {%- endif %}
 </div>
 <div class="sources-toolbar">
