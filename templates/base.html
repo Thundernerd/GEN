@@ -19,10 +19,11 @@
     <div class="wrap header-inner">
       <a class="brand" href="/"><span class="brand-mark">GEN</span><span class="brand-sub">game engine news</span></a>
       <nav class="site-nav" aria-label="Main">
-        {%- for key, label, href in [("latest", "Latest", "/"), ("engines", "Engines", "/engines"), ("sources", "Sources", "/sources")] %}
+        {%- for key, label, href in [("latest", "Latest", "/"), ("engines", "Engines", "/engines")] %}
         <a href="{{ href }}"{% if nav == key %} aria-current="page"{% endif %}>{{ label }}</a>
         {%- endfor %}
         {%- if admin %}
+        <a href="/sources"{% if nav == "sources" %} aria-current="page"{% endif %}>Sources</a>
         <a href="/notifications"{% if nav == "notifications" %} aria-current="page"{% endif %}>Notifications</a>
         {%- endif %}
         <a class="feed-link" href="{{ feed_url or '/feed.xml' }}"{% if nav == "feed" %} aria-current="page"{% endif %}>RSS</a>
@@ -36,6 +37,9 @@
     <div class="wrap">
       GEN collects releases and news from game engines and game-dev outlets.
       Titles link to the original source.
+      {%- if login_available and not admin and nav != "login" %}
+      <a class="footer-login" href="/login">Admin login</a>
+      {%- endif %}
     </div>
   </footer>
 </body>

@@ -162,12 +162,19 @@ async fn login(st: &AppState) -> String {
 
 #[tokio::test]
 async fn sources_grouped_by_owner() {
-    let pos = |body: &str, owner: &str| body.find(&format!(">{owner}<")).unwrap();
+    let st = state();
+    let cookie = login(&st).await;
+    let get = |uri: &'static str| get_as(&st, uri, &cookie);
+    // Look in the table only: the admin forms above it name the owners too.
+    let pos = |body: &str, owner: &str| {
+        let table = body.find(r#"<table class="sources">"#).unwrap();
+        table + body[table..].find(&format!(">{owner}<")).unwrap()
+    };
     let active =
         |body: &str, label: &str| body.contains(&format!(r#"aria-current="true">{label}<"#));
 
     // Default: groups in config order (Godot, Bevy, then the outlet), one header each.
-    let (_, _, body) = get("/sources?sort=bogus").await;
+    let (_, body) = get("/sources?sort=bogus").await;
     assert!(pos(&body, "Godot") < pos(&body, "Bevy"));
     assert!(pos(&body, "Bevy") < pos(&body, "GameFromScratch"));
     assert_eq!(body.matches(r#"class="group-head""#).count(), 3);
@@ -175,18 +182,18 @@ async fn sources_grouped_by_owner() {
     assert!(body.contains("1 of 1 enabled"));
     assert!(active(&body, "Config"));
 
-    let (_, _, body) = get("/sources?sort=owner").await;
+    let (_, body) = get("/sources?sort=owner").await;
     assert!(pos(&body, "Bevy") < pos(&body, "GameFromScratch"));
     assert!(pos(&body, "GameFromScratch") < pos(&body, "Godot"));
     assert!(active(&body, "A–Z"));
 
-    let (_, _, body) = get("/sources?sort=owner&dir=desc").await;
+    let (_, body) = get("/sources?sort=owner&dir=desc").await;
     assert!(pos(&body, "Godot") < pos(&body, "GameFromScratch"));
     assert!(pos(&body, "GameFromScratch") < pos(&body, "Bevy"));
     assert!(active(&body, "Z–A"));
 
     // Engine pages list their sources without group headers.
-    let (_, _, body) = get("/engine/godot").await;
+    let (_, body) = get("/engine/godot").await;
     assert!(!body.contains(r#"class="group-head""#));
     assert!(body.contains(r#"class="source-kind""#));
 }
@@ -209,10 +216,60 @@ async fn toggling_sources_requires_admin() {
     assert_eq!(status, StatusCode::UNAUTHORIZED);
     assert!(body.contains("not correct"));
 
-    // Not logged in: no toggle buttons, but a way to log in.
-    let (_, _, body) = send(&st, Request::get("/sources").body(Body::empty()).unwrap()).await;
+    // Not logged in: no toggle buttons on engine pages.
+    let (_, _, body) = send(
+        &st,
+        Request::get("/engine/godot").body(Body::empty()).unwrap(),
+    )
+    .await;
     assert!(!body.contains("/sources/toggle"));
-    assert!(body.contains("/login?next=/sources") || body.contains("/login?next=&#x2f;sources"));
+}
+
+#[tokio::test]
+async fn sources_page_is_admin_only() {
+    let st = state();
+    let page = |cookie: Option<&str>| {
+        let mut req = Request::get("/sources");
+        if let Some(c) = cookie {
+            req = req.header(header::COOKIE, c);
+        }
+        send(&st, req.body(Body::empty()).unwrap())
+    };
+
+    // Logged out (or a bad cookie): off to the login page, which comes back here.
+    for cookie in [None, Some("gen_admin=deadbeef")] {
+        let (status, headers, _) = page(cookie).await;
+        assert_eq!(status, StatusCode::SEE_OTHER);
+        assert_eq!(headers[header::LOCATION], "/login?next=/sources");
+    }
+
+    // Readers see no Sources link, but the footer offers the admin login.
+    let (_, _, body) = send(&st, Request::get("/").body(Body::empty()).unwrap()).await;
+    assert!(!body.contains(r#"href="/sources""#) && !body.contains(r#"href="&#x2f;sources""#));
+    assert!(body.contains("footer-login"));
+    let (_, _, body) = send(&st, Request::get("/login").body(Body::empty()).unwrap()).await;
+    assert!(
+        !body.contains("footer-login"),
+        "no login link on the login page"
+    );
+
+    // Admins get the page and the nav link, and no login link.
+    let cookie = login(&st).await;
+    let (status, _, body) = page(Some(&cookie)).await;
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.contains(r#"aria-current="page">Sources<"#));
+    assert!(!body.contains("footer-login"));
+}
+
+#[tokio::test]
+async fn no_login_link_without_admin_token() {
+    let mut config = AppConfig::default();
+    config.server.templates_dir = concat!(env!("CARGO_MANIFEST_DIR"), "/templates").into();
+    let store = Store::open_in_memory().unwrap();
+    let registry = SourceRegistry::load(&store).unwrap();
+    let st = AppState::new(&Pipeline::test(store, registry), config).unwrap();
+    let (_, _, body) = send(&st, Request::get("/").body(Body::empty()).unwrap()).await;
+    assert!(!body.contains("footer-login"));
 }
 
 #[tokio::test]
@@ -277,6 +334,7 @@ async fn admin_can_disable_and_enable_sources() {
 
     let (status, headers, _) = send(&st, post_form("/logout", "", Some(&cookie))).await;
     assert_eq!(status, StatusCode::SEE_OTHER);
+    assert_eq!(headers[header::LOCATION], "/");
     assert!(
         headers[header::SET_COOKIE]
             .to_str()
@@ -507,7 +565,15 @@ async fn engine_pages() {
     assert!(body.contains("<dt>Languages</dt><dd>GDScript, C#, C++"));
     assert!(!body.contains("C# support"));
     assert!(body.contains("Godot 4.8 released"));
+    // Source health is admin-only: readers get no sources section.
+    assert!(!body.contains("godotengine&#x2f;godot"));
+    assert!(!body.contains("engine-sources") && !body.contains("status-"));
+
+    let st = state();
+    let cookie = login(&st).await;
+    let (_, body) = get_as(&st, "/engine/godot", &cookie).await;
     assert!(body.contains("godotengine&#x2f;godot"));
+    assert!(body.contains("engine-sources"));
 
     let (status, _, body) = get("/engine/unknown").await;
     assert_eq!(status, StatusCode::NOT_FOUND);
@@ -562,7 +628,9 @@ async fn engines_and_sources_pages() {
     ));
     assert!(!body.contains("<dt>C#</dt>"));
 
-    let (status, _, body) = get("/sources").await;
+    let st = state();
+    let cookie = login(&st).await;
+    let (status, body) = get_as(&st, "/sources", &cookie).await;
     assert_eq!(status, StatusCode::OK);
     assert!(body.contains("HTTP 503"));
     assert!(body.contains("status-failing"));
@@ -659,7 +727,11 @@ async fn managing_sources_requires_admin() {
     }
     assert_eq!(st.registry.current().config.all_sources().len(), 3);
 
-    let (_, _, body) = send(&st, Request::get("/sources").body(Body::empty()).unwrap()).await;
+    let (_, _, body) = send(
+        &st,
+        Request::get("/engine/godot").body(Body::empty()).unwrap(),
+    )
+    .await;
     assert!(!body.contains("/sources/add"));
     assert!(!body.contains("/sources/remove"));
 }
@@ -1367,7 +1439,11 @@ async fn admin_schedules_sources() {
         r#"data-source="{}""#,
         GODOT_SRC.replace('/', "&#x2f;")
     )));
-    let (_, _, body) = send(&st, Request::get("/sources").body(Body::empty()).unwrap()).await;
+    let (_, _, body) = send(
+        &st,
+        Request::get("/engine/godot").body(Body::empty()).unwrap(),
+    )
+    .await;
     assert!(!body.contains("fetch-progress") && !body.contains("data-source="));
     let (status, _, _) = send(
         &st,
@@ -1624,31 +1700,22 @@ fn state_with_unhealthy_sources() -> AppState {
 #[tokio::test]
 async fn sources_page_flags_failing_and_stale_sources() {
     let st = state_with_unhealthy_sources();
-    let (_, _, body) = send(&st, Request::get("/sources").body(Body::empty()).unwrap()).await;
+    let cookie = login(&st).await;
+    let (_, body) = get_as(&st, "/sources", &cookie).await;
     assert!(body.contains(r#"data-status="stale""#));
     assert!(body.contains(r#"data-status="failing""#));
     assert!(body.contains(r#"newest item <time"#) && body.contains(">1 year ago</time>"));
     assert!(body.contains(r#"<span class="badge status-stale">1 stale</span>"#));
     assert!(body.contains(r#"<span class="badge status-failing">1 failing</span>"#));
-    // Everyone gets the filter; only admins get the call-out in the page header.
     assert!(body.contains(r#"href="&#x2f;sources?health=unhealthy">Show only unhealthy (2)<"#));
-    assert!(!body.contains("need attention"));
-
-    let cookie = login(&st).await;
-    let (_, body) = get_as(&st, "/sources", &cookie).await;
     assert!(body.contains("2 sources need attention"));
 }
 
 #[tokio::test]
 async fn sources_page_filters_unhealthy_sources() {
     let st = state_with_unhealthy_sources();
-    let (_, _, body) = send(
-        &st,
-        Request::get("/sources?health=unhealthy&sort=owner")
-            .body(Body::empty())
-            .unwrap(),
-    )
-    .await;
+    let cookie = login(&st).await;
+    let (_, body) = get_as(&st, "/sources?health=unhealthy&sort=owner", &cookie).await;
     assert!(body.contains("godotengine&#x2f;godot"));
     assert!(body.contains("bevyengine.org&#x2f;news&#x2f;rss.xml"));
     assert!(!body.contains("gamefromscratch.com&#x2f;feed"));

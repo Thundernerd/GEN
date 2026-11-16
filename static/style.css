@@ -159,6 +159,11 @@ main.wrap { padding-top: 2.5rem; padding-bottom: 3rem; }
   padding: 1.25rem 0 2rem;
 }
 
+.footer-login {
+  color: inherit;
+  margin-left: 0.5em;
+}
+
 .notice {
   background: var(--surface-2);
   border-radius: var(--radius);
