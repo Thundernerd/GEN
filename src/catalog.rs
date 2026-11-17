@@ -989,6 +989,23 @@ mod tests {
     }
 
     #[test]
+    fn rapier_and_avian_are_tagged_by_their_names_not_by_the_words() {
+        let classifier = crate::classify::Classifier::new(&CATALOG);
+        let cases: &[(&str, &[&str])] = &[
+            ("Rapier and dagger combat in a soulslike", &[]),
+            ("Avian flu outbreak delays studio", &[]),
+            ("Rapier physics 0.36 is out", &["rapier"]),
+            (
+                "Switching from bevy_rapier to avian3d",
+                &["rapier", "avian"],
+            ),
+        ];
+        for (title, expected) in cases {
+            assert_eq!(classifier.match_engines(title), *expected, "{title}");
+        }
+    }
+
+    #[test]
     fn sdl_is_tagged_by_its_name_only() {
         assert_tags(&[
             ("SDLC best practices for game studios", &[]),
