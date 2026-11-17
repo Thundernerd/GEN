@@ -1589,6 +1589,107 @@ aliases = ["jolt physics", "joltphysics"]
   repo = "jrouwe/JoltPhysics"
   category = "release"
 
+# --- Rapier -------------------------------------------------------------------------
+# rapier.rs has no feed. Rapier publishes tags, not GitHub releases, and also tags its
+# Python bindings (`python-v...`), so only `v` tags are kept. "rapier" is an ordinary
+# word, so only multi-word or crate-name aliases.
+[[engine]]
+id = "rapier"
+name = "Rapier"
+tier = 3
+languages = ["Rust"]
+homepage = "https://rapier.rs"
+icon = "https://avatars.githubusercontent.com/u/43279238?s=128&v=4"
+aliases = ["rapier physics", "rapier.rs", "rapier2d", "rapier3d", "bevy_rapier"]
+  [[engine.source]]
+  kind = "github"
+  repo = "dimforge/rapier"
+  mode = "tags"
+  tag_prefix = "v"
+  category = "release"
+
+# --- Avian --------------------------------------------------------------------------
+# The release posts are on the author's personal blog, so only GitHub releases. "avian"
+# is an ordinary word, so only multi-word or crate-name aliases.
+[[engine]]
+id = "avian"
+name = "Avian Physics"
+tier = 3
+languages = ["Rust"]
+language_note = "built on Bevy"
+homepage = "https://github.com/avianphysics/avian"
+icon = "https://avatars.githubusercontent.com/u/238884779?s=128&v=4"
+aliases = ["avian physics", "avian2d", "avian3d"]
+  [[engine.source]]
+  kind = "github"
+  repo = "avianphysics/avian"
+  category = "release"
+
+# --- wgpu ---------------------------------------------------------------------------
+# wgpu.rs has no feed.
+[[engine]]
+id = "wgpu"
+name = "wgpu"
+tier = 3
+languages = ["Rust"]
+homepage = "https://wgpu.rs"
+icon = "https://avatars.githubusercontent.com/u/8213174?s=128&v=4"
+aliases = ["wgpu"]
+  [[engine.source]]
+  kind = "github"
+  repo = "gfx-rs/wgpu"
+  category = "release"
+
+# --- egui ---------------------------------------------------------------------------
+# egui.rs has no feed. The repo's owner avatar is a person's, so there is no icon.
+[[engine]]
+id = "egui"
+name = "egui"
+tier = 3
+languages = ["Rust"]
+homepage = "https://www.egui.rs"
+aliases = ["egui"]
+  [[engine.source]]
+  kind = "github"
+  repo = "emilk/egui"
+  category = "release"
+
+# --- godot-rust ---------------------------------------------------------------------
+[[engine]]
+id = "gdext"
+name = "godot-rust"
+tier = 3
+languages = ["Rust"]
+language_note = "Godot bindings"
+homepage = "https://godot-rust.github.io"
+icon = "https://avatars.githubusercontent.com/u/66136469?s=128&v=4"
+aliases = ["godot-rust", "gdext"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://godot-rust.github.io/dev/atom.xml"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "godot-rust/gdext"
+  category = "release"
+
+# --- Lightyear ----------------------------------------------------------------------
+# Networking for Bevy. No feed. The repo's owner avatar is a person's, so there is no
+# icon. "lightyear" is an ordinary word, so only multi-word aliases.
+[[engine]]
+id = "lightyear"
+name = "Lightyear"
+tier = 3
+languages = ["Rust"]
+language_note = "built on Bevy"
+homepage = "https://cbournhonesque.github.io/lightyear/book"
+aliases = ["lightyear networking", "lightyear crate", "bevy lightyear"]
+  [[engine.source]]
+  kind = "github"
+  repo = "cBournhonesque/lightyear"
+  category = "release"
+
 # ===========================================================================
 # Outlets: general game-dev news. Items are tagged with engines via aliases.
 # ===========================================================================
@@ -1700,3 +1801,7 @@ require_engine_match = true
 # - Lumix Engine, Halley, bgfx: no releases since 2021 or none at all.
 # - Torque3D, The Forge, Diligent Engine, Magnum, OGRE-Next: no release since 2024 or
 #   earlier (OGRE-Next is covered by OGRE's aliases).
+# - ggez, Notan, Tetra, Piston: no release in the last year, or only one.
+# - Ambient, Comfy: archived or abandoned.
+# - hecs, Kira: small libraries (tags only for hecs).
+# - nannou: creative coding rather than games.
