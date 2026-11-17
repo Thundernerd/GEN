@@ -30,7 +30,8 @@
 # `icon` is a PNG/JPEG/WebP logo for Discord messages: the engine's own icon, or its
 # GitHub organization's avatar (never a person's).
 #
-# All URLs below were verified with curl / the GitHub API on 2026-11-11.
+# All URLs below were verified with curl / the GitHub API on 2026-11-11 (the web engines
+# from PixiJS on, and Needle, Galacean, LayaAir and Wonderland, on 2026-11-17).
 #
 # Redot Engine is intentionally excluded everywhere (user request).
 
@@ -659,6 +660,72 @@ aliases = ["jmonkeyengine", "jmonkey", "jme3"]
   kind = "github"
   repo = "jMonkeyEngine/jmonkeyengine"
   category = "release"
+
+# --- Needle Engine ------------------------------------------------------------------
+# Built on three.js, with Unity and Blender integrations. The engine's source isn't on
+# GitHub; its releases are published in the support repo as `release/<version>`.
+# needle.tools has no feed.
+[[engine]]
+id = "needle"
+name = "Needle Engine"
+tier = 2
+languages = ["TypeScript", "JavaScript"]
+language_note = "built on three.js"
+homepage = "https://needle.tools"
+icon = "https://avatars.githubusercontent.com/u/64381776?s=128&v=4"
+aliases = ["needle engine", "needle tools", "needle.tools"]
+  [[engine.source]]
+  kind = "github"
+  repo = "needle-tools/needle-engine-support"
+  tag_prefix = "release/"
+  category = "release"
+
+# --- Galacean -----------------------------------------------------------------------
+# Ant Group's web engine with an online editor. galacean.com has no feed.
+[[engine]]
+id = "galacean"
+name = "Galacean"
+tier = 2
+languages = ["TypeScript"]
+homepage = "https://galacean.com/engine"
+icon = "https://avatars.githubusercontent.com/u/72598982?s=128&v=4"
+aliases = ["galacean", "galacean engine"]
+  [[engine.source]]
+  kind = "github"
+  repo = "galacean/engine"
+  category = "release"
+
+# --- LayaAir ------------------------------------------------------------------------
+# layaair.com has no feed.
+[[engine]]
+id = "layaair"
+name = "LayaAir"
+tier = 2
+languages = ["TypeScript", "JavaScript"]
+homepage = "https://www.layaair.com"
+icon = "https://avatars.githubusercontent.com/u/11814868?s=128&v=4"
+aliases = ["layaair", "laya air"]
+  [[engine.source]]
+  kind = "github"
+  repo = "layabox/LayaAir"
+  category = "release"
+
+# --- Wonderland Engine --------------------------------------------------------------
+# The engine isn't open source and publishes no GitHub releases; releases are announced
+# in the site's news and newsletter feed.
+[[engine]]
+id = "wonderland"
+name = "Wonderland Engine"
+tier = 2
+languages = ["TypeScript", "JavaScript"]
+homepage = "https://wonderlandengine.com"
+icon = "https://avatars.githubusercontent.com/u/75369823?s=128&v=4"
+aliases = ["wonderland engine", "wonderlandengine"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://wonderlandengine.com/rss.xml"
+  category = "news"
+  interval_minutes = 180
 
 # ===========================================================================
 # Tier 3: frameworks and libraries
@@ -1301,6 +1368,116 @@ aliases = ["kaplay", "kaplayjs", "kaplay.js"]
   repo = "kaplayjs/kaplay"
   category = "release"
 
+# --- PixiJS -------------------------------------------------------------------------
+[[engine]]
+id = "pixijs"
+name = "PixiJS"
+tier = 3
+languages = ["TypeScript", "JavaScript"]
+homepage = "https://pixijs.com"
+icon = "https://avatars.githubusercontent.com/u/5406849?s=128&v=4"
+aliases = ["pixijs", "pixi.js"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://pixijs.com/blog/rss.xml"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "pixijs/pixijs"
+  category = "release"
+
+# --- A-Frame ------------------------------------------------------------------------
+# "A-frame" is also a building and a ladder, so the bare name isn't an alias.
+[[engine]]
+id = "aframe"
+name = "A-Frame"
+tier = 3
+languages = ["JavaScript"]
+language_note = "scenes written as HTML, built on three.js"
+homepage = "https://aframe.io"
+icon = "https://aframe.io/images/aframe-logo-152.png"
+aliases = ["aframe", "aframe.io", "a-frame vr", "a-frame webxr", "a-frame framework"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://aframe.io/feed.xml"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "aframevr/aframe"
+  category = "release"
+
+# --- react-three-fiber --------------------------------------------------------------
+[[engine]]
+id = "r3f"
+name = "react-three-fiber"
+tier = 3
+languages = ["TypeScript", "JavaScript"]
+language_note = "React renderer for three.js"
+homepage = "https://r3f.docs.pmnd.rs"
+icon = "https://avatars.githubusercontent.com/u/45790596?s=128&v=4"
+aliases = ["react-three-fiber", "react three fiber", "r3f"]
+  [[engine.source]]
+  kind = "github"
+  repo = "pmndrs/react-three-fiber"
+  category = "release"
+
+# --- melonJS ------------------------------------------------------------------------
+# melonjs.org has no feed.
+[[engine]]
+id = "melonjs"
+name = "melonJS"
+tier = 3
+languages = ["JavaScript", "TypeScript"]
+homepage = "https://melonjs.org"
+icon = "https://avatars.githubusercontent.com/u/579995?s=128&v=4"
+aliases = ["melonjs"]
+  [[engine.source]]
+  kind = "github"
+  repo = "melonjs/melonJS"
+  category = "release"
+
+# --- LittleJS -----------------------------------------------------------------------
+# littlejsengine.com has no feed. The repo's owner avatar is a person's, so the icon is
+# the site's.
+[[engine]]
+id = "littlejs"
+name = "LittleJS"
+tier = 3
+languages = ["JavaScript"]
+homepage = "https://littlejsengine.com"
+icon = "https://littlejsengine.com/assets/apple-touch-icon.png"
+aliases = ["littlejs"]
+  [[engine.source]]
+  kind = "github"
+  repo = "KilledByAPixel/LittleJS"
+  category = "release"
+
+# --- Colyseus -----------------------------------------------------------------------
+# Multiplayer server framework. colyseus/colyseus is a monorepo that releases its packages
+# together; the releases source keeps only the server's own `colyseus@` tags. Without a
+# token it reads the 10 entries of `releases.atom`, so a batch can push a server release
+# out of that window.
+[[engine]]
+id = "colyseus"
+name = "Colyseus"
+tier = 3
+languages = ["TypeScript", "JavaScript"]
+homepage = "https://colyseus.io"
+icon = "https://avatars.githubusercontent.com/u/28384334?s=128&v=4"
+aliases = ["colyseus"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://colyseus.io/rss.xml"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "colyseus/colyseus"
+  tag_prefix = "colyseus@"
+  category = "release"
+
 # ===========================================================================
 # Outlets: general game-dev news. Items are tagged with engines via aliases.
 # ===========================================================================
@@ -1403,3 +1580,8 @@ require_engine_match = true
 # - Construct: no GitHub repo, and construct.net answers 403 to GEN's user agent
 #   (checked 2026-11-11).
 # - PICO-8: no GitHub repo; updates are announced only on the lexaloffle.com forum.
+# - Kontra, Impact: no releases or commits since 2024.
+# - matter.js, bitECS: no GitHub releases and tags only every year or two.
+# - Rapier.js: archived; the JavaScript bindings moved into dimforge/rapier.
+# - ct.js: its GitHub repo was archived as ct-js-old and development moved off GitHub.
+# - Threlte: a monorepo whose releases are split over many packages.

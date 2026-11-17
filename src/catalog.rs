@@ -937,6 +937,32 @@ mod tests {
     }
 
     #[test]
+    fn aframe_is_tagged_by_its_name_not_by_the_word_a_frame() {
+        let classifier = crate::classify::Classifier::new(&CATALOG);
+        let cases: &[(&str, &[&str])] = &[
+            ("Building an A-frame cabin in the woods", &[]),
+            ("The A-Frame ladder is back in stock", &[]),
+            ("aframe 1.8 adds WebGPU support", &["aframe"]),
+            ("A WebXR shooter made with A-Frame VR", &["aframe"]),
+        ];
+        for (title, expected) in cases {
+            assert_eq!(classifier.match_engines(title), *expected, "{title}");
+        }
+    }
+
+    #[test]
+    fn needle_is_tagged_by_its_name_not_by_the_word_needle() {
+        let classifier = crate::classify::Classifier::new(&CATALOG);
+        let cases: &[(&str, &[&str])] = &[
+            ("Finding a needle in a haystack of assets", &[]),
+            ("Needle Engine 5 brings WebXR to the browser", &["needle"]),
+        ];
+        for (title, expected) in cases {
+            assert_eq!(classifier.match_engines(title), *expected, "{title}");
+        }
+    }
+
+    #[test]
     fn sdl_is_tagged_by_its_name_only() {
         assert_tags(&[
             ("SDLC best practices for game studios", &[]),
