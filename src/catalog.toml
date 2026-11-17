@@ -31,7 +31,8 @@
 # GitHub organization's avatar (never a person's).
 #
 # All URLs below were verified with curl / the GitHub API on 2026-11-11 (the web engines
-# from PixiJS on, and Needle, Galacean, LayaAir and Wonderland, on 2026-11-17).
+# from PixiJS on, the C++ and Rust libraries after them, and Needle, Galacean, LayaAir,
+# Wonderland and Axmol, on 2026-11-17).
 #
 # Redot Engine is intentionally excluded everywhere (user request).
 
@@ -726,6 +727,22 @@ aliases = ["wonderland engine", "wonderlandengine"]
   url = "https://wonderlandengine.com/rss.xml"
   category = "news"
   interval_minutes = 180
+
+# --- Axmol --------------------------------------------------------------------------
+# axmol.dev has no feed.
+[[engine]]
+id = "axmol"
+name = "Axmol"
+tier = 2
+languages = ["C++", "Lua"]
+language_note = "Cocos2d-x fork"
+homepage = "https://axmol.dev"
+icon = "https://avatars.githubusercontent.com/u/108861585?s=128&v=4"
+aliases = ["axmol", "axmol engine"]
+  [[engine.source]]
+  kind = "github"
+  repo = "axmolengine/axmol"
+  category = "release"
 
 # ===========================================================================
 # Tier 3: frameworks and libraries
@@ -1478,6 +1495,100 @@ aliases = ["colyseus"]
   tag_prefix = "colyseus@"
   category = "release"
 
+# --- OGRE ---------------------------------------------------------------------------
+# A rendering engine. "ogre" is an ordinary word, so the bare name is only matched in
+# capitals.
+[[engine]]
+id = "ogre"
+name = "OGRE"
+tier = 3
+languages = ["C++"]
+homepage = "https://www.ogre3d.org"
+icon = "https://avatars.githubusercontent.com/u/16446637?s=128&v=4"
+aliases = ["OGRE", "ogre3d", "ogre 3d", "ogre-next", "ogre engine"]
+  [[engine.source]]
+  kind = "feed"
+  url = "https://www.ogre3d.org/feed"
+  category = "news"
+  interval_minutes = 180
+  [[engine.source]]
+  kind = "github"
+  repo = "OGRECave/ogre"
+  category = "release"
+
+# --- SFML ---------------------------------------------------------------------------
+# sfml-dev.org has no feed.
+[[engine]]
+id = "sfml"
+name = "SFML"
+tier = 3
+languages = ["C++"]
+homepage = "https://www.sfml-dev.org"
+icon = "https://avatars.githubusercontent.com/u/4226899?s=128&v=4"
+aliases = ["SFML"]
+  [[engine.source]]
+  kind = "github"
+  repo = "SFML/SFML"
+  category = "release"
+
+# --- Dear ImGui ---------------------------------------------------------------------
+# No site or feed. The repo's owner avatar is a person's, so there is no icon.
+[[engine]]
+id = "imgui"
+name = "Dear ImGui"
+tier = 3
+languages = ["C++"]
+homepage = "https://github.com/ocornut/imgui"
+aliases = ["dear imgui", "imgui"]
+  [[engine.source]]
+  kind = "github"
+  repo = "ocornut/imgui"
+  category = "release"
+
+# --- EnTT ---------------------------------------------------------------------------
+# No site or feed. The repo's owner avatar is a person's, so there is no icon.
+[[engine]]
+id = "entt"
+name = "EnTT"
+tier = 3
+languages = ["C++"]
+homepage = "https://github.com/skypjack/entt"
+aliases = ["entt"]
+  [[engine.source]]
+  kind = "github"
+  repo = "skypjack/entt"
+  category = "release"
+
+# --- Flecs --------------------------------------------------------------------------
+# flecs.dev has no feed. The repo's owner avatar is a person's, so the icon is the site's.
+[[engine]]
+id = "flecs"
+name = "Flecs"
+tier = 3
+languages = ["C", "C++"]
+homepage = "https://www.flecs.dev"
+icon = "https://www.flecs.dev/explorer/img/flecs_logo.png"
+aliases = ["flecs"]
+  [[engine.source]]
+  kind = "github"
+  repo = "SanderMertens/flecs"
+  category = "release"
+
+# --- Jolt Physics -------------------------------------------------------------------
+# No feed. The repo's owner avatar is a person's, so there is no icon. "jolt" is an
+# ordinary word, so only multi-word aliases.
+[[engine]]
+id = "jolt"
+name = "Jolt Physics"
+tier = 3
+languages = ["C++"]
+homepage = "https://github.com/jrouwe/JoltPhysics"
+aliases = ["jolt physics", "joltphysics"]
+  [[engine.source]]
+  kind = "github"
+  repo = "jrouwe/JoltPhysics"
+  category = "release"
+
 # ===========================================================================
 # Outlets: general game-dev news. Items are tagged with engines via aliases.
 # ===========================================================================
@@ -1585,3 +1696,7 @@ require_engine_match = true
 # - Rapier.js: archived; the JavaScript bindings moved into dimforge/rapier.
 # - ct.js: its GitHub repo was archived as ct-js-old and development moved off GitHub.
 # - Threlte: a monorepo whose releases are split over many packages.
+# - Spartan Engine: publishes a build release several times a day.
+# - Lumix Engine, Halley, bgfx: no releases since 2021 or none at all.
+# - Torque3D, The Forge, Diligent Engine, Magnum, OGRE-Next: no release since 2024 or
+#   earlier (OGRE-Next is covered by OGRE's aliases).
