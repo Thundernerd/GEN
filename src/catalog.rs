@@ -963,6 +963,32 @@ mod tests {
     }
 
     #[test]
+    fn ogre_is_tagged_by_its_name_not_by_the_word_ogre() {
+        let classifier = crate::classify::Classifier::new(&CATALOG);
+        let cases: &[(&str, &[&str])] = &[
+            ("An ogre boss fight in our dungeon crawler", &[]),
+            ("Ogre Tale is out on Steam", &[]),
+            ("OGRE 14.6 released", &["ogre"]),
+            ("Porting a renderer to Ogre-Next", &["ogre"]),
+        ];
+        for (title, expected) in cases {
+            assert_eq!(classifier.match_engines(title), *expected, "{title}");
+        }
+    }
+
+    #[test]
+    fn jolt_is_tagged_by_its_name_not_by_the_word_jolt() {
+        let classifier = crate::classify::Classifier::new(&CATALOG);
+        let cases: &[(&str, &[&str])] = &[
+            ("A jolt of energy for indie devs", &[]),
+            ("Jolt Physics 5.7 adds soft body vehicles", &["jolt"]),
+        ];
+        for (title, expected) in cases {
+            assert_eq!(classifier.match_engines(title), *expected, "{title}");
+        }
+    }
+
+    #[test]
     fn sdl_is_tagged_by_its_name_only() {
         assert_tags(&[
             ("SDLC best practices for game studios", &[]),
